@@ -1,4 +1,4 @@
-name: Build R15-TV APKs
+name: Build R15-TV APKs\nrun-name: R15-TV APK Build (manual or source update)
 
 on:
   workflow_dispatch:
