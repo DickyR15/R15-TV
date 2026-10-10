@@ -11,6 +11,7 @@ APP_VERSION_CODE=${APP_VERSION_CODE:?APP_VERSION_CODE is required}
 APP_VERSION_NAME=${APP_VERSION_NAME:?APP_VERSION_NAME is required}
 BASE_VERSION_CODE=${BASE_VERSION_CODE:?BASE_VERSION_CODE is required}
 BASE_VERSION_NAME=${BASE_VERSION_NAME:?BASE_VERSION_NAME is required}
+BUILD_API_LEVEL=${BUILD_API_LEVEL:?BUILD_API_LEVEL is required}
 
 rm -rf "$DIST"
 mkdir -p "$DIST"
@@ -22,7 +23,7 @@ cp "$TV_DIR/Release/apk/mobile-armeabi_v7a.apk" "$DIST/R15-TV-mobile-armeabi-v7a
 
 cp "$SOURCE_REFS" "$DIST/SOURCE_REFS.json"
 cp "$TV_DIR/LICENSE.md" "$DIST/FONGMI-TV-LICENSE.md"
-git -C "$TV_DIR" diff -- app/build.gradle > "$DIST/R15-TV-source-version.patch"
+git -C "$TV_DIR" diff -- app/build.gradle gradle/libs.versions.toml > "$DIST/R15-TV-source-version.patch"
 test -s "$DIST/R15-TV-source-version.patch"
 
 (
@@ -44,7 +45,8 @@ jq -n \
   --arg repository "$tv_repository" \
   --arg branch "$tv_branch" \
   --arg sha "$tv_sha" \
-  '{schema:1,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sha,url:("https://github.com/"+$repository+"/tree/"+$sha)},github:{runNumber:$runNumber,runUrl:$runUrl}}' \
+  --argjson androidSdkApiLevel "$BUILD_API_LEVEL" \
+  '{schema:1,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},androidSdkApiLevel:$androidSdkApiLevel,source:{repository:$repository,branch:$branch,commit:$sha,url:("https://github.com/"+$repository+"/tree/"+$sha)},github:{runNumber:$runNumber,runUrl:$runUrl}}' \
   > "$DIST/BUILD_INFO.json"
 
 cat > "$DIST/RELEASE_NOTES.md" <<EOF_NOTES
@@ -53,6 +55,7 @@ R15-TV public-source build ${APP_VERSION_NAME} (${APP_VERSION_CODE}).
 - Upstream: https://github.com/$tv_repository/tree/$tv_sha
 - Configured upstream branch: $tv_branch
 - Base version: ${BASE_VERSION_NAME} (${BASE_VERSION_CODE})
+- Android SDK compile/target API level: ${BUILD_API_LEVEL}
 - Build run: $RUN_URL
 - APKs: Android TV (Leanback) and Mobile, each for arm64-v8a and armeabi-v7a.
 - Content sources: none are bundled; users must configure their own source.
