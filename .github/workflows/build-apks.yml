@@ -51,6 +51,7 @@ jobs:
         env:
           EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
         run: |
+          set -euo pipefail
           actual_sha=$(git -C sources/TV rev-parse HEAD)
           test "$actual_sha" = "$EXPECTED_SHA"
           test -x sources/TV/gradlew
