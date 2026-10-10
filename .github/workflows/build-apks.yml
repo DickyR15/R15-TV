@@ -1,4 +1,4 @@
-name: Build R15-TV APKs
+name: Build R15 TV APKs
 
 on:
   workflow_dispatch:
@@ -24,11 +24,11 @@ env:
 
 jobs:
   build:
-    name: Build R15-TV from public FongMi source
+    name: Build R15 TV from public FongMi source
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
-      - name: Checkout R15-TV build configuration
+      - name: Checkout R15 TV build configuration
         uses: actions/checkout@v4
         with:
           fetch-depth: 1
@@ -141,7 +141,7 @@ jobs:
             echo "::warning::Release-signing secrets are not configured. Building debug APKs for initial testing; these are not stable updateable releases."
           fi
 
-      - name: Set R15-TV package metadata and app label
+      - name: Set R15 TV package metadata and app label
         id: version
         working-directory: sources/TV
         env:
@@ -191,7 +191,7 @@ jobs:
               output.write(f"base_version_code={base_code}\n")
               output.write(f"version_name={version_name}\n")
               output.write(f"version_code={version_code}\n")
-          print(f"R15-TV version: {version_name} (code {version_code})")
+          print(f"R15 TV version: {version_name} (code {version_code})")
           print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
           PY
 
@@ -250,10 +250,10 @@ jobs:
           while IFS= read -r -d '' apk; do
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
-              *leanback*arm64*v8a*) name="R15-TV-leanback-arm64-v8a.apk" ;;
-              *leanback*armeabi*v7a*) name="R15-TV-leanback-armeabi-v7a.apk" ;;
-              *mobile*arm64*v8a*) name="R15-TV-mobile-arm64-v8a.apk" ;;
-              *mobile*armeabi*v7a*) name="R15-TV-mobile-armeabi-v7a.apk" ;;
+              *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
+              *leanback*armeabi*v7a*) name="R15 TV-leanback-armeabi-v7a.apk" ;;
+              *mobile*arm64*v8a*) name="R15 TV-mobile-arm64-v8a.apk" ;;
+              *mobile*armeabi*v7a*) name="R15 TV-mobile-armeabi-v7a.apk" ;;
               *) continue ;;
             esac
             if [[ -e "dist/$name" ]]; then
@@ -268,8 +268,8 @@ jobs:
             exit 1
           fi
 
-          git -C "$TV_DIR" diff --binary > dist/R15-TV-source.patch
-          cp "$TV_DIR/LICENSE" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
+          cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
           jq -n \
             --arg mode "$BUILD_MODE" \
             --arg versionName "$VERSION_NAME" \
@@ -285,24 +285,24 @@ jobs:
 
           (
             cd dist
-            sha256sum R15-TV-*.apk > SHA256SUMS.txt
+            sha256sum "R15 TV-"*.apk > SHA256SUMS.txt
           )
           {
-            echo "## R15-TV build result"
+            echo "## R15 TV build result"
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
             else
-              echo "- APKs are signed with the private R15-TV release key supplied through GitHub Actions secrets."
+              echo "- APKs are signed with the private R15 TV release key supplied through GitHub Actions secrets."
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-${{ github.run_number }}
+          name: R15 TV-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
@@ -312,23 +312,23 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: r15tv-${{ github.run_number }}
-          name: R15-TV ${{ steps.version.outputs.version_name }}
+          name: R15 TV ${{ steps.version.outputs.version_name }}
           body: |
-            R15-TV build based on public FongMi/TV source.
+            R15 TV build based on public FongMi/TV source.
 
             - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
             - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
             - Build metadata and SHA-256 checksums are attached.
             - The app does not include IPTV/live-playlist sources.
           files: |
-            dist/R15-TV-leanback-arm64-v8a.apk
-            dist/R15-TV-leanback-armeabi-v7a.apk
-            dist/R15-TV-mobile-arm64-v8a.apk
-            dist/R15-TV-mobile-armeabi-v7a.apk
+            dist/R15 TV-leanback-arm64-v8a.apk
+            dist/R15 TV-leanback-armeabi-v7a.apk
+            dist/R15 TV-mobile-arm64-v8a.apk
+            dist/R15 TV-mobile-armeabi-v7a.apk
             dist/SOURCE_REFS.json
             dist/SOURCE_COMMIT.txt
             dist/BUILD_INFO.json
             dist/SHA256SUMS.txt
-            dist/R15-TV-source.patch
+            dist/R15 TV-source.patch
             dist/UPSTREAM-GPL-3.0-LICENSE.txt
           make_latest: true
