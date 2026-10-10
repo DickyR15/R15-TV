@@ -290,14 +290,13 @@ jobs:
                   "androidx.media3:media3-ui:1.8.0",
                   "androidx.media3:media3-datasource:1.8.0",
               ]
-              block = "\\n".join("    implementation \\\"%s\\\" " % item for item in libs) + "\\n"
+              block = "\\n".join('    implementation "' + item + '"' for item in libs) + "\\n"
               if marker not in text:
                   raise SystemExit("Cannot locate dependencies block in app/build.gradle")
               text = text.replace(marker, marker + "\\n" + block, 1)
               p.write_text(text, encoding="utf-8")
           PY
-
-          cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+                    cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
           jq -n \
             --arg mode "$BUILD_MODE" \
             --arg versionName "$VERSION_NAME" \
