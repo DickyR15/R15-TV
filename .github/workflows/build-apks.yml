@@ -176,7 +176,7 @@ jobs:
               xml = strings_file.read_text(encoding="utf-8")
               changed = re.sub(
                   r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
-                  r"\g<1>R15-TV\g<2>",
+                  r"\g<1>R15 TV\g<2>",
                   xml,
                   count=1,
                   flags=re.DOTALL,
