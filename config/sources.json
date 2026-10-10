@@ -2,28 +2,10 @@
   "schema": 1,
   "sources": {
     "TV": {
-      "repository": "iptvorganization/TV",
+      "repository": "FongMi/TV",
       "branch": "fongmi",
-      "baselineRef": "94118276821ecbec16cf26a6dd47729e6e346792",
-      "requiresPrivateSourceAccess": true
-    },
-    "media": {
-      "repository": "iptvorganization/media",
-      "branch": "codec-support",
-      "baselineRef": "f35d04172f570aed7c09ed9c5d0c0cd5c11f0615",
-      "requiresPrivateSourceAccess": true
-    },
-    "VividLib": {
-      "repository": "iptvorganization/VividLib",
-      "branch": "master",
-      "baselineRef": "10a5c7140a15f179a7d94fbff76f9176063f7a97",
-      "requiresPrivateSourceAccess": false
-    },
-    "sherpa-onnx": {
-      "repository": "iptvorganization/sherpa-onnx",
-      "branch": "master",
-      "baselineRef": "40b75e98a0cd5b3f961e73ae158305b3447b5ebb",
-      "requiresPrivateSourceAccess": false
+      "requiresPrivateSourceAccess": false,
+      "bundledLiveSources": false
     }
   }
 }
