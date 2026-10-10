@@ -152,8 +152,8 @@ EOF_PROPERTIES
 
           gradle_file = Path("app/build.gradle")
           text = gradle_file.read_text(encoding="utf-8")
-          code_match = re.search(r"(?m)^\\s*versionCode\\s+(\\d+)\\s*$", text)
-          name_match = re.search(r'(?m)^\\s*versionName\\s+"([^"]+)"\\s*$', text)
+          code_match = re.search(r"(?m)^\s*versionCode\s+(\d+)\s*$", text)
+          name_match = re.search(r'(?m)^\s*versionName\s+"([^"]+)"\s*$', text)
           if not code_match or not name_match:
               raise SystemExit("Unable to read upstream versionCode/versionName from app/build.gradle")
 
@@ -166,16 +166,16 @@ EOF_PROPERTIES
               raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
           version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
 
-          text = re.sub(r"(?m)^(\\s*versionCode\\s+)\\d+\\s*$", rf"\\g<1>{version_code}", text, count=1)
-          text = re.sub(r'(?m)^(\\s*versionName\\s+)"[^"]+"\\s*$', rf'\\g<1>"{version_name}"', text, count=1)
-          text = re.sub(r'(?m)^(\\s*applicationId\\s+)"[^"]+"\\s*$', r'\\g<1>"com.dicky.r15tv"', text, count=1)
+          text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
+          text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
+          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv"', text, count=1)
           gradle_file.write_text(text, encoding="utf-8")
 
           for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = strings_file.read_text(encoding="utf-8")
               changed = re.sub(
-                  r'(<string\\s+name="app_name"[^>]*>).*?(</string>)',
-                  r"\\g<1>R15-TV\\g<2>",
+                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+                  r"\g<1>R15-TV\g<2>",
                   xml,
                   count=1,
                   flags=re.DOTALL,
@@ -184,10 +184,10 @@ EOF_PROPERTIES
                   strings_file.write_text(changed, encoding="utf-8")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"base_version_name={base_name}\\n")
-              output.write(f"base_version_code={base_code}\\n")
-              output.write(f"version_name={version_name}\\n")
-              output.write(f"version_code={version_code}\\n")
+              output.write(f"base_version_name={base_name}\n")
+              output.write(f"base_version_code={base_code}\n")
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
           print(f"R15-TV version: {version_name} (code {version_code})")
           print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
           PY
@@ -205,7 +205,7 @@ EOF_PROPERTIES
             --arg sha "$SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' \
             > dist/SOURCE_REFS.json
-          printf '%s\\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
+          printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
