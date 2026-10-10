@@ -250,6 +250,7 @@ jobs:
             exit 1
           fi
 
+          git -C "$TV_DIR" diff --binary > dist/R15-TV-source.patch
           cp "$TV_DIR/LICENSE" dist/UPSTREAM-GPL-3.0-LICENSE.txt
           jq -n \
             --arg mode "$BUILD_MODE" \
@@ -310,5 +311,6 @@ jobs:
             dist/SOURCE_COMMIT.txt
             dist/BUILD_INFO.json
             dist/SHA256SUMS.txt
+            dist/R15-TV-source.patch
             dist/UPSTREAM-GPL-3.0-LICENSE.txt
           make_latest: true
