@@ -3,10 +3,9 @@ name: R15-TV Public Source Preflight
 on:
   workflow_dispatch:
   push:
-    branches: [main, public-source-build]
+    branches: [public-source-build]
     paths:
       - "README.md"
-      - "LICENSE"
       - "config/**"
       - "scripts/**"
       - ".github/workflows/**"
@@ -39,13 +38,14 @@ jobs:
           resolver = Path("scripts/resolve-sources.sh").read_text(encoding="utf-8")
           assert "R15TV_SOURCE_TOKEN" not in workflow + resolver
           assert "PRIVATE_SOURCE_TOKEN" not in workflow + resolver
-          assert "actions/checkout@v4" in workflow
+          assert "R15TV_KEYSTORE_B64" in workflow
+          assert "R15-TV-source.patch" in workflow
           print("Public source manifest: OK")
           print("Private source token dependency: absent")
-          print("APK build workflow: present")
+          print("Signing and source patch metadata steps: present")
           PY
 
-      - name: Confirm upstream branch is publicly reachable
+      - name: Confirm public source is reachable
         run: |
           sha=$(git ls-remote https://github.com/FongMi/TV.git refs/heads/fongmi | awk 'NR == 1 {print $1}')
           if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
@@ -53,4 +53,4 @@ jobs:
             exit 1
           fi
           echo "Public FongMi/TV revision: $sha"
-          echo "This preflight checks access and configuration; the APK build is a separate workflow."
+          echo "This preflight checks access/configuration; it does not compile the APK."
