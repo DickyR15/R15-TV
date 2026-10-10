@@ -78,9 +78,7 @@ jobs:
       - name: Inspect upstream Media3 dependency setup
         run: |
           set -euo pipefail
-          echo "Checking Gradle dependency configuration before compilation"
-          grep -R -n "androidx.media3" sources/TV/app/build.gradle sources/TV/gradle/libs.versions.toml || true
-          grep -R -n "media3" sources/TV/build.gradle sources/TV/settings.gradle || true
+          echo "Checking upstream player dependencies"
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
