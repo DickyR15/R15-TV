@@ -222,6 +222,8 @@ jobs:
       - name: Build debug APKs (initial test mode)
         if: steps.signing.outputs.mode == 'debug'
         working-directory: sources/TV
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
