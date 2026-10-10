@@ -75,11 +75,6 @@ jobs:
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
 
-      - name: Inspect upstream Media3 dependency setup
-        run: |
-          set -euo pipefail
-          echo "Checking upstream player dependencies"
-
       - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
