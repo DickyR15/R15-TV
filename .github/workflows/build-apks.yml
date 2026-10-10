@@ -70,6 +70,8 @@ jobs:
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/libs/forcetech-release.aar
           test -f sources/TV/LICENSE.md
+          test -f sources/TV/chaquo/requirements.txt
+          chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
 
