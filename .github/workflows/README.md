@@ -1,5 +1,13 @@
 # GitHub Actions notes
 
-The first workflow is intentionally a validation/preflight workflow. It does not pretend to compile the Android app while the source tree and build secrets are not available.
+## Build R15-TV APKs
 
-The full official build workflow can only be connected after confirming that the necessary upstream source repositories are accessible to the user and that this fork has its own release signing key. Do not copy the upstream private signing secrets.
+The APK workflow checks out the public `FongMi/TV` repository at the `fongmi` branch. It resolves and records the exact commit before building; no `R15TV_SOURCE_TOKEN` or `PRIVATE_SOURCE_TOKEN` is used.
+
+If all three R15-TV release-signing secrets are absent, the workflow produces debug APKs for initial testing. Configure the three `R15TV_*` signing secrets to produce release-signed APKs. A release is published only when `publish_release` is selected.
+
+The source project is GPL-3.0. Build artifacts include the upstream license and exact source commit. The app does not bundle any IPTV/live-playlist sources.
+
+## Public Source Preflight
+
+The preflight workflow verifies the source manifest and checks that the public upstream branch is reachable. It does not compile the Android app; use **Actions → Build R15-TV APKs** for an actual build.
