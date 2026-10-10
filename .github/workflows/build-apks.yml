@@ -82,7 +82,7 @@ jobs:
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager | sort -V | tail -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" "platform-tools" "platforms;android-37" "build-tools;36.0.0" "ndk;28.2.13676358"
+          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37" "build-tools;36.0.0" "ndk;28.2.13676358"
           echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       - name: Compute a traceable R15-TV version
