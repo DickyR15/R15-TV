@@ -37,13 +37,15 @@ jobs:
         id: sources
         run: scripts/resolve-sources.sh
 
-      - name: Checkout public FongMi/TV source
-        uses: actions/checkout@v4
-        with:
-          repository: FongMi/TV
-          ref: ${{ steps.sources.outputs.tv_sha }}
-          path: sources/TV
-          persist-credentials: false
+      - name: Fetch public FongMi/TV source without credentials
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+        run: |
+          mkdir -p sources/TV
+          git -C sources/TV init
+          git -C sources/TV remote add origin https://github.com/FongMi/TV.git
+          git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
+          git -C sources/TV checkout --detach FETCH_HEAD
 
       - name: Verify checkout and required public dependencies
         env:
