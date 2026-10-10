@@ -1,68 +1,46 @@
-# R15-TV — 台灣繁體中文電視版
+# R15-TV — 公開原始碼建置基準
 
-這是個人維護的 Android TV 播放器建置／客製化專案，目標是建立可重現的 APK 建置流程，並逐步整合台灣繁體中文介面、AI 即時字幕與字幕外觀調整。
+這個分支把 R15-TV 的 GitHub Actions 改為使用可公開讀取的 [FongMi/TV](https://github.com/FongMi/TV) 原始碼，目的是先建立不需要私人原始碼 Token 的可重現 APK 建置流程。
 
-> **目前狀態：建置骨架已建立；尚未完成可在此倉庫獨立執行的完整建置。**  
-> 本倉庫已加入改名後的手動建置流程與來源解析腳本；完整編譯仍需要能讀取上游來源的個人 token，以及本專案自己的發行簽章。請勿把任何 token、私鑰或 keystore 密碼提交到 Git。
+> **目前定位：公開原始碼建置基準，不是完整的 TV-Taiwan 客製正式版。** 本分支以官方播放器功能為基礎；台灣繁體中文完整介面、AI 即時字幕及其他額外解碼器尚未在這個基準中實作或驗證。
 
-## 目標功能
+## 直播源
 
-- 全介面台灣繁體中文用語（例如「壁紙」→「桌布」、「普通話」顯示為「中文」）。
-- 移除不需要的第三方修改聲明。
-- AI 即時字幕：位置、大小、文字顏色、描邊／背景與分段模式可調。
-- 啟動狀態提示不遮擋畫面；串流閒置指示不應長時間停留。
-- 保留 M3U／直播播放與原有播放器功能。
-- GitHub Actions 建置 ARMv7 Leanback APK，並產生校驗碼。
+APK **不內附直播源或播放清單**。官方 FongMi/TV 專案也說明應用程式本身不提供內容來源；安裝後由使用者自行設定外部配置即可。
 
-## 官方來源與版本基準
+## 原始碼與建置
 
-- 官方建置流程：[iptvorganization/TV-AutoBuild](https://github.com/iptvorganization/TV-AutoBuild)
-- 官方版本參考：[autobuild-170](https://github.com/iptvorganization/TV-AutoBuild/releases/tag/autobuild-170)
-- 該版 TV 原始碼提交：`94118276821ecbec16cf26a6dd47729e6e346792`
-- 該版 media 原始碼提交：`f35d04172f570aed7c09ed9c5d0c0cd5c11f0615`
-- 該版 VividLib 原始碼提交：`10a5c7140a15f179a7d94fbff76f9176063f7a97`
-- 該版 sherpa-onnx 原始碼提交：`40b75e98a0cd5b3f961e73ae158305b3447b5ebb`
+- 公開原始碼：[FongMi/TV](https://github.com/FongMi/TV)
+- 使用分支：`fongmi`
+- 每次建置會解析該分支的實際 commit SHA，並記錄在 `SOURCE_REFS.json`、`BUILD_INFO.json` 及 release notes。
+- 建置環境：JDK 21、Python 3.10、Android SDK API 37、Build Tools 36.0.0、NDK 28.2.13676358。
+- 產出四個 APK：Android TV（Leanback）及手機（Mobile），各自提供 `arm64-v8a` 與 `armeabi-v7a` 版本。
+- 建置流程會執行單元測試、檢查 APK 簽章、套件版本與 ABI，並產生 SHA-256 校驗碼。
 
-官方 AutoBuild 的 workflow 會透過 `PRIVATE_SOURCE_TOKEN` 取回部分來源，因此不能只複製公開 workflow 就視為完成。先確認授權和來源權限，再接入完整編譯。
+## 如何編譯
 
-## 建置前需要的 GitHub Secrets
+1. 開啟 GitHub 的 **Actions**。
+2. 選擇 **Build R15-TV APKs from public FongMi source**。
+3. 按 **Run workflow**。測試分支先將 `publish_release` 保持為 `false`。
+4. 建置完成後，從該次 workflow run 的 Artifacts 下載 `R15-TV-public-build-<run number>`，查看 APK 及建置資訊。
 
-只有在確定有權存取來源並採用自己的發行簽章後，才設定以下 Secrets：
+**不需要建立或提供私人原始碼 Token。** 工作流程會公開讀取 FongMi/TV 的指定分支，再固定到此次解析到的 commit 建置。
 
-- `PRIVATE_SOURCE_TOKEN`：可讀取所需來源倉庫的 token。
-- `R15TV_KEYSTORE_B64`：個人發行 keystore 的 Base64 內容。
-- `R15TV_STORE_PASSWORD`
-- `R15TV_KEY_PASSWORD`
+## 簽章設定
 
-**不要使用或複製官方的私人簽章金鑰；也不要將秘密寫入檔案或 commit。** 尚未配置所需 Secrets 前，workflow 應明確停止並提示原因。
+可先不設定簽章 Secrets 來測試編譯；這種情況會產生一次性的測試簽章，只上傳 Actions Artifact，不會發布 GitHub Release。每次測試使用的金鑰不同，所以測試 APK 之間不能直接覆蓋更新；重新安裝前可能需要先解除安裝上一個測試版本。
 
-## 版本原則
+要發布可長期更新的正式 APK，請在 Repository → **Settings → Secrets and variables → Actions** 設定：
 
-1. 先以官方原始碼鎖定版本建立可重現的乾淨基準。
-2. 每次只合併一組修改，先跑單元測試及 APK 簽章驗證。
-3. 再由使用者在雷電模擬器實測：啟動、直播播放、字幕啟動、Bing 翻譯、字幕位置與分段。
-4. 不把「ZIP／簽章檢查通過」宣稱為「已經實機測試」。
+- `R15TV_KEYSTORE_B64`：你自己的 Android release keystore 之 Base64 內容。
+- `R15TV_STORE_PASSWORD`：keystore 密碼；依目前上游 Gradle 設定，金鑰密碼也必須相同。
+- `R15TV_KEY_ALIAS`：可選，預設為 `r15tv`。
 
-## 授權
+請勿把 keystore、密碼或其他私密資料提交到 Git。若你使用不同密碼的 key entry，需先調整上游簽章設定；此工作流程目前依照上游設定要求相同密碼。
 
-此倉庫的建置腳本與本專案新增文件依 MIT License 提供；上游 TV、media、VividLib、sherpa-onnx 及其依賴仍各自依其原始授權條款。請在發佈 APK 前檢查所有上游授權與第三方元件要求。
+## 重要限制
 
-
-## 使用 GitHub Actions 編譯
-
-完成下列 Secrets 後，到 **Actions → Build R15-TV APKs → Run workflow** 手動執行。第一次建議保持 `force_build=true`。
-
-GitHub Repository → **Settings → Secrets and variables → Actions → New repository secret**：
-
-- `R15TV_SOURCE_TOKEN`：只能填入你有權限使用的 token，而且必須能讀取 `iptvorganization/TV` 及 `iptvorganization/media`。若這兩個倉庫未授權給你的帳號，新增 token 也無法繞過權限限制；需先向上游取得存取權。
-- `R15TV_KEYSTORE_B64`：你自己的 Android release keystore，以 Base64 編碼。
-- `R15TV_STORE_PASSWORD`
-- `R15TV_KEY_PASSWORD`
-
-此 workflow 以手動觸發為主，不會每 15 分鐘自動編譯。成功後在 Actions 的 workflow run 下載 `TV-APKs-<run number>` artifact，裡面會有四種 APK、來源鎖定資訊及 SHA-256。
-
-### 重要限制
-
-- 官方的 TV 與 media 原始碼在目前 GitHub 連線下回傳 404，表示目前尚無法確認你的帳號有讀取權限。沒有上游授權時，建置會在來源解析階段失敗。
-- 本 workflow 沿用官方公開的 build steps，並按 MIT License 保留其來源與授權說明；不包含也不複製官方私有簽章金鑰。
-- 此 repo 目前仍是建置骨架。字幕位置／外觀面板、移除聲明、台灣用語及字幕分段修改，必須在可編譯的 TV 原始碼上套用後，才會進入此 workflow 的 APK。
+- 目前 APK 保留上游的套件識別碼 `com.fongmi.android.tv` 與應用程式顯示名稱 `TV`，檔名使用 R15-TV。不同簽章的 APK 不能直接覆蓋原本由其他簽章簽署的同套件應用程式。
+- 這個基準先驗證公開原始碼能否編譯；不代表台灣繁體中文、AI 即時字幕、專用品牌圖示或其他客製功能已完成。
+- 發布時會附上上游 GPL-3.0 授權、此次來源 commit、建置資訊、版本修改 patch 與 APK SHA-256。
+- 本倉庫現有建置腳本保留原有授權與來源聲明；FongMi/TV 應用程式原始碼依上游 GPL-3.0 授權。發行衍生 APK 時仍需遵循該授權及相依元件的條款。
