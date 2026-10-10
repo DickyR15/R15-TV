@@ -1,0 +1,27 @@
+{
+  "schema": 1,
+  "status": "reference-only-until-private-source-access-is-configured",
+  "baselineRelease": "autobuild-170",
+  "sources": {
+    "TV": {
+      "repository": "iptvorganization/TV",
+      "ref": "94118276821ecbec16cf26a6dd47729e6e346792",
+      "requiresPrivateSourceAccess": true
+    },
+    "media": {
+      "repository": "iptvorganization/media",
+      "ref": "f35d04172f570aed7c09ed9c5d0c0cd5c11f0615",
+      "requiresPrivateSourceAccess": true
+    },
+    "VividLib": {
+      "repository": "iptvorganization/VividLib",
+      "ref": "10a5c7140a15f179a7d94fbff76f9176063f7a97",
+      "requiresPrivateSourceAccess": true
+    },
+    "sherpa-onnx": {
+      "repository": "iptvorganization/sherpa-onnx",
+      "ref": "40b75e98a0cd5b3f961e73ae158305b3447b5ebb",
+      "requiresPrivateSourceAccess": true
+    }
+  }
+}
