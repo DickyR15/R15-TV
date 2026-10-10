@@ -59,25 +59,6 @@ jobs:
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
 
-      - name: Prepare upstream Media3 dependencies
-        working-directory: sources/TV
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-          gradle_file = Path("app/build.gradle")
-          text = gradle_file.read_text(encoding="utf-8")
-          marker = "dependencies {"
-          if "androidx.media3:media3-common" not in text:
-              modules = ("common", "exoplayer", "exoplayer-dash", "exoplayer-hls", "exoplayer-rtsp", "ui", "datasource")
-              lines = ['    implementation "androidx.media3:media3-%s:1.8.0"' % module for module in modules]
-              block = "\\n".join(lines)
-              if marker not in text:
-                  raise SystemExit("Cannot locate dependencies block in app/build.gradle")
-              text = text.replace(marker, marker + "\\n" + block + "\\n", 1)
-              gradle_file.write_text(text, encoding="utf-8")
-          PY
-
       - name: Verify checkout and required public dependencies
         env:
           EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
