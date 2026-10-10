@@ -19,6 +19,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - name: Validate source manifest
         run: |
           python - <<'PY'
@@ -27,16 +28,19 @@ jobs:
           p = Path("config/sources.json")
           data = json.loads(p.read_text(encoding="utf-8"))
           assert data.get("schema") == 1
-          expected = {"TV", "media", "VividLib", "sherpa-onnx"}
-          assert set(data["sources"]) == expected
-          for name, source in data["sources"].items():
-              assert len(source.get("ref", "")) == 40, name
-              assert source.get("repository")
-          print("Source manifest syntax and pinned refs: OK")
-          print("This preflight does not compile the app.")
+          sources = data.get("sources", {})
+          assert set(sources) == {"TV"}, f"Unexpected source set: {sorted(sources)}"
+          source = sources["TV"]
+          assert source.get("repository") == "FongMi/TV"
+          assert source.get("branch") == "fongmi"
+          assert source.get("requiresPrivateSourceAccess") is False
+          assert source.get("bundledLiveSources") is False
+          print("Public source manifest and no-live-sources setting: OK")
           PY
-      - name: Explain required credentials
+
+      - name: Explain signing prerequisites
         run: |
-          echo "The complete upstream build uses source repositories that may require PRIVATE_SOURCE_TOKEN."
-          echo "No APK build was attempted by this preflight workflow."
-          echo "Configure a separate R15-TV signing key before building release APKs."
+          echo "The APK workflow can build debug APKs without signing secrets."
+          echo "For stable release APKs, configure your own R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, and R15TV_KEY_PASSWORD."
+          echo "No private upstream source token is needed."
+          echo "This preflight does not compile the APK; use the Build R15-TV APKs workflow."
