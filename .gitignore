@@ -1,0 +1,17 @@
+# Build outputs and source worktrees
+build/
+dist/
+sources/
+runtime-cache/
+.gradle/
+**/build/
+
+# Signing material and local SDK paths
+*.keystore
+*.jks
+local.properties
+*.pem
+*.p12
+
+# Local state/logs
+*.log
