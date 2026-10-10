@@ -3,70 +3,28 @@ name: Build R15-TV APKs
 on:
   workflow_dispatch:
     inputs:
-      force_build:
-        description: Build even when the four source SHAs are unchanged
+      publish_release:
+        description: Publish a GitHub Release after a successful signed build
         required: true
         type: boolean
-        default: true
+        default: false
 
 permissions:
   contents: write
   actions: read
 
 concurrency:
-  group: tv-autobuild
+  group: r15tv-public-build
   cancel-in-progress: false
 
 env:
+  SOURCE_REPOSITORY: FongMi/TV
+  SOURCE_BRANCH: fongmi
   NDK_VERSION: 28.2.13676358
-  FFMPEG_COMMIT: f947bc9c1532e7bcc95da11d9574cac3543490b3
 
 jobs:
-  resolve:
-    name: Detect source changes
-    runs-on: ubuntu-latest
-    outputs:
-      should_build: ${{ steps.sources.outputs.should_build }}
-      source_changed: ${{ steps.sources.outputs.source_changed }}
-      changed_sources: ${{ steps.sources.outputs.changed_sources }}
-      tv_sha: ${{ steps.sources.outputs.tv_sha }}
-      media_sha: ${{ steps.sources.outputs.media_sha }}
-      vivid_sha: ${{ steps.sources.outputs.vivid_sha }}
-      sherpa_sha: ${{ steps.sources.outputs.sherpa_sha }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 1
-
-      - name: Resolve all source branches
-        id: sources
-        env:
-          FORCE_REQUESTED: ${{ github.event_name == 'push' || github.event_name == 'repository_dispatch' || (github.event_name == 'workflow_dispatch' && inputs.force_build) }}
-          R15TV_SOURCE_TOKEN: ${{ secrets.R15TV_SOURCE_TOKEN }}
-        run: scripts/resolve-sources.sh
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: source-refs
-          path: build/source-refs.json
-          retention-days: 30
-
-      - name: Monitoring summary
-        run: |
-          {
-            echo "## Source monitor"
-            echo "- Changed: ${{ steps.sources.outputs.source_changed }}"
-            echo "- Changed repositories: ${{ steps.sources.outputs.changed_sources }}"
-            echo "- Build scheduled: ${{ steps.sources.outputs.should_build }}"
-            echo '```json'
-            cat build/source-refs.json
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
   build:
-    name: Build R15-TV Mobile and Leanback APKs
-    needs: resolve
-    if: needs.resolve.outputs.should_build == 'true'
+    name: Build R15-TV from public FongMi source
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
@@ -75,58 +33,40 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Download resolved source manifest
-        uses: actions/download-artifact@v4
-        with:
-          name: source-refs
-          path: build
+      - name: Resolve public source revision (no source token)
+        id: sources
+        run: scripts/resolve-sources.sh
 
-      - name: Checkout TV
+      - name: Checkout public FongMi/TV source
         uses: actions/checkout@v4
         with:
-          repository: iptvorganization/TV
-          ref: ${{ needs.resolve.outputs.tv_sha }}
+          repository: FongMi/TV
+          ref: ${{ steps.sources.outputs.tv_sha }}
           path: sources/TV
-          token: ${{ secrets.R15TV_SOURCE_TOKEN }}
           persist-credentials: false
 
-      - name: Checkout media
-        uses: actions/checkout@v4
-        with:
-          repository: iptvorganization/media
-          ref: ${{ needs.resolve.outputs.media_sha }}
-          path: sources/FongMi-media
-          token: ${{ secrets.R15TV_SOURCE_TOKEN }}
-          persist-credentials: false
+      - name: Verify checkout and required public dependencies
+        env:
+          EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
+        run: |
+          actual_sha=$(git -C sources/TV rev-parse HEAD)
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test -x sources/TV/gradlew
+          test -f sources/TV/app/build.gradle
+          test -f sources/TV/app/libs/forcetech-release.aar
+          test -f sources/TV/LICENSE
+          echo "Public source checked out: FongMi/TV@$actual_sha"
+          echo "This build does not include IPTV/live-playlist sources."
 
-      - name: Checkout VividLib
-        uses: actions/checkout@v4
-        with:
-          repository: iptvorganization/VividLib
-          ref: ${{ needs.resolve.outputs.vivid_sha }}
-          path: sources/VividLib
-          persist-credentials: false
-
-      - name: Checkout sherpa-onnx
-        uses: actions/checkout@v4
-        with:
-          repository: iptvorganization/sherpa-onnx
-          ref: ${{ needs.resolve.outputs.sherpa_sha }}
-          path: sources/sherpa-onnx
-          persist-credentials: false
-
-      - name: Set up JDK 21
+      - name: Set up Java 21
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
-          cache-dependency-path: |
-            sources/TV/**/*.gradle*
-            sources/TV/gradle/libs.versions.toml
-            sources/FongMi-media/**/*.gradle*
+          cache-dependency-path: sources/TV/**/*.gradle*
 
-      - name: Set up Chaquopy build Python
+      - name: Set up Python for Chaquopy build
         uses: actions/setup-python@v5
         with:
           python-version: "3.10"
@@ -136,7 +76,7 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Android SDK packages
+      - name: Install Android build packages
         run: |
           yes | sdkmanager --licenses >/dev/null
           sdkmanager \
@@ -145,238 +85,230 @@ jobs:
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
             "ndk;${NDK_VERSION}"
-          python3.10 --version
-          echo "ANDROID_NDK_HOME=${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" >> "$GITHUB_ENV"
 
-      - name: Restore source-built sherpa runtime
-        id: sherpa-cache
-        uses: actions/cache@v4
-        with:
-          path: runtime-cache/sherpa
-          key: sherpa-android-static-${{ needs.resolve.outputs.sherpa_sha }}-ndk-${{ env.NDK_VERSION }}
-
-      - name: Build sherpa-onnx Java and JNI runtime
-        if: steps.sherpa-cache.outputs.cache-hit != 'true'
-        working-directory: sources/sherpa-onnx
-        env:
-          BUILD_SHARED_LIBS: "OFF"
-          SHERPA_ONNX_ENABLE_TTS: "OFF"
-          SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION: "OFF"
-          SHERPA_ONNX_ENABLE_BINARY: "OFF"
-          SHERPA_ONNX_ENABLE_C_API: "OFF"
-          SHERPA_ONNX_ENABLE_RKNN: "OFF"
-          SHERPA_ONNX_ENABLE_QNN: "OFF"
-        run: |
-          export ANDROID_NDK="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
-          ./build-android-arm64-v8a.sh
-          ./build-android-armv7-eabi.sh
-          make -C sherpa-onnx/java-api clean all
-          mkdir -p "$GITHUB_WORKSPACE/runtime-cache/sherpa/arm64-v8a"
-          mkdir -p "$GITHUB_WORKSPACE/runtime-cache/sherpa/armeabi-v7a"
-          cp sherpa-onnx/java-api/build/sherpa-onnx.jar "$GITHUB_WORKSPACE/runtime-cache/sherpa/sherpa-onnx.jar"
-          cp build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so "$GITHUB_WORKSPACE/runtime-cache/sherpa/arm64-v8a/"
-          cp build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so "$GITHUB_WORKSPACE/runtime-cache/sherpa/armeabi-v7a/"
-
-      - name: Install source-built sherpa runtime into TV
-        run: |
-          test -s runtime-cache/sherpa/sherpa-onnx.jar
-          test -s runtime-cache/sherpa/arm64-v8a/libsherpa-onnx-jni.so
-          test -s runtime-cache/sherpa/armeabi-v7a/libsherpa-onnx-jni.so
-          install -m 644 runtime-cache/sherpa/sherpa-onnx.jar sources/TV/app/libs/sherpa-onnx-v1.13.4.jar
-          install -m 755 runtime-cache/sherpa/arm64-v8a/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
-          install -m 755 runtime-cache/sherpa/armeabi-v7a/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
-
-      - name: Build AV3A JNI from latest VividLib source
-        env:
-          MEDIA3_DIR: ${{ github.workspace }}/sources/FongMi-media
-          VIVID_SOURCE_DIR: ${{ github.workspace }}/sources/VividLib
-          VIVID_COMMIT: ${{ needs.resolve.outputs.vivid_sha }}
-        run: |
-          export NDK="${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}"
-          sources/TV/tools/build-av3a-from-source.sh
-
-      - name: Restore source-built FFmpeg decoder
-        id: ffmpeg-cache
-        uses: actions/cache@v4
-        with:
-          path: sources/FongMi-media/libraries/decoder_ffmpeg/src/main/jni/ffmpeg
-          key: ffmpeg-android-${{ env.FFMPEG_COMMIT }}-media-${{ needs.resolve.outputs.media_sha }}-ndk-${{ env.NDK_VERSION }}
-
-      - name: Build FFmpeg decoder from pinned source
-        if: steps.ffmpeg-cache.outputs.cache-hit != 'true'
-        env:
-          MEDIA3_DIR: ${{ github.workspace }}/sources/FongMi-media
-        run: |
-          module_dir="${MEDIA3_DIR}/libraries/decoder_ffmpeg/src/main"
-          source_dir="${module_dir}/jni/ffmpeg"
-          mkdir -p "$source_dir"
-          git -C "$source_dir" init
-          git -C "$source_dir" remote add origin https://github.com/FongMi/FFmpeg.git
-          git -C "$source_dir" fetch --depth=1 origin "$FFMPEG_COMMIT"
-          git -C "$source_dir" checkout --detach FETCH_HEAD
-          test "$(git -C "$source_dir" rev-parse HEAD)" = "$FFMPEG_COMMIT"
-          chmod +x "${module_dir}/jni/build_ffmpeg.sh"
-          "${module_dir}/jni/build_ffmpeg.sh" \
-            "$module_dir" \
-            "${ANDROID_SDK_ROOT}/ndk/${NDK_VERSION}" \
-            linux-x86_64 \
-            24 \
-            aac ac3 alac dca eac3 flac h264 hevc mp3 opus pcm_alaw pcm_mulaw truehd vorbis
-
-      - name: Verify source-built FFmpeg inputs
-        env:
-          MEDIA3_DIR: ${{ github.workspace }}/sources/FongMi-media
-        run: |
-          source_dir="${MEDIA3_DIR}/libraries/decoder_ffmpeg/src/main/jni/ffmpeg"
-          test "$(git -C "$source_dir" rev-parse HEAD)" = "$FFMPEG_COMMIT"
-          for abi in armeabi-v7a arm64-v8a; do
-            for library in avcodec avutil swresample swscale; do
-              test -s "${source_dir}/android-libs/${abi}/lib${library}.a"
-            done
-          done
-
-      - name: Configure R15-TV release signing
+      - name: Configure signing and local.properties
+        id: signing
         working-directory: sources/TV
         env:
           KEYSTORE_B64: ${{ secrets.R15TV_KEYSTORE_B64 }}
           STORE_PASSWORD: ${{ secrets.R15TV_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.R15TV_KEY_PASSWORD }}
         run: |
-          test -n "$KEYSTORE_B64"
-          test -n "$STORE_PASSWORD"
-          test -n "$KEY_PASSWORD"
-          printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
-          cat > local.properties <<EOF_PROPERTIES
-          sdk.dir=${ANDROID_SDK_ROOT}
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_PATH"
+          if [[ -n "$KEYSTORE_B64" || -n "$STORE_PASSWORD" || -n "$KEY_PASSWORD" ]]; then
+            if [[ -z "$KEYSTORE_B64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
+              echo "Configure all three secrets: R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, R15TV_KEY_PASSWORD." >&2
+              exit 1
+            fi
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
+            cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$SDK_PATH
           storeFile=../r15tv.keystore
           keyAlias=r15tv
-          storePassword=${STORE_PASSWORD}
-          keyPassword=${KEY_PASSWORD}
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
           EOF_PROPERTIES
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            echo "Release-signing key detected; building signed release APKs."
+          else
+            cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$SDK_PATH
+          storeFile=../r15tv-debug-placeholder.jks
+          keyAlias=r15tv-debug-placeholder
+          storePassword=not-used-for-debug
+          keyPassword=not-used-for-debug
+          EOF_PROPERTIES
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release-signing secrets are not configured. Building debug APKs for initial testing; these are not stable updateable releases."
+          fi
 
-      - name: Compute traceable Android version
+      - name: Set R15-TV package metadata and app label
         id: version
-        env:
-          TV_DIR: ${{ github.workspace }}/sources/TV
-          SOURCE_REFS: ${{ github.workspace }}/build/source-refs.json
-        run: scripts/compute-version.sh
-
-      - name: Run all ABI tests and build four release APKs
         working-directory: sources/TV
         env:
-          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
-          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          code_match = re.search(r"(?m)^\s*versionCode\s+(\d+)\s*$", text)
+          name_match = re.search(r'(?m)^\s*versionName\s+"([^"]+)"\s*$', text)
+          if not code_match or not name_match:
+              raise SystemExit("Unable to read upstream versionCode/versionName from app/build.gradle")
+
+          base_code = int(code_match.group(1))
+          base_name = name_match.group(1)
+          run_number = int(os.environ["RUN_NUMBER"])
+          source_sha = os.environ["SOURCE_SHA"]
+          version_code = base_code * 1_000_000 + run_number
+          if version_code > 2_100_000_000:
+              raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
+          version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
+
+          text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
+          text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
+          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv"', text, count=1)
+          gradle_file.write_text(text, encoding="utf-8")
+
+          for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
+              xml = strings_file.read_text(encoding="utf-8")
+              changed = re.sub(
+                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+                  r"\g<1>R15-TV\g<2>",
+                  xml,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if changed != xml:
+                  strings_file.write_text(changed, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"base_version_name={base_name}\n")
+              output.write(f"base_version_code={base_code}\n")
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+          print(f"R15-TV version: {version_name} (code {version_code})")
+          print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
+          PY
+
+      - name: Record exact upstream source revision
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          SOURCE_REPOSITORY: ${{ env.SOURCE_REPOSITORY }}
+          SOURCE_BRANCH: ${{ env.SOURCE_BRANCH }}
+        run: |
+          mkdir -p dist
+          jq -n \
+            --arg repository "$SOURCE_REPOSITORY" \
+            --arg branch "$SOURCE_BRANCH" \
+            --arg sha "$SOURCE_SHA" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' \
+            > dist/SOURCE_REFS.json
+          printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
+
+      - name: Build signed release APKs
+        if: steps.signing.outputs.mode == 'release'
+        working-directory: sources/TV
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            "-PappVersionCode=${APP_VERSION_CODE}" \
-            "-PappVersionName=${APP_VERSION_NAME}" \
-            :media3-lib-ui-danmaku:testDebugUnitTest \
-            :app:testLeanbackArmeabi_v7aDebugUnitTest \
-            :app:testLeanbackArm64_v8aDebugUnitTest \
-            :app:testMobileArmeabi_v7aDebugUnitTest \
-            :app:testMobileArm64_v8aDebugUnitTest \
-            :app:assembleLeanbackArmeabi_v7aRelease \
-            :app:assembleLeanbackArm64_v8aRelease \
-            :app:assembleMobileArmeabi_v7aRelease \
-            :app:assembleMobileArm64_v8aRelease
+            :app:assembleLeanbackRelease \
+            :app:assembleMobileRelease
 
-      - name: Verify signatures and prepare release
-        id: release
-        env:
-          TV_DIR: ${{ github.workspace }}/sources/TV
-          SOURCE_REFS: ${{ github.workspace }}/build/source-refs.json
-          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
-          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
-          BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
-          BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+      - name: Build debug APKs (initial test mode)
+        if: steps.signing.outputs.mode == 'debug'
+        working-directory: sources/TV
         run: |
-          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
-          AAPT=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)
-          test -x "$APKSIGNER"
-          test -x "$AAPT"
-          scripts/prepare-release.sh
-          "$APKSIGNER" verify --verbose --print-certs dist/TV-leanback-armeabi-v7a.apk
-          "$APKSIGNER" verify --verbose --print-certs dist/TV-leanback-arm64-v8a.apk
-          "$APKSIGNER" verify --verbose --print-certs dist/TV-mobile-armeabi-v7a.apk
-          "$APKSIGNER" verify --verbose --print-certs dist/TV-mobile-arm64-v8a.apk
-          verify_apk() {
-            apk=$1
-            abi=$2
-            mode=$3
-            badging=$("$AAPT" dump badging "$apk")
-            grep -Fq "package: name='com.fongmi.android.tv' versionCode='${APP_VERSION_CODE}' versionName='${APP_VERSION_NAME}'" <<<"$badging" || return 1
-            grep -Fq "native-code: '${abi}'" <<<"$badging" || return 1
-            if [[ "$mode" == leanback ]]; then
-              grep -Fq "leanback-launchable-activity:" <<<"$badging" || return 1
-            else
-              if grep -Fq "leanback-launchable-activity:" <<<"$badging"; then return 1; fi
-            fi
-            entries=$(zipinfo -1 "$apk")
-            grep -Fxq "lib/${abi}/libav3aJNI.so" <<<"$entries" || return 1
-            grep -Fxq "lib/${abi}/libffmpegJNI.so" <<<"$entries" || return 1
-            other_abi=arm64-v8a
-            [[ "$abi" == arm64-v8a ]] && other_abi=armeabi-v7a
-            if grep -q "^lib/${other_abi}/" <<<"$entries"; then return 1; fi
-          }
-          verify_apk dist/TV-leanback-armeabi-v7a.apk armeabi-v7a leanback
-          verify_apk dist/TV-leanback-arm64-v8a.apk arm64-v8a leanback
-          verify_apk dist/TV-mobile-armeabi-v7a.apk armeabi-v7a mobile
-          verify_apk dist/TV-mobile-arm64-v8a.apk arm64-v8a mobile
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleLeanbackDebug \
+            :app:assembleMobileDebug
 
-      - name: Upload workflow artifacts
+      - name: Package APKs and verification metadata
+        env:
+          BUILD_MODE: ${{ steps.signing.outputs.mode }}
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+          BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TV_DIR="$GITHUB_WORKSPACE/sources/TV"
+          mkdir -p dist
+          if [[ "$BUILD_MODE" == "release" ]]; then
+            APK_ROOT="$TV_DIR/Release/apk"
+          else
+            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+          fi
+          found=0
+          while IFS= read -r -d '' apk; do
+            lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
+            case "$lower" in
+              *leanback*arm64*v8a*) name="R15-TV-leanback-arm64-v8a.apk" ;;
+              *leanback*armeabi*v7a*) name="R15-TV-leanback-armeabi-v7a.apk" ;;
+              *mobile*arm64*v8a*) name="R15-TV-mobile-arm64-v8a.apk" ;;
+              *mobile*armeabi*v7a*) name="R15-TV-mobile-armeabi-v7a.apk" ;;
+              *) continue ;;
+            esac
+            if [[ -e "dist/$name" ]]; then
+              continue
+            fi
+            cp "$apk" "dist/$name"
+            found=$((found + 1))
+          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
+          if [[ "$found" -ne 4 ]]; then
+            echo "Expected four ABI/flavor APKs under $APK_ROOT but packaged $found." >&2
+            find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
+            exit 1
+          fi
+
+          cp "$TV_DIR/LICENSE" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          jq -n \
+            --arg mode "$BUILD_MODE" \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg baseVersionName "$BASE_VERSION_NAME" \
+            --argjson baseVersionCode "$BASE_VERSION_CODE" \
+            --arg repository "FongMi/TV" \
+            --arg branch "fongmi" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg runUrl "$RUN_URL" \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},workflowRun:$runUrl}' \
+            > dist/BUILD_INFO.json
+
+          (
+            cd dist
+            sha256sum R15-TV-*.apk > SHA256SUMS.txt
+          )
+          {
+            echo "## R15-TV build result"
+            echo "- Mode: $BUILD_MODE"
+            echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
+            echo "- Version: $VERSION_NAME ($VERSION_CODE)"
+            if [[ "$BUILD_MODE" == "debug" ]]; then
+              echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
+            else
+              echo "- APKs are signed with the private R15-TV release key supplied through GitHub Actions secrets."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v4
         with:
-          name: TV-APKs-${{ github.run_number }}
+          name: R15-TV-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publish GitHub release
+      - name: Publish GitHub Release
+        if: steps.signing.outputs.mode == 'release' && inputs.publish_release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: autobuild-${{ github.run_number }}
-          name: ${{ steps.release.outputs.release_name }}
-          body_path: dist/RELEASE_NOTES.md
-          make_latest: true
+          tag_name: r15tv-${{ github.run_number }}
+          name: R15-TV ${{ steps.version.outputs.version_name }}
+          body: |
+            R15-TV build based on public FongMi/TV source.
+
+            - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
+            - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
+            - Build metadata and SHA-256 checksums are attached.
+            - The app does not include IPTV/live-playlist sources.
           files: |
-            dist/TV-leanback-armeabi-v7a.apk
-            dist/TV-leanback-arm64-v8a.apk
-            dist/TV-mobile-armeabi-v7a.apk
-            dist/TV-mobile-arm64-v8a.apk
+            dist/R15-TV-leanback-arm64-v8a.apk
+            dist/R15-TV-leanback-armeabi-v7a.apk
+            dist/R15-TV-mobile-arm64-v8a.apk
+            dist/R15-TV-mobile-armeabi-v7a.apk
             dist/SOURCE_REFS.json
-            dist/SHA256SUMS.txt
+            dist/SOURCE_COMMIT.txt
             dist/BUILD_INFO.json
-
-  record:
-    name: Record monitored source state
-    needs: [resolve, build]
-    if: always() && needs.resolve.outputs.should_build == 'true'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Download resolved source manifest
-        uses: actions/download-artifact@v4
-        with:
-          name: source-refs
-          path: build
-
-      - name: Commit attempt state
-        env:
-          SOURCE_REFS: ${{ github.workspace }}/build/source-refs.json
-          BUILD_RESULT: ${{ needs.build.result }}
-          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-        run: |
-          git pull --rebase origin main
-          scripts/record-state.sh
-          git config user.name iptvorganization
-          git config user.email iptvorganization@users.noreply.github.com
-          git add state/
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "chore: record source build ${GITHUB_RUN_NUMBER} (${BUILD_RESULT})"
-          git push origin HEAD:main
+            dist/SHA256SUMS.txt
+            dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          make_latest: true
