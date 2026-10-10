@@ -35,7 +35,7 @@ jobs:
 
       - name: Resolve public source revision (no source token)
         id: sources
-        run: scripts/resolve-sources.sh
+        run: bash scripts/resolve-sources.sh
 
       - name: Fetch public FongMi/TV source without credentials
         env:
@@ -106,22 +106,22 @@ jobs:
             fi
             printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
             cat > local.properties <<EOF_PROPERTIES
-          sdk.dir=$SDK_PATH
-          storeFile=../r15tv.keystore
-          keyAlias=r15tv
-          storePassword=$STORE_PASSWORD
-          keyPassword=$KEY_PASSWORD
-          EOF_PROPERTIES
+sdk.dir=$SDK_PATH
+storeFile=../r15tv.keystore
+keyAlias=r15tv
+storePassword=$STORE_PASSWORD
+keyPassword=$KEY_PASSWORD
+EOF_PROPERTIES
             echo "mode=release" >> "$GITHUB_OUTPUT"
             echo "Release-signing key detected; building signed release APKs."
           else
             cat > local.properties <<EOF_PROPERTIES
-          sdk.dir=$SDK_PATH
-          storeFile=../r15tv-debug-placeholder.jks
-          keyAlias=r15tv-debug-placeholder
-          storePassword=not-used-for-debug
-          keyPassword=not-used-for-debug
-          EOF_PROPERTIES
+sdk.dir=$SDK_PATH
+storeFile=../r15tv-debug-placeholder.jks
+keyAlias=r15tv-debug-placeholder
+storePassword=not-used-for-debug
+keyPassword=not-used-for-debug
+EOF_PROPERTIES
             echo "mode=debug" >> "$GITHUB_OUTPUT"
             echo "::warning::Release-signing secrets are not configured. Building debug APKs for initial testing; these are not stable updateable releases."
           fi
@@ -140,8 +140,8 @@ jobs:
 
           gradle_file = Path("app/build.gradle")
           text = gradle_file.read_text(encoding="utf-8")
-          code_match = re.search(r"(?m)^\s*versionCode\s+(\d+)\s*$", text)
-          name_match = re.search(r'(?m)^\s*versionName\s+"([^"]+)"\s*$', text)
+          code_match = re.search(r"(?m)^\\s*versionCode\\s+(\\d+)\\s*$", text)
+          name_match = re.search(r'(?m)^\\s*versionName\\s+"([^"]+)"\\s*$', text)
           if not code_match or not name_match:
               raise SystemExit("Unable to read upstream versionCode/versionName from app/build.gradle")
 
@@ -154,16 +154,16 @@ jobs:
               raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
           version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
 
-          text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
-          text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
-          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv"', text, count=1)
+          text = re.sub(r"(?m)^(\\s*versionCode\\s+)\\d+\\s*$", rf"\\g<1>{version_code}", text, count=1)
+          text = re.sub(r'(?m)^(\\s*versionName\\s+)"[^"]+"\\s*$', rf'\\g<1>"{version_name}"', text, count=1)
+          text = re.sub(r'(?m)^(\\s*applicationId\\s+)"[^"]+"\\s*$', r'\\g<1>"com.dicky.r15tv"', text, count=1)
           gradle_file.write_text(text, encoding="utf-8")
 
           for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = strings_file.read_text(encoding="utf-8")
               changed = re.sub(
-                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
-                  r"\g<1>R15-TV\g<2>",
+                  r'(<string\\s+name="app_name"[^>]*>).*?(</string>)',
+                  r"\\g<1>R15-TV\\g<2>",
                   xml,
                   count=1,
                   flags=re.DOTALL,
@@ -172,10 +172,10 @@ jobs:
                   strings_file.write_text(changed, encoding="utf-8")
 
           with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
-              output.write(f"base_version_name={base_name}\n")
-              output.write(f"base_version_code={base_code}\n")
-              output.write(f"version_name={version_name}\n")
-              output.write(f"version_code={version_code}\n")
+              output.write(f"base_version_name={base_name}\\n")
+              output.write(f"base_version_code={base_code}\\n")
+              output.write(f"version_name={version_name}\\n")
+              output.write(f"version_code={version_code}\\n")
           print(f"R15-TV version: {version_name} (code {version_code})")
           print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
           PY
@@ -193,7 +193,7 @@ jobs:
             --arg sha "$SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' \
             > dist/SOURCE_REFS.json
-          printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
+          printf '%s\\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
