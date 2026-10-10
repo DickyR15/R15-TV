@@ -82,9 +82,9 @@ jobs:
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager | sort -V | tail -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           package_list=$("$SDKMANAGER" --list --channel=3)
-          if grep -Eq 'platforms;android-37[[:space:]]*\\|' <<< "$package_list"; then
+          if grep -Eq 'platforms;android-37[[:space:]]*\|' <<< "$package_list"; then
             API_LEVEL=37
-          elif grep -Eq 'platforms;android-36[[:space:]]*\\|' <<< "$package_list"; then
+          elif grep -Eq 'platforms;android-36[[:space:]]*\|' <<< "$package_list"; then
             API_LEVEL=36
             echo "::warning::Android SDK API 37 is not currently available from the SDK package index; building this baseline against API 36."
           else
@@ -120,7 +120,7 @@ jobs:
           version_file = Path("sources/TV/gradle/libs.versions.toml")
           version_text = version_file.read_text(encoding="utf-8")
           for key in ("compileSdk", "targetSdk"):
-              pattern = rf'(?m)^({key}\\s*=\\s*")[0-9]+(".*)          text = path.read_text(encoding="utf-8")
+              pattern = rf'(?m)^({key}\s*=\s*")[0-9]+(".*)$'
           code = os.environ["APP_VERSION_CODE"]
           name = os.environ["APP_VERSION_NAME"]
 
