@@ -38,6 +38,7 @@ Never commit a keystore, password, or token to the repository. Do not copy an up
 Every successful build artifact includes:
 
 - `SOURCE_REFS.json` and `SOURCE_COMMIT.txt`: exact public upstream source revision.
+- `R15-TV-source.patch`: the exact tracked source edits for this build; apply it to the recorded source commit to reproduce the app ID, label, and version metadata.
 - `BUILD_INFO.json`: build mode, version, source commit, and workflow URL.
 - `SHA256SUMS.txt`: SHA-256 checksums for all APKs.
 - `UPSTREAM-GPL-3.0-LICENSE.txt`: upstream app license.
