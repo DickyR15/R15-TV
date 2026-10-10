@@ -1,23 +1,23 @@
-# R15-TV
+# R15 TV
 
-R15-TV is a personal Android TV / mobile player build based on the public [FongMi/TV](https://github.com/FongMi/TV) source. APK builds run on GitHub Actions; a Windows Android build environment is not required.
+R15 TV is a personal Android TV / mobile player build based on the public [FongMi/TV](https://github.com/FongMi/TV) source. APK builds run on GitHub Actions; a Windows Android build environment is not required.
 
 ## Current status
 
 - The public-source build workflow is available on branch [`public-source-build`](https://github.com/DickyR15/R15-TV/tree/public-source-build).
 - It fetches public `FongMi/TV` source without a private source token.
 - It is intended to produce Android TV and mobile APKs for `arm64-v8a` and `armeabi-v7a`.
-- App label: `R15-TV`; package ID: `com.dicky.r15tv`.
+- App label: `R15 TV`; package ID: `com.dicky.r15tv`.
 - No IPTV/live-playlist sources or channel lists are bundled.
 
 The public-source branch is a build baseline, not yet a verified successful build. Please select that branch in the workflow before running it. The existing `main` branch is retained separately.
 
 ## Run a test build
 
-1. Open [Build R15-TV APKs in GitHub Actions](https://github.com/DickyR15/R15-TV/actions/workflows/build-apks.yml).
+1. Open [Build R15 TV APKs in GitHub Actions](https://github.com/DickyR15/R15-TV/actions/workflows/build-apks.yml).
 2. Select branch `public-source-build`.
 3. Click **Run workflow** and leave `publish_release` unchecked for the first run.
-4. Without release-signing secrets, the workflow attempts to produce debug APKs for testing. Download the `R15-TV-<run number>` artifact if the build succeeds.
+4. Without release-signing secrets, the workflow attempts to produce debug APKs for testing. Download the `R15 TV-<run number>` artifact if the build succeeds.
 
 A debug build is for initial validation only. Its signing key is not persistent between hosted runs, so it is not appropriate for stable updateable releases.
 
@@ -33,7 +33,7 @@ The configured key alias is `r15tv`. The workflow does not require `R15TV_SOURCE
 
 ## Build metadata
 
-The artifact is intended to include the exact upstream source revision, build metadata, SHA-256 checksums, upstream license, and an R15-TV source patch for traceability.
+The artifact is intended to include the exact upstream source revision, build metadata, SHA-256 checksums, upstream license, and an R15 TV source patch for traceability.
 
 ## Customization and license
 
