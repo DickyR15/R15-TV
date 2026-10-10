@@ -60,7 +60,7 @@ Source commits:
 
 Build run: ${RUN_URL}
 
-All four APKs use the persistent R15-TV release signing key stored as GitHub Actions secrets. Verify files with SHA256SUMS.txt and inspect BUILD_INFO.json for the effective install version.
+All four APKs use the persistent R15 TV release signing key stored as GitHub Actions secrets. Verify files with SHA256SUMS.txt and inspect BUILD_INFO.json for the effective install version.
 EOF_NOTES
 
 echo "release_name=TV ${APP_VERSION_NAME}" >> "${GITHUB_OUTPUT:-/dev/null}"
