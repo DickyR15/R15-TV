@@ -1,13 +1,14 @@
-name: R15-TV Build Preflight
+name: R15-TV Public Source Preflight
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, public-source-build]
     paths:
       - "README.md"
       - "LICENSE"
       - "config/**"
+      - "scripts/**"
       - ".github/workflows/**"
 
 permissions:
@@ -15,28 +16,41 @@ permissions:
 
 jobs:
   preflight:
-    name: Check build prerequisites
+    name: Check public build prerequisites
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate source manifest
+
+      - name: Validate public source manifest and build workflow
         run: |
           python - <<'PY'
           import json
           from pathlib import Path
-          p = Path("config/sources.json")
-          data = json.loads(p.read_text(encoding="utf-8"))
-          assert data.get("schema") == 1
-          expected = {"TV", "media", "VividLib", "sherpa-onnx"}
-          assert set(data["sources"]) == expected
-          for name, source in data["sources"].items():
-              assert len(source.get("ref", "")) == 40, name
-              assert source.get("repository")
-          print("Source manifest syntax and pinned refs: OK")
-          print("This preflight does not compile the app.")
+
+          config = json.loads(Path("config/sources.json").read_text(encoding="utf-8"))
+          assert config.get("schema") == 1
+          source = config.get("sources", {}).get("TV", {})
+          assert source.get("repository") == "FongMi/TV"
+          assert source.get("branch") == "fongmi"
+          assert source.get("requiresPrivateSourceAccess") is False
+          assert source.get("bundledLiveSources") is False
+
+          workflow = Path(".github/workflows/build-apks.yml").read_text(encoding="utf-8")
+          resolver = Path("scripts/resolve-sources.sh").read_text(encoding="utf-8")
+          assert "R15TV_SOURCE_TOKEN" not in workflow + resolver
+          assert "PRIVATE_SOURCE_TOKEN" not in workflow + resolver
+          assert "actions/checkout@v4" in workflow
+          print("Public source manifest: OK")
+          print("Private source token dependency: absent")
+          print("APK build workflow: present")
           PY
-      - name: Explain required credentials
+
+      - name: Confirm upstream branch is publicly reachable
         run: |
-          echo "The complete upstream build uses source repositories that may require PRIVATE_SOURCE_TOKEN."
-          echo "No APK build was attempted by this preflight workflow."
-          echo "Configure a separate R15-TV signing key before building release APKs."
+          sha=$(git ls-remote https://github.com/FongMi/TV.git refs/heads/fongmi | awk 'NR == 1 {print $1}')
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Unable to resolve the public FongMi/TV fongmi branch." >&2
+            exit 1
+          fi
+          echo "Public FongMi/TV revision: $sha"
+          echo "This preflight checks access and configuration; the APK build is a separate workflow."
