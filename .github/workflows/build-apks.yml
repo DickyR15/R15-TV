@@ -120,18 +120,29 @@ jobs:
           version_file = Path("sources/TV/gradle/libs.versions.toml")
           version_text = version_file.read_text(encoding="utf-8")
           for key in ("compileSdk", "targetSdk"):
-              pattern = rf'(?m)^({key}\s*=\s*")[0-9]+(".*)$'
+              pattern = rf'(?m)^({key}\\s*=\\s*")[0-9]+(".*)$'
+              version_text, count = re.subn(
+                  pattern,
+                  lambda match: match.group(1) + api_level + match.group(2),
+                  version_text,
+              )
+              if count != 1:
+                  raise SystemExit(f"Expected one {key} definition; found {count}")
+          version_file.write_text(version_text, encoding="utf-8")
+
+          path = Path("sources/TV/app/build.gradle")
+          text = path.read_text(encoding="utf-8")
           code = os.environ["APP_VERSION_CODE"]
           name = os.environ["APP_VERSION_NAME"]
 
           text, code_count = re.subn(
-              r'(?m)^([ \t]*versionCode[ \t]+)\d+([ \t]*(?://.*)?$)',
-              lambda m: f"{m.group(1)}{code}{m.group(2)}",
+              r'(?m)^([ \\t]*versionCode[ \\t]+)\\d+([ \\t]*(?://.*)?$)',
+              lambda match: f"{match.group(1)}{code}{match.group(2)}",
               text,
           )
           text, name_count = re.subn(
-              r'(?m)^([ \t]*versionName[ \t]+)"[^"]+"([ \t]*(?://.*)?$)',
-              lambda m: f'{m.group(1)}"{name}"{m.group(2)}',
+              r'(?m)^([ \\t]*versionName[ \\t]+)"[^"]+"([ \\t]*(?://.*)?$)',
+              lambda match: f'{match.group(1)}"{name}"{match.group(2)}',
               text,
           )
           if code_count != 1 or name_count != 1:
@@ -139,7 +150,7 @@ jobs:
                   f"Expected one versionCode and one versionName; found {code_count} and {name_count}"
               )
           path.write_text(text, encoding="utf-8")
-          print(f"Prepared app version {name} ({code})")
+          print(f"Prepared app version {name} ({code}), Android API {api_level}")
           PY
 
       - name: Configure signing
