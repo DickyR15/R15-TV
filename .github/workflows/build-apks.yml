@@ -63,14 +63,27 @@ jobs:
           cache: pip
           cache-dependency-path: sources/TV/chaquo/requirements.txt
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure preinstalled Android SDK
+        run: |
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          test -d "$SDK_ROOT/cmdline-tools"
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager | sort -V | tail -1)
+          test -x "$SDKMANAGER"
+          echo "ANDROID_SDK_ROOT=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=$SDK_ROOT" >> "$GITHUB_ENV"
+          echo "$SDK_ROOT/platform-tools" >> "$GITHUB_PATH"
+          echo "Using Android SDK at $SDK_ROOT"
+          echo "sdkmanager: $SDKMANAGER"
 
       - name: Install Android SDK packages
         run: |
-          yes | sdkmanager --licenses >/dev/null
-          sdkmanager "platform-tools" "platforms;android-37" "build-tools;36.0.0" "ndk;28.2.13676358"
-          echo "ANDROID_NDK_HOME=$ANDROID_SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          set -euo pipefail
+          SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
+          SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager | sort -V | tail -1)
+          yes | "$SDKMANAGER" --licenses >/dev/null || true
+          "$SDKMANAGER" "platform-tools" "platforms;android-37" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
 
       - name: Compute a traceable R15-TV version
         id: version
