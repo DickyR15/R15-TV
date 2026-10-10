@@ -188,6 +188,7 @@ jobs:
           APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
           BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
           BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+          BUILD_API_LEVEL: ${{ steps.sdk.outputs.compile_api_level }}
         run: bash scripts/prepare-release.sh
 
       - name: Verify APK signatures, package identity, versions, and ABIs
