@@ -5,8 +5,6 @@ on:
     branches: [public-fongmi-base]
     paths:
       - ".github/workflows/build-apks.yml"
-      - "config/**"
-      - "scripts/**"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -77,13 +75,28 @@ jobs:
           echo "sdkmanager: $SDKMANAGER"
 
       - name: Install Android SDK packages
+        id: sdk
         run: |
           set -euo pipefail
           SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-/usr/local/lib/android/sdk}}"
           SDKMANAGER=$(find "$SDK_ROOT/cmdline-tools" -mindepth 2 -maxdepth 3 -type f -name sdkmanager | sort -V | tail -1)
           yes | "$SDKMANAGER" --licenses >/dev/null || true
-          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-37" "build-tools;36.0.0" "ndk;28.2.13676358"
+          package_list=$("$SDKMANAGER" --list --channel=3)
+          if grep -Eq 'platforms;android-37[[:space:]]*\\|' <<< "$package_list"; then
+            API_LEVEL=37
+          elif grep -Eq 'platforms;android-36[[:space:]]*\\|' <<< "$package_list"; then
+            API_LEVEL=36
+            echo "::warning::Android SDK API 37 is not currently available from the SDK package index; building this baseline against API 36."
+          else
+            echo "::error::Neither Android SDK API 37 nor API 36 is available."
+            grep -E 'platforms;android-[0-9]+' <<< "$package_list" | tail -30 || true
+            exit 1
+          fi
+          "$SDKMANAGER" --channel=3 "platform-tools" "platforms;android-$API_LEVEL" "build-tools;36.0.0" "ndk;28.2.13676358"
+          echo "compile_api_level=$API_LEVEL" >> "$GITHUB_OUTPUT"
+          echo "compile_api_level=$API_LEVEL" >> "$GITHUB_ENV"
           echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/28.2.13676358" >> "$GITHUB_ENV"
+          echo "Selected Android platform API $API_LEVEL"
 
       - name: Compute a traceable R15-TV version
         id: version
@@ -96,11 +109,156 @@ jobs:
         env:
           APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
           APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          COMPILE_API_LEVEL: ${{ steps.sdk.outputs.compile_api_level }}
         run: |
           python3 - <<'PY'
           import os
           import re
           from pathlib import Path
+
+          api_level = os.environ["COMPILE_API_LEVEL"]
+          version_file = Path("sources/TV/gradle/libs.versions.toml")
+          version_text = version_file.read_text(encoding="utf-8")
+          for key in ("compileSdk", "targetSdk"):
+              pattern = rf'(?m)^({key}\\s*=\\s*")[0-9]+(".*)          text = path.read_text(encoding="utf-8")
+          code = os.environ["APP_VERSION_CODE"]
+          name = os.environ["APP_VERSION_NAME"]
+
+          text, code_count = re.subn(
+              r'(?m)^([ \t]*versionCode[ \t]+)\d+([ \t]*(?://.*)?$)',
+              lambda m: f"{m.group(1)}{code}{m.group(2)}",
+              text,
+          )
+          text, name_count = re.subn(
+              r'(?m)^([ \t]*versionName[ \t]+)"[^"]+"([ \t]*(?://.*)?$)',
+              lambda m: f'{m.group(1)}"{name}"{m.group(2)}',
+              text,
+          )
+          if code_count != 1 or name_count != 1:
+              raise SystemExit(
+                  f"Expected one versionCode and one versionName; found {code_count} and {name_count}"
+              )
+          path.write_text(text, encoding="utf-8")
+          print(f"Prepared app version {name} ({code})")
+          PY
+
+      - name: Configure signing
+        id: signing
+        env:
+          KEYSTORE_B64: ${{ secrets.R15TV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.R15TV_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.R15TV_KEY_ALIAS }}
+        run: |
+          cd sources/TV
+          if [[ -n "$KEYSTORE_B64" && -n "$STORE_PASSWORD" ]]; then
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
+            SIGNING_PASSWORD="$STORE_PASSWORD"
+            KEY_ALIAS_VALUE="${KEY_ALIAS:-r15tv}"
+            echo "stable_signing=true" >> "$GITHUB_OUTPUT"
+            echo "Using the persistent R15-TV signing key."
+          elif [[ -z "$KEYSTORE_B64" && -z "$STORE_PASSWORD" ]]; then
+            SIGNING_PASSWORD="r15tv-test-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+            KEY_ALIAS_VALUE="r15tv"
+            keytool -genkeypair -noprompt -keystore r15tv.keystore -storetype JKS -alias r15tv -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=R15-TV Test Only" -storepass "$SIGNING_PASSWORD" -keypass "$SIGNING_PASSWORD"
+            echo "stable_signing=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::No persistent signing key was configured. This run will upload a test-only artifact and will not publish a release."
+          else
+            echo "::error::Set both R15TV_KEYSTORE_B64 and R15TV_STORE_PASSWORD, or leave both unset for a test-only build."
+            exit 1
+          fi
+          [[ "$KEY_ALIAS_VALUE" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "::error::R15TV_KEY_ALIAS contains unsupported characters."; exit 1; }
+          cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$ANDROID_SDK_ROOT
+          storeFile=../r15tv.keystore
+          keyAlias=$KEY_ALIAS_VALUE
+          storePassword=$SIGNING_PASSWORD
+          EOF_PROPERTIES
+
+      - name: Run unit tests and build Mobile/Leanback APKs
+        working-directory: sources/TV
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace :app:testLeanbackDebugUnitTest :app:testMobileDebugUnitTest :app:assembleLeanbackRelease :app:assembleMobileRelease
+
+      - name: Prepare release files and source traceability
+        env:
+          TV_DIR: sources/TV
+          SOURCE_REFS: build/source-refs.json
+          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
+          BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+        run: bash scripts/prepare-release.sh
+
+      - name: Verify APK signatures, package identity, versions, and ABIs
+        env:
+          APP_VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.version_name }}
+        run: |
+          APKSIGNER=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name apksigner | sort -V | tail -1)
+          AAPT=$(find "$ANDROID_SDK_ROOT/build-tools" -type f -name aapt | sort -V | tail -1)
+          test -x "$APKSIGNER"
+          test -x "$AAPT"
+
+          verify_apk() {
+            apk=$1
+            abi=$2
+            mode=$3
+            test -s "$apk"
+            "$APKSIGNER" verify --verbose --print-certs "$apk"
+            badging=$("$AAPT" dump badging "$apk")
+            grep -Fq "package: name='com.fongmi.android.tv' versionCode='$APP_VERSION_CODE' versionName='$APP_VERSION_NAME'" <<< "$badging"
+            grep -Fq "native-code: '$abi'" <<< "$badging"
+            if [[ "$mode" == "leanback" ]]; then
+              grep -Fq "leanback-launchable-activity:" <<< "$badging"
+            else
+              if grep -Fq "leanback-launchable-activity:" <<< "$badging"; then
+                echo "Mobile APK unexpectedly declares a Leanback launcher: $apk" >&2
+                return 1
+              fi
+            fi
+          }
+
+          verify_apk dist/R15-TV-leanback-arm64-v8a.apk arm64-v8a leanback
+          verify_apk dist/R15-TV-leanback-armeabi-v7a.apk armeabi-v7a leanback
+          verify_apk dist/R15-TV-mobile-arm64-v8a.apk arm64-v8a mobile
+          verify_apk dist/R15-TV-mobile-armeabi-v7a.apk armeabi-v7a mobile
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15-TV-public-build-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: steps.signing.outputs.stable_signing == 'true' && inputs.publish_release && github.ref == 'refs/heads/main'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: r15tv-${{ github.run_number }}
+          name: R15-TV ${{ steps.version.outputs.version_name }}
+          body_path: dist/RELEASE_NOTES.md
+          make_latest: true
+          files: |
+            dist/R15-TV-leanback-arm64-v8a.apk
+            dist/R15-TV-leanback-armeabi-v7a.apk
+            dist/R15-TV-mobile-arm64-v8a.apk
+            dist/R15-TV-mobile-armeabi-v7a.apk
+            dist/SOURCE_REFS.json
+            dist/BUILD_INFO.json
+            dist/SHA256SUMS.txt
+            dist/R15-TV-source-version.patch
+            dist/FONGMI-TV-LICENSE.md
+
+              version_text, count = re.subn(
+                  pattern,
+                  lambda match: match.group(1) + api_level + match.group(2),
+                  version_text,
+              )
+              if count != 1:
+                  raise SystemExit(f"Expected one {key} definition; found {count}")
+          version_file.write_text(version_text, encoding="utf-8")
 
           path = Path("sources/TV/app/build.gradle")
           text = path.read_text(encoding="utf-8")
