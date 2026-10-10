@@ -1,4 +1,4 @@
-name: R15-TV Build Preflight
+name: R15 TV Build Preflight
 
 on:
   workflow_dispatch:
@@ -43,4 +43,4 @@ jobs:
           echo "The APK workflow can build debug APKs without signing secrets."
           echo "For stable release APKs, configure your own R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, and R15TV_KEY_PASSWORD."
           echo "No private upstream source token is needed."
-          echo "This preflight does not compile the APK; use the Build R15-TV APKs workflow."
+          echo "This preflight does not compile the APK; use the Build R15 TV APKs workflow."
