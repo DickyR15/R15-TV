@@ -1,4 +1,4 @@
-name: R15-TV Public Source Preflight
+name: R15 TV Public Source Preflight
 
 on:
   workflow_dispatch:
@@ -39,7 +39,7 @@ jobs:
           assert "R15TV_SOURCE_TOKEN" not in workflow + resolver
           assert "PRIVATE_SOURCE_TOKEN" not in workflow + resolver
           assert "R15TV_KEYSTORE_B64" in workflow
-          assert "R15-TV-source.patch" in workflow
+          assert "R15 TV-source.patch" in workflow
           print("Public source manifest: OK")
           print("Private source token dependency: absent")
           print("Signing and source patch metadata steps: present")
