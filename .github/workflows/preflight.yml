@@ -26,7 +26,7 @@ jobs:
           set -euo pipefail
           repository=$(jq -er '.sources.TV.repository' config/sources.json)
           branch=$(jq -er '.sources.TV.branch' config/sources.json)
-          requires_private=$(jq -er '.sources.TV.requiresPrivateSourceAccess' config/sources.json)
+          requires_private=$(jq -r '.sources.TV.requiresPrivateSourceAccess' config/sources.json)
           test "$repository" = "FongMi/TV"
           test "$branch" = "fongmi"
           test "$requires_private" = "false"
