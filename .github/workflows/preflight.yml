@@ -1,13 +1,13 @@
-name: R15-TV Build Preflight
+name: R15-TV Public Source Preflight
 
 on:
   workflow_dispatch:
   push:
-    branches: [main]
+    branches: [main, public-fongmi-base]
     paths:
       - "README.md"
-      - "LICENSE"
       - "config/**"
+      - "scripts/**"
       - ".github/workflows/**"
 
 permissions:
@@ -15,28 +15,24 @@ permissions:
 
 jobs:
   preflight:
-    name: Check build prerequisites
+    name: Validate public source configuration
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Validate source manifest
+      - name: Checkout R15-TV
+        uses: actions/checkout@v4
+
+      - name: Validate manifest and confirm public upstream
         run: |
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          p = Path("config/sources.json")
-          data = json.loads(p.read_text(encoding="utf-8"))
-          assert data.get("schema") == 1
-          expected = {"TV", "media", "VividLib", "sherpa-onnx"}
-          assert set(data["sources"]) == expected
-          for name, source in data["sources"].items():
-              assert len(source.get("ref", "")) == 40, name
-              assert source.get("repository")
-          print("Source manifest syntax and pinned refs: OK")
-          print("This preflight does not compile the app.")
-          PY
-      - name: Explain required credentials
-        run: |
-          echo "The complete upstream build uses source repositories that may require PRIVATE_SOURCE_TOKEN."
-          echo "No APK build was attempted by this preflight workflow."
-          echo "Configure a separate R15-TV signing key before building release APKs."
+          set -euo pipefail
+          repository=$(jq -er '.sources.TV.repository' config/sources.json)
+          branch=$(jq -er '.sources.TV.branch' config/sources.json)
+          requires_private=$(jq -er '.sources.TV.requiresPrivateSourceAccess' config/sources.json)
+          test "$repository" = "FongMi/TV"
+          test "$branch" = "fongmi"
+          test "$requires_private" = "false"
+          response=$(curl --fail --silent --show-error --location "https://api.github.com/repos/$repository/git/ref/heads/$branch")
+          sha=$(jq -er '.object.sha' <<< "$response")
+          [[ "$sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "Public source is reachable: $repository:$branch ($sha)"
+          echo "No personal source token is needed for this public repository."
+          echo "This preflight checks source access only; it does not compile the APK."
