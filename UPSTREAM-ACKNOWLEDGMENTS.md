@@ -1,6 +1,6 @@
 # Upstream acknowledgements
 
-R15-TV's build workflow and helper scripts are adapted from the public repository
+R15 TV's build workflow and helper scripts are adapted from the public repository
 [iptvorganization/TV-AutoBuild](https://github.com/iptvorganization/TV-AutoBuild).
 
 The upstream TV-AutoBuild repository declares the MIT License and copyright
