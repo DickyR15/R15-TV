@@ -1,0 +1,233 @@
+name: R15 TV MPV Preservation Test
+run-name: R15 TV MPV dependency build check
+
+on:
+  push:
+    branches: [mpv-preserve-research]
+    paths:
+      - ".github/workflows/mpv-preserve-test.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r15tv-mpv-preserve-test
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build official Media3 and MPV dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    env:
+      TV_REPOSITORY: FongMi/TV
+      TV_BRANCH: fongmi
+      MEDIA_REPOSITORY: FongMi/media
+      MEDIA_BRANCH: release-1.11.0-fongmi
+
+    steps:
+      - name: Checkout R15 TV build configuration
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve public upstream revisions
+        id: refs
+        shell: bash
+        run: |
+          set -euo pipefail
+          tv_sha=$(git ls-remote "https://github.com/${TV_REPOSITORY}.git" "refs/heads/${TV_BRANCH}" | awk 'NR == 1 {print $1}')
+          media_sha=$(git ls-remote "https://github.com/${MEDIA_REPOSITORY}.git" "refs/heads/${MEDIA_BRANCH}" | awk 'NR == 1 {print $1}')
+          [[ "$tv_sha" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$media_sha" =~ ^[0-9a-f]{40}$ ]]
+          echo "tv_sha=$tv_sha" >> "$GITHUB_OUTPUT"
+          echo "media_sha=$media_sha" >> "$GITHUB_OUTPUT"
+          echo "TV source: $TV_REPOSITORY@$tv_sha"
+          echo "Media source: $MEDIA_REPOSITORY@$media_sha"
+
+      - name: Fetch official TV source
+        env:
+          SOURCE_SHA: ${{ steps.refs.outputs.tv_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sources/TV
+          git -C sources/TV init
+          git -C sources/TV remote add origin "https://github.com/${TV_REPOSITORY}.git"
+          git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
+          git -C sources/TV checkout --detach FETCH_HEAD
+          chmod +x sources/TV/gradlew
+          test "$(git -C sources/TV rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Fetch official Media3 and MPV source
+        env:
+          SOURCE_SHA: ${{ steps.refs.outputs.media_sha }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sources/Media
+          git -C sources/Media init
+          git -C sources/Media remote add origin "https://github.com/${MEDIA_REPOSITORY}.git"
+          git -C sources/Media fetch --depth=1 origin "$SOURCE_SHA"
+          git -C sources/Media checkout --detach FETCH_HEAD
+          chmod +x sources/Media/gradlew
+          test "$(git -C sources/Media rev-parse HEAD)" = "$SOURCE_SHA"
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+
+      - name: Set up Python for Chaquopy
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: sources/TV/chaquo/requirements.txt
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android SDK packages
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;28.2.13676358"
+
+      - name: Publish public FongMi Media3 modules including MPV to a local Maven repository
+        working-directory: sources/Media
+        shell: bash
+        env:
+          MEDIA3_REPO: ${{ github.workspace }}/sources/TV/media3-repo
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace \
+            publishAllPublicationsToMavenRepository \
+            -PmavenRepo="$MEDIA3_REPO" 2>&1 | tee "$GITHUB_WORKSPACE/media-publish.log"
+          test -f "$MEDIA3_REPO/androidx/media3/media3-mpvplayer/1.11.0/media3-mpvplayer-1.11.0.aar"
+          test -f "$MEDIA3_REPO/androidx/media3/media3-ui/1.11.0/media3-ui-1.11.0.aar"
+          echo "Published MPV and Media3 AARs to $MEDIA3_REPO"
+
+      - name: Attach the public Media3 repository to official TV source
+        working-directory: sources/TV
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import re
+          from pathlib import Path
+
+          settings = Path("settings.gradle")
+          source = settings.read_text(encoding="utf-8")
+          marker = (
+              "dependencyResolutionManagement {\n"
+              "    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)\n"
+              "    repositories {\n"
+          )
+          if marker not in source:
+              raise SystemExit("Cannot safely locate TV dependencyResolutionManagement repositories block")
+          repo_line = '        maven { url = uri("$rootDir/media3-repo") }\n'
+          if repo_line not in source:
+              source = source.replace(marker, marker + repo_line, 1)
+              settings.write_text(source, encoding="utf-8")
+
+          catalog = Path("../Media/gradle/libs.versions.toml").read_text(encoding="utf-8")
+          match = re.search(r'(?m)^releaseVersion\s*=\s*"([^"]+)"', catalog)
+          if not match:
+              raise SystemExit("Cannot read releaseVersion from the public FongMi/media catalog")
+          version = match.group(1)
+
+          build_file = Path("app/build.gradle")
+          source = build_file.read_text(encoding="utf-8")
+          if "androidx.media3:media3-mpvplayer:" in source:
+              raise SystemExit("MPV dependencies already appear in app/build.gradle; refusing duplicate injection")
+          marker = "    implementation libs.media\n"
+          if marker not in source:
+              raise SystemExit("Cannot safely locate the Media dependency in app/build.gradle")
+          modules = [
+              "common",
+              "container",
+              "database",
+              "datasource",
+              "datasource-okhttp",
+              "datasource-rtmp",
+              "decoder",
+              "decoder-ffmpeg",
+              "effect",
+              "exoplayer",
+              "exoplayer-dash",
+              "exoplayer-hls",
+              "exoplayer-rtsp",
+              "exoplayer-smoothstreaming",
+              "extractor",
+              "session",
+              "ui",
+              "ui-danmaku",
+              "mpvplayer",
+          ]
+          dependencies = "".join(
+              f'    implementation "androidx.media3:media3-{module}:{version}"\n'
+              for module in modules
+          )
+          source = source.replace(marker, marker + dependencies, 1)
+          build_file.write_text(source, encoding="utf-8")
+          print(f"Attached {len(modules)} public Media3 modules at version {version}, including MPV.")
+          PY
+
+          cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$ANDROID_HOME
+          storeFile=../r15tv-debug-placeholder.jks
+          keyAlias=r15tv-debug-placeholder
+          storePassword=debug-placeholder
+          keyPassword=debug-placeholder
+          EOF_PROPERTIES
+          chmod +x gradlew
+
+      - name: Build Android TV debug APK from official TV source with MPV enabled
+        working-directory: sources/TV
+        shell: bash
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackDebug 2>&1 | tee "$GITHUB_WORKSPACE/r15tv-mpv-build.log"
+          find app/build/outputs/apk -type f -name "*.apk" -print
+
+      - name: Write dependency provenance
+        if: always()
+        shell: bash
+        env:
+          TV_SHA: ${{ steps.refs.outputs.tv_sha }}
+          MEDIA_SHA: ${{ steps.refs.outputs.media_sha }}
+        run: |
+          mkdir -p test-results
+          {
+            echo "R15 TV MPV preservation test"
+            echo "TV source: https://github.com/FongMi/TV/commit/$TV_SHA"
+            echo "Media/MPV source: https://github.com/FongMi/media/commit/$MEDIA_SHA"
+            echo "No IPTV/live-playlist sources are copied by this workflow."
+          } > test-results/BUILD_INFO.txt
+          cp media-publish.log test-results/ 2>/dev/null || true
+          cp r15tv-mpv-build.log test-results/ 2>/dev/null || true
+          find sources/TV/app/build/outputs/apk -type f -name "*.apk" -exec cp {} test-results/ \; 2>/dev/null || true
+
+      - name: Upload test APK and build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15-TV-MPV-preservation-test-${{ github.run_number }}
+          path: test-results/
+          if-no-files-found: warn
+          retention-days: 14
