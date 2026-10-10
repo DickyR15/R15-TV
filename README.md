@@ -13,7 +13,7 @@ APK **不內附直播源或播放清單**。官方 FongMi/TV 專案也說明應�
 - 公開原始碼：[FongMi/TV](https://github.com/FongMi/TV)
 - 使用分支：`fongmi`
 - 每次建置會解析該分支的實際 commit SHA，並記錄在 `SOURCE_REFS.json`、`BUILD_INFO.json` 及 release notes。
-- 建置環境：JDK 21、Python 3.10、Android SDK API 37、Build Tools 36.0.0、NDK 28.2.13676358。
+- 建置環境：JDK 21、Python 3.10、Android SDK API 37、Build Tools 36.0.0、NDK 28.2.13676358。若 Google SDK 套件索引尚未提供 API 37，建置會回退 API 36，並將修改記錄在來源 patch 與建置資訊。
 - 產出四個 APK：Android TV（Leanback）及手機（Mobile），各自提供 `arm64-v8a` 與 `armeabi-v7a` 版本。
 - 建置流程會執行單元測試、檢查 APK 簽章、套件版本與 ABI，並產生 SHA-256 校驗碼。
 
