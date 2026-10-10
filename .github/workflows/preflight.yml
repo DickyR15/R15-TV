@@ -1,0 +1,42 @@
+name: R15-TV Build Preflight
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "README.md"
+      - "LICENSE"
+      - "config/**"
+      - ".github/workflows/**"
+
+permissions:
+  contents: read
+
+jobs:
+  preflight:
+    name: Check build prerequisites
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate source manifest
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          p = Path("config/sources.json")
+          data = json.loads(p.read_text(encoding="utf-8"))
+          assert data.get("schema") == 1
+          expected = {"TV", "media", "VividLib", "sherpa-onnx"}
+          assert set(data["sources"]) == expected
+          for name, source in data["sources"].items():
+              assert len(source.get("ref", "")) == 40, name
+              assert source.get("repository")
+          print("Source manifest syntax and pinned refs: OK")
+          print("This preflight does not compile the app.")
+          PY
+      - name: Explain required credentials
+        run: |
+          echo "The complete upstream build uses source repositories that may require PRIVATE_SOURCE_TOKEN."
+          echo "No APK build was attempted by this preflight workflow."
+          echo "Configure a separate R15-TV signing key before building release APKs."
