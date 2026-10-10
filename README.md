@@ -3,7 +3,7 @@
 這是個人維護的 Android TV 播放器建置／客製化專案，目標是建立可重現的 APK 建置流程，並逐步整合台灣繁體中文介面、AI 即時字幕與字幕外觀調整。
 
 > **目前狀態：建置骨架已建立；尚未完成可在此倉庫獨立執行的完整建置。**  
-> 官方 TV-AutoBuild 的公開倉庫主要提供建置流程，部分來源倉庫與發布簽章金鑰需要額外權限。請勿把任何 token、私鑰或 keystore 密碼提交到 Git。
+> 本倉庫已加入改名後的手動建置流程與來源解析腳本；完整編譯仍需要能讀取上游來源的個人 token，以及本專案自己的發行簽章。請勿把任何 token、私鑰或 keystore 密碼提交到 Git。
 
 ## 目標功能
 
@@ -46,3 +46,23 @@
 ## 授權
 
 此倉庫的建置腳本與本專案新增文件依 MIT License 提供；上游 TV、media、VividLib、sherpa-onnx 及其依賴仍各自依其原始授權條款。請在發佈 APK 前檢查所有上游授權與第三方元件要求。
+
+
+## 使用 GitHub Actions 編譯
+
+完成下列 Secrets 後，到 **Actions → Build R15-TV APKs → Run workflow** 手動執行。第一次建議保持 `force_build=true`。
+
+GitHub Repository → **Settings → Secrets and variables → Actions → New repository secret**：
+
+- `R15TV_SOURCE_TOKEN`：只能填入你有權限使用的 token，而且必須能讀取 `iptvorganization/TV` 及 `iptvorganization/media`。若這兩個倉庫未授權給你的帳號，新增 token 也無法繞過權限限制；需先向上游取得存取權。
+- `R15TV_KEYSTORE_B64`：你自己的 Android release keystore，以 Base64 編碼。
+- `R15TV_STORE_PASSWORD`
+- `R15TV_KEY_PASSWORD`
+
+此 workflow 以手動觸發為主，不會每 15 分鐘自動編譯。成功後在 Actions 的 workflow run 下載 `TV-APKs-<run number>` artifact，裡面會有四種 APK、來源鎖定資訊及 SHA-256。
+
+### 重要限制
+
+- 官方的 TV 與 media 原始碼在目前 GitHub 連線下回傳 404，表示目前尚無法確認你的帳號有讀取權限。沒有上游授權時，建置會在來源解析階段失敗。
+- 本 workflow 沿用官方公開的 build steps，並按 MIT License 保留其來源與授權說明；不包含也不複製官方私有簽章金鑰。
+- 此 repo 目前仍是建置骨架。字幕位置／外觀面板、移除聲明、台灣用語及字幕分段修改，必須在可編譯的 TV 原始碼上套用後，才會進入此 workflow 的 APK。
