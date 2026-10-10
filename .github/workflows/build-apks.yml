@@ -35,7 +35,18 @@ jobs:
 
       - name: Resolve public source revision (no source token)
         id: sources
-        run: bash scripts/resolve-sources.sh
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          sha=$(git ls-remote "https://github.com/${SOURCE_REPOSITORY}.git" "refs/heads/${SOURCE_BRANCH}" | awk 'NR == 1 {print $1}')
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Unable to resolve public source ${SOURCE_REPOSITORY}:${SOURCE_BRANCH}" >&2
+            exit 1
+          fi
+          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$sha" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
+          echo "tv_sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Resolved public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${sha}"
 
       - name: Fetch public FongMi/TV source without credentials
         env:
