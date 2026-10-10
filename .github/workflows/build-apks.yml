@@ -65,10 +65,10 @@ jobs:
           set -euo pipefail
           actual_sha=$(git -C sources/TV rev-parse HEAD)
           test "$actual_sha" = "$EXPECTED_SHA"
-          test -x sources/TV/gradlew
+          test -f sources/TV/gradlew
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/libs/forcetech-release.aar
-          test -f sources/TV/LICENSE
+          test -f sources/TV/LICENSE.md
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
 
