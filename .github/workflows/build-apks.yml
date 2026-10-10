@@ -271,6 +271,30 @@ jobs:
 
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
+          
+          # The current public upstream tree has updated player sources that
+          # require AndroidX Media3 modules; declare them explicitly for CI.
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("sources/TV/app/build.gradle")
+          text = p.read_text(encoding="utf-8")
+          marker = "dependencies {"
+          if "androidx.media3:media3-common" not in text:
+              libs = [
+                  "androidx.media3:media3-common:1.8.0",
+                  "androidx.media3:media3-exoplayer:1.8.0",
+                  "androidx.media3:media3-exoplayer-dash:1.8.0",
+                  "androidx.media3:media3-exoplayer-hls:1.8.0",
+                  "androidx.media3:media3-exoplayer-rtsp:1.8.0",
+                  "androidx.media3:media3-ui:1.8.0",
+                  "androidx.media3:media3-datasource:1.8.0",
+              ]
+              block = "\\n".join("    implementation \\\"%s\\\" " % item for item in libs) + "\\n"
+              if marker not in text:
+                  raise SystemExit("Cannot locate dependencies block in app/build.gradle")
+              text = text.replace(marker, marker + "\\n" + block, 1)
+              p.write_text(text, encoding="utf-8")
+          PY
           cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
           jq -n \
             --arg mode "$BUILD_MODE" \
