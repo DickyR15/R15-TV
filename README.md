@@ -1,68 +1,49 @@
 # R15-TV
 
-這是個人維護的 Android TV 播放器建置／客製化專案，目標是建立可重現的 APK 建置流程，並逐步整合台灣繁體中文介面、AI 即時字幕與字幕外觀調整。
+R15-TV is a personal Android TV / mobile player build based on the public [FongMi/TV](https://github.com/FongMi/TV) source. GitHub Actions builds the APKs; no source checkout or Android build environment is required on your Windows PC.
 
-> **目前狀態：建置骨架已建立；尚未完成可在此倉庫獨立執行的完整建置。**  
-> 本倉庫已加入改名後的手動建置流程與來源解析腳本；完整編譯仍需要能讀取上游來源的個人 token，以及本專案自己的發行簽章。請勿把任何 token、私鑰或 keystore 密碼提交到 Git。
+## Current build path
 
-## 目標功能
+- Public upstream source: `FongMi/TV`, branch `fongmi`.
+- **No private source token is required.** Actions resolves the public branch and checks out the exact commit used for each build.
+- Four APK variants are packaged: Android TV (`leanback`) and mobile (`mobile`), each for `arm64-v8a` and `armeabi-v7a`.
+- The build sets the app label to `R15-TV`, uses application ID `com.dicky.r15tv` so it can coexist with the official app, and embeds a run-specific version.
+- **No IPTV/live-playlist source or channel list is bundled.** Users must provide their own configuration or playlist.
 
-- 全介面台灣繁體中文用語（例如「壁紙」→「桌布」、「普通話」顯示為「中文」）。
-- 移除不需要的第三方修改聲明。
-- AI 即時字幕：位置、大小、文字顏色、描邊／背景與分段模式可調。
-- 啟動狀態提示不遮擋畫面；串流閒置指示不應長時間停留。
-- 保留 M3U／直播播放與原有播放器功能。
-- GitHub Actions 建置 ARMv7 Leanback APK，並產生校驗碼。
+This is a clean public-source baseline. It does not claim that every previously planned customization (for example, full Taiwan Traditional Chinese localization or additional AI subtitle UI changes) has already been implemented. Those changes must be applied and tested separately against this public source before being advertised as R15-TV features.
 
-## 官方來源與版本基準
+## Build with GitHub Actions
 
-- 官方建置流程：[iptvorganization/TV-AutoBuild](https://github.com/iptvorganization/TV-AutoBuild)
-- 官方版本參考：[autobuild-170](https://github.com/iptvorganization/TV-AutoBuild/releases/tag/autobuild-170)
-- 該版 TV 原始碼提交：`94118276821ecbec16cf26a6dd47729e6e346792`
-- 該版 media 原始碼提交：`f35d04172f570aed7c09ed9c5d0c0cd5c11f0615`
-- 該版 VividLib 原始碼提交：`10a5c7140a15f179a7d94fbff76f9176063f7a97`
-- 該版 sherpa-onnx 原始碼提交：`40b75e98a0cd5b3f961e73ae158305b3447b5ebb`
+1. Open **Actions → Build R15-TV APKs**.
+2. Select branch `public-source-build` in the workflow's branch selector and choose **Run workflow**.
+3. Keep `publish_release` off for the first test. The workflow uses a debug build if no signing secrets are configured, then uploads the four APKs and build metadata as an artifact.
+4. After a successful run, open that run and download the `R15-TV-<run number>` artifact.
 
-官方 AutoBuild 的 workflow 會透過 `PRIVATE_SOURCE_TOKEN` 取回部分來源，因此不能只複製公開 workflow 就視為完成。先確認授權和來源權限，再接入完整編譯。
+A debug APK is for initial testing. Hosted runners do not preserve their debug signing key between runs, so a debug APK may not update an APK from an earlier run. It is not suitable for a public stable release.
 
-## 建置前需要的 GitHub Secrets
+### Optional: stable release signing
 
-只有在確定有權存取來源並採用自己的發行簽章後，才設定以下 Secrets：
+For signed release APKs and GitHub Releases, create **your own** Android release keystore and add all three repository secrets at **Settings → Secrets and variables → Actions**:
 
-- `PRIVATE_SOURCE_TOKEN`：可讀取所需來源倉庫的 token。
-- `R15TV_KEYSTORE_B64`：個人發行 keystore 的 Base64 內容。
-- `R15TV_STORE_PASSWORD`
-- `R15TV_KEY_PASSWORD`
+- `R15TV_KEYSTORE_B64`: Base64-encoded contents of the keystore.
+- `R15TV_STORE_PASSWORD`: keystore password.
+- `R15TV_KEY_PASSWORD`: key password.
 
-**不要使用或複製官方的私人簽章金鑰；也不要將秘密寫入檔案或 commit。** 尚未配置所需 Secrets 前，workflow 應明確停止並提示原因。
+The expected alias in the keystore is `r15tv`. If only some of these secrets are present, the workflow stops rather than silently building with incomplete signing information. The workflow publishes a GitHub Release only when signing secrets are available and `publish_release` is checked.
 
-## 版本原則
+Never commit a keystore, password, or token to the repository. Do not copy an upstream project's private signing key.
 
-1. 先以官方原始碼鎖定版本建立可重現的乾淨基準。
-2. 每次只合併一組修改，先跑單元測試及 APK 簽章驗證。
-3. 再由使用者在雷電模擬器實測：啟動、直播播放、字幕啟動、Bing 翻譯、字幕位置與分段。
-4. 不把「ZIP／簽章檢查通過」宣稱為「已經實機測試」。
+## Traceability and checksums
 
-## 授權
+Every successful build artifact includes:
 
-此倉庫的建置腳本與本專案新增文件依 MIT License 提供；上游 TV、media、VividLib、sherpa-onnx 及其依賴仍各自依其原始授權條款。請在發佈 APK 前檢查所有上游授權與第三方元件要求。
+- `SOURCE_REFS.json` and `SOURCE_COMMIT.txt`: exact public upstream source revision.
+- `BUILD_INFO.json`: build mode, version, source commit, and workflow URL.
+- `SHA256SUMS.txt`: SHA-256 checksums for all APKs.
+- `UPSTREAM-GPL-3.0-LICENSE.txt`: upstream app license.
 
+The build records the exact source commit so a particular APK can be traced to its upstream baseline.
 
-## 使用 GitHub Actions 編譯
+## License
 
-完成下列 Secrets 後，到 **Actions → Build R15-TV APKs → Run workflow** 手動執行。第一次建議保持 `force_build=true`。
-
-GitHub Repository → **Settings → Secrets and variables → Actions → New repository secret**：
-
-- `R15TV_SOURCE_TOKEN`：只能填入你有權限使用的 token，而且必須能讀取 `iptvorganization/TV` 及 `iptvorganization/media`。若這兩個倉庫未授權給你的帳號，新增 token 也無法繞過權限限制；需先向上游取得存取權。
-- `R15TV_KEYSTORE_B64`：你自己的 Android release keystore，以 Base64 編碼。
-- `R15TV_STORE_PASSWORD`
-- `R15TV_KEY_PASSWORD`
-
-此 workflow 以手動觸發為主，不會每 15 分鐘自動編譯。成功後在 Actions 的 workflow run 下載 `TV-APKs-<run number>` artifact，裡面會有四種 APK、來源鎖定資訊及 SHA-256。
-
-### 重要限制
-
-- 官方的 TV 與 media 原始碼在目前 GitHub 連線下回傳 404，表示目前尚無法確認你的帳號有讀取權限。沒有上游授權時，建置會在來源解析階段失敗。
-- 本 workflow 沿用官方公開的 build steps，並按 MIT License 保留其來源與授權說明；不包含也不複製官方私有簽章金鑰。
-- 此 repo 目前仍是建置骨架。字幕位置／外觀面板、移除聲明、台灣用語及字幕分段修改，必須在可編譯的 TV 原始碼上套用後，才會進入此 workflow 的 APK。
+The R15-TV build scripts and original documentation in this repository are provided under the repository's MIT license. The upstream FongMi/TV application is licensed under **GPL-3.0**; that license still applies to the application and derivative APKs. Follow upstream license obligations when distributing binaries or modified source, and review all third-party components' licenses.
