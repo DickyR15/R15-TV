@@ -281,23 +281,25 @@ jobs:
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
           
-          - name: Prepare Media3 dependencies for upstream sources
-            run: |
-              set -euo pipefail
-              python3 - <<'PY'
-              from pathlib import Path
-              
-              gradle_file = Path("sources/TV/app/build.gradle")
-              text = gradle_file.read_text(encoding="utf-8")
-              marker = "dependencies {"
-              if "androidx.media3:media3-common" not in text:
-                  modules = ("common", "exoplayer", "exoplayer-dash", "exoplayer-hls", "exoplayer-rtsp", "ui", "datasource")
-                  lines = ['    implementation "androidx.media3:media3-%s:1.8.0"' % module for module in modules]
-                  block = "\n".join(lines)
-                  if marker not in text:
-                      raise SystemExit("Cannot locate dependencies block in app/build.gradle")
-                  text = text.replace(marker, marker + "\n" + block + "\n", 1)
-                  gradle_file.write_text(text, encoding="utf-8")
+      - name: Prepare Media3 dependencies for upstream sources
+        working-directory: sources/TV
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          marker = "dependencies {"
+          if "androidx.media3:media3-common" not in text:
+              modules = ("common", "exoplayer", "exoplayer-dash", "exoplayer-hls", "exoplayer-rtsp", "ui", "datasource")
+              lines = ['    implementation "androidx.media3:media3-%s:1.8.0"' % module for module in modules]
+              block = "\n".join(lines)
+              if marker not in text:
+                  raise SystemExit("Cannot locate dependencies block in app/build.gradle")
+              text = text.replace(marker, marker + "\n" + block + "\n", 1)
+              gradle_file.write_text(text, encoding="utf-8")
+          PY
+
               PY
                     cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
           jq -n \
