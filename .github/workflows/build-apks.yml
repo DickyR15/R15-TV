@@ -1,6 +1,12 @@
 name: Build R15-TV APKs from public FongMi source
 
 on:
+  push:
+    branches: [public-fongmi-base]
+    paths:
+      - ".github/workflows/build-apks.yml"
+      - "config/**"
+      - "scripts/**"
   workflow_dispatch:
     inputs:
       publish_release:
