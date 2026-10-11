@@ -21,7 +21,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 收到實機回報後，確認 POC-43 的設定面板只接到點播頁、未接到 M3U/M3U8 的 LiveActivity；研究分支已修正兩種 TV 版型的直播入口，並改成讓 ExoPlayer 的 HLS 碼率自適應，不再強制最高碼率。MPV 解碼錯誤兩次時已加入「只對當前來源暫時切到 ExoPlayer」的備援，不會永久更改 MPV 偏好；單純渲染掉幀仍需實機診斷。舊 POC-43 不是已修好的版本。新修正版待重新建置與驗證後才會更新下載連結。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
+**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 目前修正項目包括：主設定的「AI 字幕／語音設定」入口、播放畫面右上角固定入口、可在 App 私有儲存空間下載 Whisper Base 多語模型，以及 EXO/HLS 的「自動適應（建議）／最高畫質」切換。預設不強制選最高碼率；如果清單提供多種畫質，播放器可依頻寬調整。MPV 對不支援的 4K 解碼格式會嘗試直接回退到 EXO，不改變使用者永久的 MPV 偏好。單一路徑 4K 或單純渲染掉幀不保證會因這些設定自動修復，仍需依 codec、碼率和電視硬體解碼能力實測。舊 POC-43 不是已修好的版本；這一輪設定與 4K 回退修改正在重新建置，成功前不要安裝舊包。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
 
 ## 優先研究的開源專案
 
