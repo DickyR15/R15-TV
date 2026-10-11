@@ -15,6 +15,7 @@
 - [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md)
 - [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
 - [免費本機翻譯與臺灣繁體轉換方案](research/LOCAL-TRANSLATION-ENGINE.md)
+- [即時字幕 POC 最短測試步驟](research/R15-TV-AUDIO-CAPTURE-POC-QUICKSTART.md)
 - [TCL Google TV／F1 即時字幕實機測試步驟](research/Hearth-TV-F1-POC-TEST.md)
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
