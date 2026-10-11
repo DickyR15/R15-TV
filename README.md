@@ -21,7 +21,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 收到實機回報後，確認 POC-43 的設定面板只接到點播頁、未接到 M3U/M3U8 的 LiveActivity；研究分支已修正兩種 TV 版型的直播入口，並改成讓 ExoPlayer 的 HLS 碼率自適應，不再強制最高碼率。MPV 單路 4K 無法播放仍需實機診斷；舊 POC-43 不是已修好的版本。新修正版待重新建置與驗證後才會更新下載連結。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
+**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 收到實機回報後，確認 POC-43 的設定面板只接到點播頁、未接到 M3U/M3U8 的 LiveActivity；研究分支已修正兩種 TV 版型的直播入口，並改成讓 ExoPlayer 的 HLS 碼率自適應，不再強制最高碼率。MPV 解碼錯誤兩次時已加入「只對當前來源暫時切到 ExoPlayer」的備援，不會永久更改 MPV 偏好；單純渲染掉幀仍需實機診斷。舊 POC-43 不是已修好的版本。新修正版待重新建置與驗證後才會更新下載連結。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
 
 ## 優先研究的開源專案
 
