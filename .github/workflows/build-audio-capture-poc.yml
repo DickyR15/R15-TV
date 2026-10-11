@@ -94,10 +94,12 @@ jobs:
           test -f sources/TV/app/libs/forcetech-release.aar
           test -f sources/TV/LICENSE.md
           test -f sources/TV/chaquo/requirements.txt
+          test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          test -f sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           mkdir -p sources/TV/app/src/main/java/androidx/media3/ui/danmaku
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
-          echo "This build does not include IPTV/live-playlist sources."
+          echo "Live TV playback screens are included; user-specific playlist/source configuration is not packaged."
 
 
       - name: Set up Java 21
@@ -236,6 +238,9 @@ jobs:
           grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
           grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
+          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
           test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
           test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
           echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
@@ -421,6 +426,9 @@ jobs:
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java \
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
+            app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
+            app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
+            app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java \
             app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
