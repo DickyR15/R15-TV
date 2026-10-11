@@ -17,7 +17,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: r15tv-audio-capture-poc-${{ github.ref }}
+  group: r15tv-whisper-base-subtitle-poc-${{ github.ref }}
   cancel-in-progress: false
 
 env:
