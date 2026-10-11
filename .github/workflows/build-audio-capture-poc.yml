@@ -245,6 +245,12 @@ jobs:
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+          grep -Fq 'mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java
+          grep -Fq 'PLAYBACK_QUALITY_STABLE_1080P' sources/TV/app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java
+          grep -Fq 'setMaxVideoSize(1920, 1080)' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+          grep -Fq 'ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES' sources/TV/app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java
+          test -s sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java
+          test -s sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
           grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
@@ -430,12 +436,20 @@ jobs:
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperCpp.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java \
+            app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java \
+            app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java \
+            app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingDecodeActivity.java \
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
-            app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
+            app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
-            app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java \
+            app/src/leanback/res/layout/activity_ai_subtitle_settings.xml \
+            app/src/leanback/res/layout/activity_setting.xml \
+            app/src/leanback/res/layout/activity_setting_decode.xml \
             app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java \
+            app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java \
+            app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java \
+            app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java \
             app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
