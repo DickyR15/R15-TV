@@ -33,7 +33,7 @@ After original English captions work, start with the lower-complexity option:
 
 1. Open **Settings → Models → Translation** and install the **on-device ML Kit English → Chinese language packs**. This is the simplest free local inference test in the Play flavor; it is not a fully open-source translator, but it does not require a paid cloud API or send each caption to a translation API.
 2. In the caption translation settings, choose **ML Kit** as the local translator, set target language to Chinese (`zh`), and enable the translation bridge. Do not select Cloud/BYOK or enter any API key.
-3. Retry the same clip, then turn off Wi-Fi temporarily after the language packs are installed and loaded. If captions and translation continue, the selected path is running on-device for that session.
+3. Retry the same clip. To verify offline inference, use a locally stored test video and turn off Wi-Fi after the language packs are installed and loaded; the captions and translation should continue. Do not turn off Wi-Fi during the actual live stream, because the stream itself needs an internet connection.
 4. Only if ML Kit translation is too weak for F1 terms, additionally test **Hy-MT2 Q2_K** from the local model catalog (about 777 MB download, 1.8B-class model). This can use materially more RAM than the file size suggests, so do not make it the first test on the TV.
 
 The 75C755 product listing identifies 3 GB RAM, so use one lightweight recognizer and the ML Kit translator first; evaluate the larger local model only after the baseline works. The exact RAM available to apps varies with firmware and background activity.
