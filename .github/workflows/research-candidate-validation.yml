@@ -109,7 +109,7 @@ jobs:
         run: |
           set -euo pipefail
           cd "$RUNNER_TEMP/candidate/SubtitlesAppSubrimaProject"
-          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+          bash ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee -a "$RUNNER_TEMP/build.log"
 
       - name: Build OpenTV debug APK
         if: matrix.project == 'opentv'
