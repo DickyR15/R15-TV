@@ -6,8 +6,6 @@ on:
       - research/realtime-subtitles-tv
     paths:
       - ".github/workflows/research-candidate-validation.yml"
-      - "research/**"
-      - "README.md"
   workflow_dispatch:
 
 permissions:
@@ -62,12 +60,18 @@ jobs:
           set -o pipefail
           "$SDKMANAGER" --install "platform-tools" "platforms;android-35" "platforms;android-36" "cmake;3.22.1"
 
-      - name: Set up Android NDK
+      - name: Install pinned Android NDK
         if: matrix.project != 'opentv'
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: ${{ matrix.ndk }}
-          link-to-sdk: true
+        shell: bash
+        env:
+          NDK_VERSION: ${{ matrix.ndk }}
+        run: |
+          set -euo pipefail
+          sdkmanager --install "ndk;$NDK_VERSION"
+          SDK_ROOT="${ANDROID_HOME:-/usr/local/lib/android/sdk}"
+          test -d "$SDK_ROOT/ndk/$NDK_VERSION"
+          echo "ANDROID_NDK_HOME=$SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
+          echo "NDK_HOME=$SDK_ROOT/ndk/$NDK_VERSION" >> "$GITHUB_ENV"
 
       - name: Fetch pinned upstream source
         shell: bash
