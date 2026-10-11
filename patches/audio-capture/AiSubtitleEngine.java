@@ -39,7 +39,7 @@ public final class AiSubtitleEngine {
 
     private final File modelFile;
     private final Listener listener;
-    private final ArrayBlockingQueue<float[]> audioQueue = new ArrayBlockingQueue<>(30);
+    private final ArrayBlockingQueue<float[]> audioQueue = new ArrayBlockingQueue<>(120);
     private final Object resampleLock = new Object();
     private volatile boolean running = true;
     private Thread worker;
