@@ -184,7 +184,7 @@ public final class AiSubtitleEngine {
                 }
                 samplesSinceInference = 0;
 
-                float[] window = snapshotTail(ring, writeIndex, bufferedSamples);
+                float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
                 long inferenceStarted = SystemClock.elapsedRealtime();
                 String transcript = WhisperCpp.transcribe(whisperContext, window, "en", 2);
                 long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
