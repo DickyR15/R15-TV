@@ -21,6 +21,7 @@ public final class WhisperModelManager {
     public static final String MODEL_FILENAME = "ggml-base.bin";
     public static final String MODEL_URL =
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+    private static volatile WhisperModelManager INSTANCE;
     private static final long MIN_MODEL_BYTES = 100L * 1024L * 1024L;
     private static final int BUFFER_SIZE = 128 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -40,6 +41,11 @@ public final class WhisperModelManager {
         return thread;
     });
     private volatile boolean downloading;
+
+    public static synchronized WhisperModelManager getInstance(Context context) {
+        if (INSTANCE == null) INSTANCE = new WhisperModelManager(context.getApplicationContext());
+        return INSTANCE;
+    }
 
     public WhisperModelManager(Context context) {
         File directory = new File(context.getApplicationContext().getFilesDir(), "whisper-models");

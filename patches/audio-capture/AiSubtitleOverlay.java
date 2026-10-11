@@ -43,6 +43,8 @@ public final class AiSubtitleOverlay {
     private final Button modelButton;
     private final Button deleteModelButton;
     private final Button toggle;
+    private final Button entryButton;
+    private final Button closePanelButton;
     private final WhisperModelManager modelManager;
     private final LinearLayout panel;
     private final ActivityResultLauncher<String> audioPermissionLauncher;
@@ -64,7 +66,9 @@ public final class AiSubtitleOverlay {
         modelButton = new Button(activity);
         deleteModelButton = new Button(activity);
         toggle = new Button(activity);
-        modelManager = new WhisperModelManager(activity);
+        entryButton = new Button(activity);
+        closePanelButton = new Button(activity);
+        modelManager = WhisperModelManager.getInstance(activity);
         panel = new LinearLayout(activity);
 
         // Registration occurs during VideoActivity view initialization, before STARTED.
@@ -125,6 +129,13 @@ public final class AiSubtitleOverlay {
         panel.addView(title, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
+        closePanelButton.setText("收起設定");
+        closePanelButton.setAllCaps(false);
+        closePanelButton.setFocusable(true);
+        closePanelButton.setOnClickListener(view -> hideSettingsPanel());
+        panel.addView(closePanelButton, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
         status.setText("Whisper Base 多語辨識 · Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
         status.setTextColor(0xFFBFD7FF);
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
@@ -163,14 +174,17 @@ public final class AiSubtitleOverlay {
         panel.addView(translationStatus, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        caption.setText("辨識出的英文會即時顯示，句段結束後更新為繁體中文字幕。");
+        caption.setText("");
         caption.setTextColor(Color.WHITE);
         caption.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         caption.setGravity(Gravity.CENTER);
         caption.setMaxLines(3);
-        caption.setPadding(dp(12), dp(4), dp(12), dp(4));
-        panel.addView(caption, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+        caption.setPadding(dp(12), dp(6), dp(12), dp(6));
+        GradientDrawable captionBackground = new GradientDrawable();
+        captionBackground.setColor(0xD9101010);
+        captionBackground.setCornerRadius(dp(8));
+        caption.setBackground(captionBackground);
+        caption.setVisibility(android.view.View.GONE);
 
         toggle.setText("啟動即時字幕測試");
         toggle.setAllCaps(false);
@@ -178,6 +192,12 @@ public final class AiSubtitleOverlay {
         toggle.setOnClickListener(view -> toggleCapture());
         panel.addView(toggle, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        entryButton.setText("AI 字幕／語音設定");
+        entryButton.setAllCaps(false);
+        entryButton.setFocusable(true);
+        entryButton.setContentDescription("開啟 AI 字幕與語音設定");
+        entryButton.setOnClickListener(view -> showSettingsPanel());
         updateModelControls();
     }
 
@@ -285,13 +305,46 @@ public final class AiSubtitleOverlay {
             status.setText("字幕測試：找不到播放器的疊加顯示區");
             return;
         }
-        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+        panel.setVisibility(android.view.View.GONE);
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        params.setMargins(dp(24), 0, dp(24), dp(66));
-        overlay.addView(panel, params);
+        panelParams.setMargins(dp(24), 0, dp(24), dp(66));
+        overlay.addView(panel, panelParams);
+
+        FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        captionParams.setMargins(dp(24), 0, dp(24), dp(28));
+        overlay.addView(caption, captionParams);
+
+        FrameLayout.LayoutParams entryParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END);
+        entryParams.setMargins(0, dp(24), dp(24), 0);
+        overlay.addView(entryButton, entryParams);
+        entryButton.bringToFront();
+    }
+
+    private void showSettingsPanel() {
+        panel.setVisibility(android.view.View.VISIBLE);
+        entryButton.setVisibility(android.view.View.GONE);
+        if (enabled) caption.setVisibility(android.view.View.GONE);
         panel.bringToFront();
+        if (!modelManager.isDownloaded()) modelButton.requestFocus();
+        else toggle.requestFocus();
+    }
+
+    private void hideSettingsPanel() {
+        panel.setVisibility(android.view.View.GONE);
+        entryButton.setText(enabled ? "AI 字幕：開啟" : "AI 字幕／語音設定");
+        entryButton.setVisibility(android.view.View.VISIBLE);
+        if (enabled) caption.setVisibility(android.view.View.VISIBLE);
+        entryButton.bringToFront();
+        entryButton.requestFocus();
     }
 
     private void toggleCapture() {
@@ -318,6 +371,7 @@ public final class AiSubtitleOverlay {
         toggle.setText("停止即時字幕測試");
         status.setText("等待音訊擷取授權…");
         caption.setText("正在準備本機語音辨識");
+        caption.setVisibility(android.view.View.VISIBLE);
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPlaybackCaptureConsent();
@@ -402,6 +456,9 @@ public final class AiSubtitleOverlay {
                                     "MPV 音訊擷取中 · 音量 %.0f dBFS", dbfs));
                         }
                     });
+            caption.setVisibility(android.view.View.VISIBLE);
+            entryButton.setText("AI 字幕：開啟");
+            hideSettingsPanel();
         } catch (Throwable error) {
             try {
                 if (projection != null) projection.stop();
@@ -417,6 +474,8 @@ public final class AiSubtitleOverlay {
         closeTranslationEngine();
         AiSubtitleEngine.stop();
         toggle.setText("啟動即時字幕測試");
+        entryButton.setText("AI 字幕／語音設定");
+        caption.setVisibility(android.view.View.GONE);
         status.setText(message);
         updateModelControls();
     }
@@ -430,8 +489,10 @@ public final class AiSubtitleOverlay {
         AiSubtitleEngine.stop();
         closeTranslationEngine();
         toggle.setText("啟動即時字幕測試");
+        entryButton.setText("AI 字幕／語音設定");
         status.setText(message);
-        caption.setText("即時字幕已關閉");
+        caption.setText("");
+        caption.setVisibility(android.view.View.GONE);
         updateModelControls();
     }
 
@@ -445,6 +506,12 @@ public final class AiSubtitleOverlay {
         stopCapture("播放器已關閉");
         if (panel.getParent() instanceof FrameLayout) {
             ((FrameLayout) panel.getParent()).removeView(panel);
+        }
+        if (caption.getParent() instanceof FrameLayout) {
+            ((FrameLayout) caption.getParent()).removeView(caption);
+        }
+        if (entryButton.getParent() instanceof FrameLayout) {
+            ((FrameLayout) entryButton.getParent()).removeView(entryButton);
         }
     }
 
