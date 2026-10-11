@@ -13,6 +13,7 @@
 ## 候選分析與決策
 
 - [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md)
+- [Whisper Base 多語模型下載與整合計畫](research/WHISPER-BASE-MULTILINGUAL-PLAN.md)
 - [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
 - [免費本機翻譯與臺灣繁體轉換方案](research/LOCAL-TRANSLATION-ENGINE.md)
 - [即時字幕 POC 最短測試步驟](research/R15-TV-AUDIO-CAPTURE-POC-QUICKSTART.md)
