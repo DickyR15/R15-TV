@@ -12,12 +12,13 @@
 
 ## 候選分析與決策
 
+- [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md)
 - [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
 - [TCL Google TV／F1 即時字幕實機測試步驟](research/Hearth-TV-F1-POC-TEST.md)
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**目前首選 Hearth 作為電視音訊擷取 POC；R15 TV 的正式播放器整合仍需保留 MPV，尚未開始移植。**
+**不要求先安裝 Hearth。** 優先直接研究 R15 TV 的 MPV 原生音訊接入，保留 M3U/M3U8 與 MPV；Hearth 只作為可選參考工具。尚未完成 PCM tap 或即時翻譯功能。
 
 ## 優先研究的開源專案
 
@@ -30,7 +31,7 @@
 
 ## 下一步
 
-候選建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。下一步先依 [TCL Google TV／F1 實機測試步驟](research/Hearth-TV-F1-POC-TEST.md) 驗證音訊擷取與本機模型延遲，再決定 MPV 整合方式。
+候選建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。下一步先依 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 釐清可接入 PCM 的原生介面，再做可重現建置；Hearth 實機測試改為可選，不是必要前置步驟。
 
 ## 授權與上游來源
 
