@@ -299,7 +299,7 @@ def patch_setting_decode_layout(path: Path) -> None:
                 android:gravity="end"
                 android:textColor="@color/white"
                 android:textSize="18sp"
-                tools:text="穩定優先（最高 1080p）" />
+                tools:text="自動適應（建議）" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
 
