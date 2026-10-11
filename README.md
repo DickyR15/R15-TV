@@ -21,7 +21,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 新研究分支已加入 App 內模型下載、Whisper.cpp JNI 及播放器內音訊擷取原型，保留 MPV、M3U／M3U8；模型權重不包進 APK。最新 Whisper Base 工作流仍需通過 native 編譯、APK 檢查與 TV 實機測試，暫時不能稱為可用正式版。初次下載需要網路，下載完成後辨識與翻譯預期在本機執行，不需要付費 API。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
+**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 新研究分支已加入 App 內模型下載、Whisper.cpp JNI 及播放器內音訊擷取原型，保留 MPV、M3U／M3U8；模型權重不包進 APK。最新 [第 43 輪 Whisper Base 建置](https://github.com/DickyR15/R15-TV/actions/runs/38135426602) 已成功，並產生 [POC-43 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)；仍需 TV 實機測試，暫時不能稱為可用正式版。初次下載需要網路，下載完成後辨識與翻譯預期在本機執行，不需要付費 API。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
 
 ## 優先研究的開源專案
 
@@ -34,7 +34,7 @@
 
 ## 下一步
 
-候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。Whisper Base Subtitle POC 已改為固定 Whisper.cpp 上游 commit，分別建置 ARM64／ARMv7 native library，並在 APK 啟動前由使用者下載多語 Base 權重。請從 [Audio Capture POC workflow](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml) 取得最新成功的 Artifact；過去的第 20 輪與第 25 輪是舊版，並非最終選定的 Whisper Base 路線。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
+候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。Whisper Base Subtitle POC 已改為固定 Whisper.cpp 上游 commit，分別建置 ARM64／ARMv7 native library，並在 APK 啟動前由使用者下載多語 Base 權重。目前已成功產生 [R15 TV Whisper Base Subtitle POC-43](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)（約 76 MB ZIP，僅含 ARM64 測試 APK與校驗資料）。[第 43 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38135426602)。過去第 20／25 輪是舊版，並非目前選定的 Whisper Base 路線。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
 
 ## 授權與上游來源
 
