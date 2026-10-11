@@ -19,7 +19,7 @@ permissions:
 
 concurrency:
   group: r15tv-whisper-base-subtitle-poc-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   SOURCE_REPOSITORY: FongMi/TV
