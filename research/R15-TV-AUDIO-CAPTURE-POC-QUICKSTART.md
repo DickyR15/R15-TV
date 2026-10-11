@@ -1,13 +1,13 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。Whisper Base Subtitle POC-43 已成功建置並通過 APK 資產檢查，但尚未在 Google TV 實機驗收音訊擷取與字幕延遲。
+> 這是研究分支的實驗測試版，不是正式發行版。POC-43 雖然建置成功，但它有一個已確認的缺陷：字幕面板只接到點播用的 VideoActivity，沒有接到 M3U／M3U8 直播用的 LiveActivity。研究分支已修正這個接線，並將 ExoPlayer 的 HLS 品質選擇改為自適應；請只安裝這些修改後最新成功的 Artifact。
 
 ## 安裝與第一次設定
 
-1. 直接下載 [R15 TV Whisper Base Subtitle POC-43 ZIP（約 76 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)；也可以先看[第 43 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38135426602)。若連結過期，請從 [Audio Capture POC 工作流](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)下載最新成功的 Artifact。
+1. 請從 [Audio Capture POC 工作流](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)下載套用 LiveActivity 修正後的最新成功 Artifact。不要再用 [POC-43 舊包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)測試 M3U／M3U8 直播字幕，因為舊包不會顯示直播字幕設定。
 2. 解壓縮後安裝 R15 TV-POC-leanback-arm64-v8a.apk。測試版套件名稱應為 com.dicky.r15tv.poc、顯示名稱為「R15 TV 字幕測試」，不會覆蓋既有 R15 TV 正式 App。若最新工作流失敗，先不要安裝。
 3. 在測試版內重新載入 M3U／M3U8 播放清單；由於這是獨立測試 App，原 App 的清單與設定不會自動複製過來。播放器仍保留 MPV。
-4. 播放英文 F1 直播或一般英文影片，在畫面底部字幕面板先按 **「下載 Whisper Base 多語模型（約 148 MB）」**。下載完成前不要啟動字幕。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內已驗證包含 `libr15whisper.so`，沒有把 Base 模型權重打包進去。
+4. 播放 M3U／M3U8 英文 F1 直播時，新的測試版應在直播畫面底部顯示 **「AI 字幕／語音設定」** 面板。先按 **「下載 Whisper Base 多語模型（約 148 MB）」**。下載完成前不要啟動字幕。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內已驗證包含 `libr15whisper.so`，沒有把 Base 模型權重打包進去。
 5. 第一次翻譯時，Google ML Kit 也會下載英翻中模型。第一次下載需要網路；模型就緒後語音辨識與翻譯設計為本機執行，不需 API 金鑰或付費雲端翻譯。
 6. 按 **「啟動即時字幕測試」**，允許錄音權限及 Android 系統音訊擷取。MediaProjection 是擷取工作階段的系統授權，重新啟動擷取時可能再次詢問。
 
@@ -16,6 +16,8 @@
 - 音量數值會隨播放聲音變化，表示可能擷取到音訊；還必須看是否有英文辨識文字，再觀察繁體中文字幕。
 - 若長時間貼近 -120 dBFS、完全沒有英文文字，先記下狀態訊息；這時不要急著換模型，應先調查電視韌體是否允許擷取 MPV 音訊。
 - 若英文文字出現、中文未出現，查看 ML Kit 翻譯模型是否正在下載或報錯。
+- ExoPlayer 的 HLS 自適應碼率現在不再強制選最高碼率，網路／來源不穩時可能先選較低畫質，再視吞吐量提升；這是為了減少卡頓，不會把影片永久鎖在低解析度。單一固定 4K 串流則不會因這項變更自動降碼率。
+- MPV 無法播放某個 4K 串流仍需以該串流的錯誤類型判斷；MPV 預設已使用 Android MediaCodec 硬體解碼並有備援，但不能保證每個 4K 編碼／串流都相容。新包不會為了字幕把解碼改成軟體或降低全域解析度。
 - 若字幕明顯落後直播、音訊卡頓或電視變慢，記錄延遲、運作時間與狀態；這些數據會用來決定是否要調整 Base 視窗或之後比較 Small 量化版。
 - 測試完成按同一個按鈕停止字幕；主播放音量、聲道與播放流暢度不應受到明顯影響。
 
