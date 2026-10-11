@@ -246,8 +246,8 @@ jobs:
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
           grep -Fq 'mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java
-          grep -Fq 'PLAYBACK_QUALITY_STABLE_1080P' sources/TV/app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java
-          grep -Fq 'setMaxVideoSize(1920, 1080)' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+          grep -Fq 'PLAYBACK_QUALITY_ADAPTIVE' sources/TV/app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java
+          grep -Fq 'switch (PlayerSetting.getPlaybackQuality())' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
           grep -Fq 'ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES' sources/TV/app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java
           test -s sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java
           test -s sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
