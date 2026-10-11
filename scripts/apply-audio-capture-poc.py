@@ -114,7 +114,7 @@ def patch_player_manager(path: Path) -> None:
             mpvDecodeFailuresForCurrentMedia++;
             boolean unsupportedFormat = e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES
                     || e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED;
-            if (mpvDecodeFailuresForCurrentMedia >= 2 || unsupportedFormat) {}
+            if (mpvDecodeFailuresForCurrentMedia >= 2 || unsupportedFormat) {
                 // Keep MPV as the user's preference, but use ExoPlayer for this one failing source.
                 fallbackExoForCurrentMedia = true;
                 decode = PlayerEngine.HARD;
