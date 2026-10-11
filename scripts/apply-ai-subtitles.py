@@ -71,7 +71,6 @@ def main() -> None:
     patch_dir = args.patch_dir.resolve()
     required = [
         tv / "app/src/main/java/com/fongmi/android/tv/player/effect/audio/AudioEffectProcessor.java",
-        tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
         tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
         tv / "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java",
         tv / "app/build.gradle",
