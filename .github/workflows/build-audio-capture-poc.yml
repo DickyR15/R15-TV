@@ -228,12 +228,12 @@ jobs:
           install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
           install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
 
-          model_archive="$RUNNER_TEMP/sherpa-onnx-zh-en.tar.bz2"
+          model_archive="$RUNNER_TEMP/sherpa-onnx-small-zh-en.tar.bz2"
           curl --fail --silent --show-error --location \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2" \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2" \
             --output "$model_archive"
           tar -xjf "$model_archive" -C "$RUNNER_TEMP"
-          model_source="$RUNNER_TEMP/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+          model_source="$RUNNER_TEMP/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16"
           model_target="sources/TV/app/src/main/assets/ai-subtitle-model"
           mkdir -p "$model_target"
           install -m 644 "$model_source/encoder-epoch-99-avg-1.int8.onnx" "$model_target/"
