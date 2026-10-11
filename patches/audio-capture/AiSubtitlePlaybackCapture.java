@@ -102,7 +102,11 @@ public final class AiSubtitlePlaybackCapture {
             if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
                 throw new IllegalStateException("音訊擷取未進入錄音狀態");
             }
-        } catch (Throwable error) {
+        } catch (Exception error) {
+            projection.unregisterCallback(projectionCallback);
+            audioRecord.release();
+            throw error;
+        } catch (Error error) {
             projection.unregisterCallback(projectionCallback);
             audioRecord.release();
             throw error;
