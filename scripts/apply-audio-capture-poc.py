@@ -179,7 +179,12 @@ def main() -> None:
         if "AiSubtitleOverlay.detach(mBinding.player);" not in patched:
             raise SystemExit(f"{path}: detach call missing after patch")
 
+    exo_text = exo_util.read_text(encoding="utf-8")
+    if "builder.setForceHighestSupportedBitrate(false);" not in exo_text:
+        raise SystemExit(f"{exo_util}: adaptive HLS bitrate selection was not enabled")
+
     print("Applied Whisper Base subtitle POC to VOD and LiveActivity (M3U/M3U8).")
+    print("ExoPlayer adaptive HLS bitrate selection enabled to avoid forcing a high-bitrate variant.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
