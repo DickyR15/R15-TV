@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。研究分支已新增 Whisper.cpp JNI、App 內下載 Base 模型、重疊音訊視窗推論與字幕面板；目前新版 CI 正在驗證 native 編譯與 APK 封裝。Whisper 模型不包進 APK，首次由使用者下載。尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
+**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。研究分支已新增 Whisper.cpp JNI、App 內下載 Base 模型、重疊音訊視窗推論與字幕面板；GitHub Actions [第 43 輪](https://github.com/DickyR15/R15-TV/actions/runs/38135426602) 已成功建置 APK，Whisper JNI 與 OpenCC 資產檢查通過；[POC-43 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822) 可下載。Whisper 模型不包進 APK，首次由使用者下載。尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -23,7 +23,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 推薦實作方案
 
-### 階段 1：Whisper Base＋ML Kit＋OpenCC POC（新版 CI 建置／實機驗證中）
+### 階段 1：Whisper Base＋ML Kit＋OpenCC POC（CI 建置成功，待實機驗證）
 
 - 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
 - 使用 [Whisper.cpp](https://github.com/ggml-org/whisper.cpp) 多語 Base 權重 ggml-base.bin；權重由字幕面板在 App 內下載，APK 只包含 native runtime。F1 第一版指定英文辨識，再交給 ML Kit 翻譯。
@@ -73,7 +73,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 本階段尚未完成的事
 
-- 最新 Whisper Base 工作流仍需通過 GitHub Actions native 編譯、APK 封裝與資產檢查，再進行 TV 實機音訊檢查。
-- 最新原型已包含英文→中文翻譯與 OpenCC 字詞轉換程式，但尚未有成功建置證據或 TV 實機驗收。
+- GitHub Actions [第 43 輪](https://github.com/DickyR15/R15-TV/actions/runs/38135426602) 已通過 native 編譯、APK 封裝與 Whisper／OpenCC 資產檢查；[POC-43 Artifact](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)。接下來才是 TV 實機音訊檢查。
+- 原型已成功建置，包含本機英翻中與 OpenCC 字詞轉換；TV 實機驗收仍未完成。
 - 尚未證實目標電視能在完整本機 ASR＋翻譯模式維持即時效能。
 - 即使 APK 成功建置，也不等於目標 TV 的 MPV 聲音會被捕捉；這必須實測。
