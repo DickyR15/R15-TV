@@ -1,10 +1,10 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。請等 GitHub Actions 的 Audio Capture POC 工作流成功並上傳 APK 後再安裝。建置成功也不代表已在 TCL 電視實機驗證。
+> 這是研究分支的實驗測試版，不是正式發行版。第 20 輪已成功編譯並上傳 APK，但尚未在 TCL Google TV 實機驗證。建置成功不代表音訊擷取或即時字幕已在電視上通過。
 
 ## 只需要做一次的設定
 
-1. 開啟成功的 [Audio Capture POC GitHub Actions 執行紀錄](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)；在 Artifacts 下載最新的 `R15 TV Audio Capture POC-…` ZIP。
+1. 直接下載 [R15 TV Audio Capture POC-20 ZIP（約 140 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。若之後連結過期，開啟[第 20 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38132010463)。解壓縮後找到 `R15 TV-POC-leanback-arm64-v8a.apk`；同一包內有 `SHA256SUMS.txt`、來源 commit 和 source patch。
 2. 在 ZIP 裡先選 `R15 TV-POC-leanback-arm64-v8a.apk` 安裝到 Google TV。這是測試 APK，會以獨立套件安裝，不是正式版更新。
 3. 打開測試版，播放你原本的 M3U／M3U8 英文直播。播放引擎仍是 MPV，不需換播放器或匯入新的播放清單。
 4. 在播放畫面按 **「啟動即時字幕測試」**，依系統提示允許錄音權限與音訊擷取。這是 Android 的一次性系統授權；沒有授權時不能擷取音訊。
@@ -20,4 +20,4 @@
 
 ## 重要限制
 
-此 POC 是排查「R15 TV 能否擷取自己播放的 MPV 音訊」並串起本機 ASR／翻譯的第一版。實機的音訊政策、電視效能、F1 專有名詞準確度和長時間延遲都尚待驗收。第一次下載翻譯模型需要網路；直播本身也需要網路。這個 POC 不會自動加入 IPTV 清單或改變你的正式播放器設定。
+此 APK 是 debug 測試版本，套件名稱為 `com.dicky.r15tv`，可與另一個套件的正式 App 並存；不要把它當成正式更新版。此 POC 是排查「R15 TV 能否擷取自己播放的 MPV 音訊」並串起本機 ASR／翻譯的第一版。實機的音訊政策、電視效能、F1 專有名詞準確度和長時間延遲都尚待驗收。第一次下載翻譯模型需要網路；直播本身也需要網路。這個 POC 不會自動加入 IPTV 清單或改變你的正式播放器設定。
