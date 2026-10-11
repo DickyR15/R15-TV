@@ -48,8 +48,9 @@
 
 ## 目前技術決策（2026-10-11）
 
-- 首先使用 Hearth 進行 Android TV 音訊擷取／字幕 POC；官方 Android TV UI 展示不等於實體電視辨識已通過。
-- 使用 SUBRIMA 作為第二候選，對比語音辨識與字幕翻譯流程。
+- 先直接研究 MPV 原生 PCM 音訊接入，避免使用者先安裝另一個 App；Hearth 保留為可選 POC，不作為開發前置條件。
+- 新增 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md)，記錄已檢查的 Java/JNI 路徑與下一步。
+- 使用 SUBRIMA 作為語音辨識與字幕流程的程式碼參考，不要求使用者安裝測試。
 - OpenTV 只參考 TV 操作與建置流程，不作為播放器底層，因其使用 Media3/ExoPlayer，而 R15 TV 保留 MPV 是既有要求。
 - 特別驗證繁體中文輸出：Hearth 與 SUBRIMA 的目前文件／語言路由都沒有證實能在所有翻譯模式明確強制輸出繁體中文。
 - 已新增候選建置工作流：`.github/workflows/research-candidate-validation.yml`。它固定上游 commit 並產生建置記錄；工作流失敗若發生在環境初始化步驟，不能當成候選源碼的編譯失敗。
