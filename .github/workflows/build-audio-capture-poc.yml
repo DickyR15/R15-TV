@@ -439,6 +439,7 @@ jobs:
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleOverlay.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java \
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
