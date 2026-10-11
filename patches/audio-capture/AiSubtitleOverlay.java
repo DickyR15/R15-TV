@@ -34,6 +34,7 @@ public final class AiSubtitleOverlay {
     private final FragmentActivity activity;
     private final PlayerView playerView;
     private final TextView status;
+    private final TextView translationStatus;
     private final TextView caption;
     private final Button toggle;
     private final LinearLayout panel;
@@ -42,11 +43,13 @@ public final class AiSubtitleOverlay {
 
     private boolean enabled;
     private AiSubtitlePlaybackCapture capture;
+    private AiSubtitleTranslationEngine translationEngine;
 
     private AiSubtitleOverlay(FragmentActivity activity, PlayerView playerView) {
         this.activity = activity;
         this.playerView = playerView;
         status = new TextView(activity);
+        translationStatus = new TextView(activity);
         caption = new TextView(activity);
         toggle = new Button(activity);
         panel = new LinearLayout(activity);
@@ -109,7 +112,15 @@ public final class AiSubtitleOverlay {
         panel.addView(status, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        caption.setText("辨識出的語音會顯示在這裡；目前尚未翻譯。");
+        translationStatus.setText("本機翻譯會在首次使用時下載模型");
+        translationStatus.setTextColor(0xFFBFD7FF);
+        translationStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        translationStatus.setGravity(Gravity.CENTER);
+        translationStatus.setPadding(dp(8), dp(2), dp(8), dp(2));
+        panel.addView(translationStatus, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        caption.setText("辨識出的英文會即時顯示，句段結束後更新為繁體中文字幕。");
         caption.setTextColor(Color.WHITE);
         caption.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
         caption.setGravity(Gravity.CENTER);
@@ -182,6 +193,22 @@ public final class AiSubtitleOverlay {
             MediaProjection projection = manager.getMediaProjection(resultCode, data);
             if (projection == null) throw new IllegalStateException("系統未建立音訊擷取工作階段");
 
+            translationEngine = new AiSubtitleTranslationEngine(activity,
+                    new AiSubtitleTranslationEngine.Listener() {
+                        @Override
+                        public void onStatus(String message) {
+                            if (enabled) translationStatus.setText(message);
+                        }
+
+                        @Override
+                        public void onTranslatedSubtitle(String source, String translation) {
+                            if (enabled && translation != null && !translation.isEmpty()) {
+                                caption.setText(translation);
+                            }
+                        }
+                    });
+            translationEngine.start();
+
             AiSubtitleEngine.start(activity, new AiSubtitleEngine.Listener() {
                 @Override
                 public void onStatus(String message) {
@@ -191,6 +218,12 @@ public final class AiSubtitleOverlay {
                 @Override
                 public void onSubtitle(String text) {
                     if (enabled) caption.setText(text);
+                }
+
+                @Override
+                public void onFinalSubtitle(String text) {
+                    AiSubtitleTranslationEngine translator = translationEngine;
+                    if (enabled && translator != null) translator.translateFinalPhrase(text);
                 }
             });
 
@@ -216,6 +249,8 @@ public final class AiSubtitleOverlay {
 
     private void resetAfterDenial(String message) {
         enabled = false;
+        closeTranslationEngine();
+        AiSubtitleEngine.stop();
         toggle.setText("啟動即時字幕測試");
         status.setText(message);
     }
@@ -226,9 +261,16 @@ public final class AiSubtitleOverlay {
         capture = null;
         if (current != null) current.stop();
         AiSubtitleEngine.stop();
+        closeTranslationEngine();
         toggle.setText("啟動即時字幕測試");
         status.setText(message);
         caption.setText("即時字幕已關閉");
+    }
+
+    private void closeTranslationEngine() {
+        AiSubtitleTranslationEngine current = translationEngine;
+        translationEngine = null;
+        if (current != null) current.close();
     }
 
     private void detachView() {
