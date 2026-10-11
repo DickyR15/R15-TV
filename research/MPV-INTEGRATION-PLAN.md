@@ -17,6 +17,10 @@ Hearth 是獨立 App，必須額外安裝、下載模型、授權音訊擷取，
 
 **結論限制：** 這表示目前檢查到的公開 wrapper 路徑不足以直接接 ASR；不代表 libmpv 或其他未檢查的分支絕對沒有可用機制。需再確認 R15 TV 建置時實際使用的 MPV/Media3 AAR 版本與原始碼，才可選定最小侵入方案。
 
+### 不採用的簡易替代方式：`ao=pcm`
+
+MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 driver，主要是把聲音寫成檔案，不是向應用程式回傳即時記憶體中的 PCM callback。把它當主要輸出可能取代正常的音訊播放；另外再輪詢檔案也會增加 I/O、延遲及清理問題。因此它可作為離線除錯工具，不作為保留正常電視聲音的正式即時字幕架構。參考：[MPV 官方手冊：Audio Output Drivers](https://mpv.io/manual/stable/#audio-output-drivers)。
+
 ## 推薦實作方案
 
 ### 階段 1：確認 native 接入點（不需使用者操作）
