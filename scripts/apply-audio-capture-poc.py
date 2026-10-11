@@ -139,8 +139,8 @@ def main() -> None:
 
     text = proguard.read_text(encoding="utf-8")
     keep_rules = [
-        "# Keep sherpa-onnx Java/JNI configuration used by the experimental ASR engine.",
-        "-keep class com.k2fsa.sherpa.onnx.** { *; }",
+        "# Keep Whisper JNI names stable for native method resolution.",
+        "-keep class com.fongmi.android.tv.ai.subtitle.WhisperCpp { *; }",
         "-keep class com.zqc.opencc.android.lib.** { *; }",
     ]
     missing_keep_rules = [rule for rule in keep_rules if rule not in text]
