@@ -9,6 +9,7 @@ on:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
       - "scripts/apply-audio-capture-poc.py"
+      - "third-party-licenses/**"
   workflow_dispatch:
 
 permissions:
@@ -192,7 +193,7 @@ jobs:
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
 
-      - name: Build public sherpa-onnx runtime and stage bilingual ASR model (ASR only)
+      - name: Build speech runtime/model and stage local translation POC
         shell: bash
         env:
           BUILD_SHARED_LIBS: "OFF"
@@ -444,6 +445,9 @@ jobs:
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
           cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          cp "$GITHUB_WORKSPACE/third-party-licenses/ANDROID-OPENCC-MIT.txt" dist/
+          cp "$GITHUB_WORKSPACE/third-party-licenses/OPENCC-APACHE-2.0.txt" dist/
+          cp "$GITHUB_WORKSPACE/third-party-licenses/ML-KIT-AND-SUBTITLE-NOTICES.md" dist/
           jq -n \
             --arg mode "$BUILD_MODE" \
             --arg versionName "$VERSION_NAME" \
@@ -473,6 +477,7 @@ jobs:
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- Experimental debug APK only; not a release and not ready for general use."
             echo "- Scope: in-app playback audio capture + streaming ASR + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
+            echo "- Initial translation model download requires network; translation is intended to run locally after model download."
             else
               echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
             fi
