@@ -1,6 +1,6 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功並上傳 [POC-58 ZIP]( https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666 )；已通過 Android TV APK 編譯、Whisper JNI 與 OpenCC 資產檢查。仍需在 TCL Google TV 實機確認音訊擷取、即時翻譯和 4K 播放效果。
+> 這是研究分支的實驗測試版，不是正式發行版。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功並上傳 [POC-58 ZIP](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)；已通過 Android TV APK 編譯、Whisper JNI 與 OpenCC 資產檢查。仍需在 TCL Google TV 實機確認音訊擷取、即時翻譯和 4K 播放效果。
 
 ## 安裝與第一次設定
 
