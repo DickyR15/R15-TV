@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。ASR 第一版改用較小的 sherpa-onnx 中英串流模型，以減少 APK 體積與 TV 記憶體負擔；GitHub Actions [第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 已成功建置測試 APK，並通過 sherpa-onnx、OpenCC 字典與 native library 資產檢查；尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。APK：[R15 TV Audio Capture POC-20](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。  
+**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。研究分支已新增 Whisper.cpp JNI、App 內下載 Base 模型、重疊音訊視窗推論與字幕面板；目前新版 CI 正在驗證 native 編譯與 APK 封裝。Whisper 模型不包進 APK，首次由使用者下載。尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -23,10 +23,10 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 推薦實作方案
 
-### 階段 1：App 內音訊擷取＋ASR＋本機翻譯 POC（CI 建置成功，待實機驗證）
+### 階段 1：Whisper Base＋ML Kit＋OpenCC POC（新版 CI 建置／實機驗證中）
 
 - 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
-- ASR 先使用 [sherpa-onnx streaming small bilingual zh-en 模型](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2)。官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB；這是為了先降低 APK 與記憶體負擔，但 F1 英文專有名詞辨識品質仍需在實機驗證。
+- 使用 [Whisper.cpp](https://github.com/ggml-org/whisper.cpp) 多語 Base 權重 ggml-base.bin；權重由字幕面板在 App 內下載，APK 只包含 native runtime。F1 第一版指定英文辨識，再交給 ML Kit 翻譯。
 - 採用 `AudioRecord` 讀取 48 kHz stereo PCM16；背景執行緒只量測音量、轉送資料，語音辨識在另一條 worker thread 執行，不阻塞播放。
 - 在 `AndroidManifest.xml` 宣告 `RECORD_AUDIO` 與 `android:allowAudioPlaybackCapture="true"`；由使用者明確按下字幕測試後才要求系統 MediaProjection 同意。
 - 最新原型會在句段結束後使用 ML Kit 本機 English → Chinese 翻譯，再以 OpenCC S2TWP 轉成臺灣繁體；首次需下載翻譯模型。此整合仍待建置與實機測試。
@@ -48,7 +48,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ### 階段 3：免費本機語音辨識與翻譯
 
-- 第一輪 POC 用小型中英串流模型先驗證擷取與即時辨識，較適合控制 APK 體積。若 F1 英文專有名詞辨識不足，再比較 Whisper `base.en` 或英文專用串流模型；最終 ASR 引擎尚未定案。
+- 第一版以 Whisper Base 多語權重作為基準；模型權重不隨 APK 發佈。若電視效能不足，先調整音訊視窗與執行緒，再量測是否有必要換 Whisper Small Q5_1 量化版。
 - 翻譯獨立成可更換元件，英文句段穩定後才送翻譯，避免每個臨時辨識結果都重翻。
 - 翻譯模型需明確支援 English → Chinese、能在 Android 裝置本機執行並核對模型授權。模型應可另行下載，避免初始 APK 過大。
 - 最後用 OpenCC 臺灣正體／詞彙轉換（例如 `s2twp`）調整字形與用詞；OpenCC 本身不負責英翻中。
@@ -73,7 +73,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 本階段尚未完成的事
 
-- App 內 AudioPlaybackCapture POC 尚待 GitHub Actions 編譯結果與 TV 實機音訊檢查。
+- 最新 Whisper Base 工作流仍需通過 GitHub Actions native 編譯、APK 封裝與資產檢查，再進行 TV 實機音訊檢查。
 - 最新原型已包含英文→中文翻譯與 OpenCC 字詞轉換程式，但尚未有成功建置證據或 TV 實機驗收。
 - 尚未證實目標電視能在完整本機 ASR＋翻譯模式維持即時效能。
 - 即使 APK 成功建置，也不等於目標 TV 的 MPV 聲音會被捕捉；這必須實測。
