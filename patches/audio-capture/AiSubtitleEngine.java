@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 
 import androidx.media3.common.C;
 
@@ -29,8 +28,8 @@ import java.util.concurrent.atomic.AtomicReference;
 /**
  * Experimental on-device speech-to-text captions.
  *
- * The first prototype taps decoded PCM from ExoPlayer's AudioProcessor chain.
- * MPV uses a separate native audio path and is intentionally not modified here.
+ * Receives PCM copied by the in-app Android AudioPlaybackCapture reader.
+ * This keeps speech recognition off the playback output path; MPV itself is unchanged.
  */
 public final class AiSubtitleEngine {
     public interface Listener {
@@ -84,7 +83,7 @@ public final class AiSubtitleEngine {
         }
     }
 
-    /** Called from the ExoPlayer PCM audio-processing thread. Never runs inference here. */
+    /** Called from the AudioRecord capture worker. Never runs inference here. */
     public static void offerPcm(ByteBuffer input, int sampleRate, int channelCount, int encoding) {
         AiSubtitleEngine engine = ACTIVE.get();
         if (engine == null || !engine.running || input == null || sampleRate <= 0 || channelCount <= 0) return;
