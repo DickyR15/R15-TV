@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。ASR 第一版改用較小的 sherpa-onnx 中英串流模型，以減少 APK 體積與 TV 記憶體負擔；最新工作流仍待建置驗證，尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
+**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。ASR 第一版改用較小的 sherpa-onnx 中英串流模型，以減少 APK 體積與 TV 記憶體負擔；GitHub Actions [第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 已成功建置測試 APK，並通過 sherpa-onnx、OpenCC 字典與 native library 資產檢查；尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。APK：[R15 TV Audio Capture POC-20](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -23,7 +23,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 推薦實作方案
 
-### 階段 1：App 內音訊擷取＋ASR＋本機翻譯 POC（建置驗證中）
+### 階段 1：App 內音訊擷取＋ASR＋本機翻譯 POC（CI 建置成功，待實機驗證）
 
 - 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
 - ASR 先使用 [sherpa-onnx streaming small bilingual zh-en 模型](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2)。官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB；這是為了先降低 APK 與記憶體負擔，但 F1 英文專有名詞辨識品質仍需在實機驗證。
