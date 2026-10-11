@@ -197,6 +197,16 @@ public final class AiSubtitleOverlay {
         entryButton.setAllCaps(false);
         entryButton.setFocusable(true);
         entryButton.setContentDescription("開啟 AI 字幕與語音設定");
+        entryButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+        entryButton.setTextColor(Color.WHITE);
+        entryButton.setPadding(dp(18), dp(10), dp(18), dp(10));
+        entryButton.setMinWidth(dp(190));
+        entryButton.setElevation(dp(8));
+        GradientDrawable entryBackground = new GradientDrawable();
+        entryBackground.setColor(0xF00B4F6C);
+        entryBackground.setCornerRadius(dp(10));
+        entryBackground.setStroke(dp(2), 0xFF7DD3FC);
+        entryButton.setBackground(entryBackground);
         entryButton.setOnClickListener(view -> showSettingsPanel());
         updateModelControls();
     }
