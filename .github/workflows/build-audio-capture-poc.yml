@@ -350,7 +350,7 @@ jobs:
             > dist/SOURCE_REFS.json
           printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build experimental Android TV debug APK (arm64 only)
+      - name: Build experimental Android TV debug APKs (arm64 + armeabi-v7a)
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -369,15 +369,22 @@ jobs:
           test "$count" -eq 2
           while IFS= read -r apk; do
             entries=$(unzip -Z1 "$apk")
-            if ! grep -Fq "lib/arm64-v8a/libr15whisper.so" <<<"$entries" \
-               && ! grep -Fq "lib/armeabi-v7a/libr15whisper.so" <<<"$entries"; then
-              echo "Missing Whisper JNI library in $apk" >&2
+            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
+            case "$lower" in
+              *arm64*v8a*) expected_abi="arm64-v8a" ;;
+              *armeabi*v7a*) expected_abi="armeabi-v7a" ;;
+              *)
+                echo "Unexpected ABI split APK name: $apk" >&2
+                exit 1
+                ;;
+            esac
+            if ! grep -Fq "lib/$expected_abi/libr15whisper.so" <<<"$entries"; then
+              echo "Missing Whisper JNI library for $expected_abi in $apk" >&2
               exit 1
             fi
             grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
-            if ! grep -Fq "lib/arm64-v8a/libChineseConverter.so" <<<"$entries" \
-               && ! grep -Fq "lib/armeabi-v7a/libChineseConverter.so" <<<"$entries"; then
-              echo "Missing OpenCC native library in $apk" >&2
+            if ! grep -Fq "lib/$expected_abi/libChineseConverter.so" <<<"$entries"; then
+              echo "Missing OpenCC native library for $expected_abi in $apk" >&2
               exit 1
             fi
             if grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"; then
@@ -415,6 +422,7 @@ jobs:
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *leanback*arm64*v8a*) name="R15 TV-POC-leanback-arm64-v8a.apk" ;;
+              *leanback*armeabi*v7a*) name="R15 TV-POC-leanback-armeabi-v7a.apk" ;;
               *) continue ;;
             esac
             if [[ -e "dist/$name" ]]; then
@@ -423,8 +431,8 @@ jobs:
             cp "$apk" "dist/$name"
             found=$((found + 1))
           done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          if [[ "$found" -ne 1 ]]; then
-            echo "Expected the single Android TV arm64 APK under $APK_ROOT but packaged $found." >&2
+          if [[ "$found" -ne 2 ]]; then
+            echo "Expected both Android TV arm64-v8a and armeabi-v7a APKs under $APK_ROOT but packaged $found." >&2
             find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
             exit 1
           fi
@@ -484,7 +492,7 @@ jobs:
           )
           {
             echo "## R15 TV Whisper Base Subtitle POC build result"
-            echo "- For easier installation, this artifact contains only the Android TV arm64 APK."
+            echo "- This artifact contains separate Android TV APKs for arm64-v8a and armeabi-v7a. Install the armeabi-v7a APK on devices whose Android userspace supports only 32-bit ARM."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
