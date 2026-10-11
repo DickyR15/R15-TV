@@ -136,13 +136,15 @@ def main() -> None:
     gradle.write_text(text, encoding="utf-8")
 
     text = proguard.read_text(encoding="utf-8")
-    keep = (
-        "\n# Keep sherpa-onnx Java/JNI configuration used by the experimental ASR engine.\n"
-        "-keep class com.k2fsa.sherpa.onnx.** { *; }\n"
-        "-keep class com.zqc.opencc.android.lib.** { *; }\n"
-    )
-    if "-keep class com.k2fsa.sherpa.onnx.**" not in text:
-        proguard.write_text(text.rstrip() + keep, encoding="utf-8")
+    keep_rules = [
+        "# Keep sherpa-onnx Java/JNI configuration used by the experimental ASR engine.",
+        "-keep class com.k2fsa.sherpa.onnx.** { *; }",
+        "-keep class com.zqc.opencc.android.lib.** { *; }",
+    ]
+    missing_keep_rules = [rule for rule in keep_rules if rule not in text]
+    if missing_keep_rules:
+        text = text.rstrip() + "\n\n" + "\n".join(missing_keep_rules) + "\n"
+        proguard.write_text(text, encoding="utf-8")
 
     patch_manifest(manifest)
     patch_video_activity(leanback)
