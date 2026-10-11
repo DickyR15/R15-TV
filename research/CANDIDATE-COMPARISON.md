@@ -6,7 +6,7 @@
 
 ## 結論摘要
 
-**先用 Hearth 驗證電視端字幕擷取和翻譯，再決定要如何整合回 R15 TV。** 這是目前風險最低的起點：它已經有 Android TV 導覽與字幕浮窗、Android 10+ 裝置播放音訊擷取，以及本機／雲端辨識與翻譯的分層流程。Hearth 0.23.9 的 Android TV emulator 證據目前偏重字幕介面示範，並不等於已在實體電視上證明音訊擷取、辨識和翻譯全流程成功。
+**不把 Hearth 實機測試當成開發前置條件。** 考量使用者操作成本，先確認 R15 TV 自己的 MPV 音訊管線能否提供低延遲 PCM 分流；Hearth 保留為可選參考，必要時才在目標 TV 上比較跨 App 音訊擷取。Hearth 0.23.9 的 Android TV emulator 證據偏重字幕介面示範，並不等於已在實體電視上證明全流程成功。具體接入調查記錄於 [MPV-INTEGRATION-PLAN.md](MPV-INTEGRATION-PLAN.md)。
 
 本研究保留先前的專案需求：**R15 TV 之後若做播放器內整合，應保留 MPV，不可在未評估下改用另一個播放引擎。** OpenTV 以 Media3/ExoPlayer 為核心，因此只作為 TV 介面／架構參考，不作為直接替換基底。
 
@@ -25,10 +25,10 @@ FongMi/TV 公開 README 確認它同時支援 Media3/ExoPlayer 與 MPV。檢查 
 
 實作時依序評估：
 
-1. **先用獨立 POC 驗證**：以 Hearth QA APK 在目標 TV 測試裝置播放音訊擷取、辨識、翻譯及字幕顯示，快速確認裝置／系統限制。
-2. **評估播放器內部擷取**：研究 Android `AudioPlaybackCapture` 能否在 R15 TV 的 MPV 播放情境可靠取得音訊。此法可能仍需要系統 MediaProjection 同意，且受音訊政策／受保護內容限制。
-3. **必要時才研究 native PCM tap**：若 Android 播放擷取不可靠，再評估在 MPV/libmpv 音訊輸出路徑加入低開銷 PCM 分流，直接把 PCM 片段傳給 ASR。這會碰到 native build、同步、緩衝區、音訊格式與授權維護等問題，應獨立成小型原型。
-4. **播放器內字幕 UI**：最終盡量在 R15 TV 現有播放畫面疊加字幕，不依賴外部 App 的 overlay；保留 MPV 原有硬解／軟解、字幕軌與音訊輸出行為。
+1. **先查清 MPV wrapper 與 native 接口**：目前的 `setAudioOutputListener(effect::applyAudioEffect)` 從可見 Java 程式碼看是音效設定通知，不是 PCM callback。詳見 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md)。
+2. **做隔離的 PCM tap 原型**：若確認沒有現成 API，評估在 MPV 音訊路徑加入低開銷音訊副本；不得阻塞主音訊執行緒。
+3. **整合本機 ASR／翻譯**：只在使用者打開字幕時啟動，句段穩定後再翻譯，使用 OpenCC 做臺灣繁體轉換。
+4. **播放器內字幕 UI**：在 R15 TV 現有播放畫面疊加字幕，不依賴外部 App overlay；保留 MPV 原有解碼、字幕軌與音訊行為。Hearth/SUBRIMA 的實機測試為可選，不要求使用者先完成。
 
 ## TCL Google TV 的驗證清單
 
@@ -64,4 +64,4 @@ GitHub Actions 第 4 輪成功完成三個候選的建置；各 Gradle 任務輸
 - [SUBRIMA debug APK、日誌與 SHA-256（約 65 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696653814)
 - [OpenTV debug APK、日誌與 SHA-256（約 29 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696980988)
 
-下一步優先使用 Hearth 的離線／FOSS QA APK，在目標 TV 測試可用性與音訊擷取；同時保留 SUBRIMA 以供對照。不應把這些候選 APK 直接重命名為 R15 TV 或當作 R15 TV 正式版發布。
+下一步優先依 [MPV-INTEGRATION-PLAN.md](MPV-INTEGRATION-PLAN.md) 確認原生 PCM 接入點，再建置獨立原型。Hearth／SUBRIMA APK 僅在需要實機對照時才使用；不得把這些候選 APK 直接重命名為 R15 TV 或當作 R15 TV 正式版發布。
