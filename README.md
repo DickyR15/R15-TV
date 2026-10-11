@@ -21,7 +21,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 目前修正項目包括：主設定的「AI 字幕／語音設定」入口、播放畫面右上角固定入口、可在 App 私有儲存空間下載 Whisper Base 多語模型，以及 EXO/HLS 的「自動適應（建議）／最高畫質」切換。預設不強制選最高碼率；如果清單提供多種畫質，播放器可依頻寬調整。MPV 對不支援的 4K 解碼格式會嘗試直接回退到 EXO，不改變使用者永久的 MPV 偏好。單一路徑 4K 或單純渲染掉幀不保證會因這些設定自動修復，仍需依 codec、碼率和電視硬體解碼能力實測。舊 POC-43 不是已修好的版本；這一輪設定與 4K 回退修改正在重新建置，成功前不要安裝舊包。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
+**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 目前修正項目包括：主設定的「AI 字幕／語音設定」入口、播放畫面右上角固定入口、可在 App 私有儲存空間下載 Whisper Base 多語模型，以及 EXO/HLS 的「自動適應（建議）／最高畫質」切換。預設不強制選最高碼率；如果清單提供多種畫質，播放器可依頻寬調整。MPV 對不支援的 4K 解碼格式會嘗試直接回退到 EXO，不改變使用者永久的 MPV 偏好。單一路徑 4K 或單純渲染掉幀不保證會因這些設定自動修復，仍需依 codec、碼率和電視硬體解碼能力實測。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功，並產生 [R15 TV Whisper Base Subtitle POC-58 測試包]( https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666 )。這是獨立套件的 debug 測試版，不會覆蓋正式 App；只完成 CI 建置與資產檢查，音訊擷取、字幕品質及 4K 播放仍需 TCL Google TV 實機驗證。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
 
 ## 優先研究的開源專案
 
@@ -34,7 +34,7 @@
 
 ## 下一步
 
-候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。Whisper Base Subtitle POC 已改為固定 Whisper.cpp 上游 commit，分別建置 ARM64／ARMv7 native library，並在 APK 啟動前由使用者下載多語 Base 權重。POC-43 曾成功產生約 76 MB 的 ARM64 測試包，但它漏接直播頁面的字幕入口。當前修正版加入 LiveActivity 與 ExoPlayer HLS 自適應碼率後，會重新建置；請不要把 POC-43 當作已修復版本。過去第 20／25 輪是更早的舊版，並非目前選定的 Whisper Base 路線。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
+候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。Whisper Base Subtitle POC 固定 Whisper.cpp 上游 commit，建置 ARM64／ARMv7 原生庫，並由 App 內下載多語 Base 權重。第 58 輪已成功建置含 LiveActivity 字幕入口、主設定 AI 字幕頁、EXO/HLS 自動適應選項及 MPV 不支援 4K 格式時的 EXO 回退邏輯。舊 POC-43 與第 20／25 輪都是更早版本，不適合驗證目前功能。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
 
 ## 授權與上游來源
 
