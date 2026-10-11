@@ -169,15 +169,14 @@ def patch_player_setting(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     constants_anchor = "    private static final int MAX_BUFFER = 10;\n"
     constants_new = constants_anchor + """    public static final int PLAYBACK_QUALITY_ADAPTIVE = 0;
-    public static final int PLAYBACK_QUALITY_STABLE_1080P = 1;
-    public static final int PLAYBACK_QUALITY_MAXIMUM = 2;
+    public static final int PLAYBACK_QUALITY_MAXIMUM = 1;
 """
     if "PLAYBACK_QUALITY_STABLE_1080P" not in text:
         text = replace_once(text, constants_anchor, constants_new, path)
 
     method_anchor = "    public static int getScale() {\n"
     methods = """    public static int getPlaybackQuality() {
-        return Math.clamp(Prefers.getInt("r15_playback_quality", PLAYBACK_QUALITY_STABLE_1080P),
+        return Math.clamp(Prefers.getInt("r15_playback_quality", PLAYBACK_QUALITY_ADAPTIVE),
                 PLAYBACK_QUALITY_ADAPTIVE, PLAYBACK_QUALITY_MAXIMUM);
     }
 
@@ -188,9 +187,8 @@ def patch_player_setting(path: Path) -> None:
 
     public static String getPlaybackQualityText() {
         return switch (getPlaybackQuality()) {
-            case PLAYBACK_QUALITY_ADAPTIVE -> "自動適應（依網路狀況）";
             case PLAYBACK_QUALITY_MAXIMUM -> "最高畫質（可能卡頓）";
-            default -> "穩定優先（最高 1080p）";
+            default -> "自動適應（建議）";
         };
     }
 
@@ -352,10 +350,6 @@ def patch_exo_adaptive_bitrate(path: Path) -> None:
         return
     old = "builder.setForceHighestSupportedBitrate(true);"
     new = """switch (PlayerSetting.getPlaybackQuality()) {
-            case PlayerSetting.PLAYBACK_QUALITY_STABLE_1080P:
-                builder.setMaxVideoSize(1920, 1080);
-                builder.setForceHighestSupportedBitrate(false);
-                break;
             case PlayerSetting.PLAYBACK_QUALITY_MAXIMUM:
                 builder.setForceHighestSupportedBitrate(true);
                 break;
@@ -475,8 +469,8 @@ def main() -> None:
             raise SystemExit(f"{path}: detach call missing after patch")
 
     exo_text = exo_util.read_text(encoding="utf-8")
-    if "PLAYBACK_QUALITY_STABLE_1080P" not in exo_text or "setMaxVideoSize(1920, 1080)" not in exo_text:
-        raise SystemExit(f"{exo_util}: stable 1080p quality profile was not applied")
+    if "PLAYBACK_QUALITY_MAXIMUM" not in exo_text or "setForceHighestSupportedBitrate(false)" not in exo_text:
+        raise SystemExit(f"{exo_util}: adaptive quality policy was not applied")
     manager_text = player_manager.read_text(encoding="utf-8")
     if "fallbackExoForCurrentMedia" not in manager_text or "MPV 解碼失敗，已暫時切換 EXO" not in manager_text:
         raise SystemExit(f"{player_manager}: per-source MPV-to-Exo fallback was not applied")
@@ -484,7 +478,7 @@ def main() -> None:
         raise SystemExit(f"{mpv_engine}: unsupported 4K format errors were not handled")
     if "mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);" not in setting_activity.read_text(encoding="utf-8"):
         raise SystemExit(f"{setting_activity}: AI subtitle entry was not applied")
-    if "PLAYBACK_QUALITY_STABLE_1080P" not in player_setting.read_text(encoding="utf-8"):
+    if "PLAYBACK_QUALITY_ADAPTIVE" not in player_setting.read_text(encoding="utf-8"):
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
     print("Applied Whisper Base subtitle POC with main Settings entry and visible playback shortcut.")
