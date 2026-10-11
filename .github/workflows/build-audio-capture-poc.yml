@@ -353,7 +353,7 @@ jobs:
             > dist/SOURCE_REFS.json
           printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build experimental debug APKs (subtitle ASR only)
+      - name: Build experimental Android TV debug APK (arm64 only)
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -361,8 +361,7 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
-            :app:assembleLeanbackDebug \
-            :app:assembleMobileDebug
+            :app:assembleLeanbackDebug
 
       - name: Verify playback-capture ASR and translation assets in experimental APKs
         shell: bash
@@ -370,7 +369,7 @@ jobs:
           set -euo pipefail
           apk_root="sources/TV/app/build/outputs/apk"
           mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
-          test "${#apks[@]}" -eq 4
+          test "${#apks[@]}" -eq 2
           for apk in "${apks[@]}"; do
             entries=$(unzip -Z1 "$apk")
             grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
@@ -418,9 +417,6 @@ jobs:
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *leanback*arm64*v8a*) name="R15 TV-POC-leanback-arm64-v8a.apk" ;;
-              *leanback*armeabi*v7a*) name="R15 TV-POC-leanback-armeabi-v7a.apk" ;;
-              *mobile*arm64*v8a*) name="R15 TV-POC-mobile-arm64-v8a.apk" ;;
-              *mobile*armeabi*v7a*) name="R15 TV-POC-mobile-armeabi-v7a.apk" ;;
               *) continue ;;
             esac
             if [[ -e "dist/$name" ]]; then
@@ -429,8 +425,8 @@ jobs:
             cp "$apk" "dist/$name"
             found=$((found + 1))
           done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          if [[ "$found" -ne 4 ]]; then
-            echo "Expected four ABI/flavor APKs under $APK_ROOT but packaged $found." >&2
+          if [[ "$found" -ne 1 ]]; then
+            echo "Expected the single Android TV arm64 APK under $APK_ROOT but packaged $found." >&2
             find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
             exit 1
           fi
@@ -471,6 +467,7 @@ jobs:
           )
           {
             echo "## R15 TV Audio Playback Capture POC build result"
+            echo "- For easier installation, this artifact contains only the Android TV arm64 APK."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
