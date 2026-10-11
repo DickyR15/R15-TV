@@ -5,6 +5,9 @@ on:
     branches: [feature/autobuild-ai-codec-research]
     paths:
       - "docs/TV-AUTOBUILD-INTEGRATION-PLAN.md"
+      - "patches/ai-subtitles/**"
+      - "scripts/apply-ai-subtitles.py"
+      - ".github/workflows/build-apks.yml"
       - ".github/workflows/integration-preflight.yml"
   workflow_dispatch:
 
@@ -41,6 +44,29 @@ jobs:
           grep -Fq "github.com/iptvorganization/TV-AutoBuild" "$plan"
           echo "Integration plan checks passed."
           echo "This is a documentation/source-access preflight only; it does not build or test playback features."
+
+      - name: Validate AI subtitle patch against pinned public TV source
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/apply-ai-subtitles.py
+          mkdir -p sources/TV
+          git -C sources/TV init
+          git -C sources/TV remote add origin https://github.com/FongMi/TV.git
+          git -C sources/TV fetch --depth=1 origin fe6a5b235477c02633cf3bc50d4cd83414a521b4
+          git -C sources/TV checkout --detach FETCH_HEAD
+          model_dir="sources/TV/app/src/main/assets/ai-subtitle-model"
+          mkdir -p "$model_dir"
+          touch "$model_dir/encoder-epoch-99-avg-1.int8.onnx"
+          touch "$model_dir/decoder-epoch-99-avg-1.onnx"
+          touch "$model_dir/joiner-epoch-99-avg-1.int8.onnx"
+          touch "$model_dir/tokens.txt"
+          python3 scripts/apply-ai-subtitles.py --tv-dir sources/TV --patch-dir patches/ai-subtitles
+          grep -Fq "AiSubtitleEngine.offerPcm(" sources/TV/app/src/main/java/com/fongmi/android/tv/player/effect/audio/AudioEffectProcessor.java
+          grep -Fq "AiSubtitleOverlay.attach(this, mBinding.player);" sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
+          grep -Fq "AiSubtitleOverlay.attach(this, mBinding.player);" sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
+          grep -Fq 'include: ["*.aar", "*.jar"]' sources/TV/app/build.gradle
+          echo "AI subtitle source patch validated against the pinned public FongMi/TV revision."
 
       - name: Print source verification instructions
         shell: bash
