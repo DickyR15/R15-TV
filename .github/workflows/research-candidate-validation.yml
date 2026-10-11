@@ -1,0 +1,151 @@
+name: Research candidate APK builds
+
+on:
+  push:
+    branches:
+      - research/realtime-subtitles-tv
+    paths:
+      - ".github/workflows/research-candidate-validation.yml"
+      - "research/**"
+      - "README.md"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.project }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - project: hearth
+            repository: https://github.com/Sal7one/Hearth.git
+            commit: 06ef54f90fad2258b9f67130b4d254f2de3baca3
+            ndk: "27.0.12077973"
+          - project: subrima
+            repository: https://github.com/y-haviv/android-subtitle-overlay.git
+            commit: a7787aad18a116cec5ba3c13d83a59002f7612b7
+            ndk: "26.1.10909125"
+          - project: opentv
+            repository: https://github.com/opentvproject/opentv.git
+            commit: 43b95c05d8f6a042f51c0cff662ef80789ee7528
+            ndk: ""
+
+    steps:
+      - name: Set up Java
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          accept-android-sdk-licenses: true
+
+      - name: Install required SDK components
+        shell: bash
+        run: |
+          sdkmanager --install "platform-tools" "platforms;android-35" "platforms;android-36" "cmake;3.22.1"
+
+      - name: Set up Android NDK
+        if: matrix.project != 'opentv'
+        uses: nttld/setup-ndk@v1
+        with:
+          ndk-version: ${{ matrix.ndk }}
+          link-to-sdk: true
+
+      - name: Fetch pinned upstream source
+        shell: bash
+        env:
+          SOURCE_URL: ${{ matrix.repository }}
+          SOURCE_COMMIT: ${{ matrix.commit }}
+        run: |
+          set -euo pipefail
+          echo "Starting candidate build" > "$RUNNER_TEMP/build.log"
+          git clone "$SOURCE_URL" "$RUNNER_TEMP/candidate"
+          git -C "$RUNNER_TEMP/candidate" checkout --detach "$SOURCE_COMMIT"
+          ACTUAL_COMMIT="$(git -C "$RUNNER_TEMP/candidate" rev-parse HEAD)"
+          if [[ "$ACTUAL_COMMIT" != "$SOURCE_COMMIT" ]]; then
+            echo "Pinned commit mismatch: $ACTUAL_COMMIT != $SOURCE_COMMIT" | tee -a "$RUNNER_TEMP/build.log"
+            exit 1
+          fi
+          {
+            echo "Source URL: $SOURCE_URL"
+            echo "Pinned commit: $ACTUAL_COMMIT"
+            echo "Fetched at UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } | tee -a "$RUNNER_TEMP/build.log"
+
+      - name: Build Hearth QA APKs
+        if: matrix.project == 'hearth'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate"
+          ./gradlew --no-daemon test :app:compilePlayQaKotlin :app:compileFossQaKotlin 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+          ./gradlew --no-daemon :common-jni:externalNativeBuildDebug :app:assemblePlayQa :app:assembleFossQa 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+
+      - name: Build SUBRIMA debug APK
+        if: matrix.project == 'subrima'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate/SubtitlesAppSubrimaProject"
+          ./gradlew --no-daemon --stacktrace testDebugUnitTest assembleDebug 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+
+      - name: Build OpenTV debug APK
+        if: matrix.project == 'opentv'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd "$RUNNER_TEMP/candidate"
+          ./gradlew --no-daemon --stacktrace test assembleDebug 2>&1 | tee -a "$RUNNER_TEMP/build.log"
+
+      - name: Collect APKs, log, and provenance
+        if: always()
+        shell: bash
+        env:
+          PROJECT: ${{ matrix.project }}
+          SOURCE_URL: ${{ matrix.repository }}
+          PINNED_COMMIT: ${{ matrix.commit }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          set -u
+          OUT="$RUNNER_TEMP/research-output"
+          mkdir -p "$OUT"
+          if [[ -f "$RUNNER_TEMP/build.log" ]]; then
+            cp "$RUNNER_TEMP/build.log" "$OUT/build.log"
+          fi
+          if [[ -d "$RUNNER_TEMP/candidate" ]]; then
+            while IFS= read -r -d '' apk; do
+              rel="${apk#"$RUNNER_TEMP/candidate"/}"
+              mkdir -p "$OUT/$(dirname "$rel")"
+              cp "$apk" "$OUT/$rel"
+            done < <(find "$RUNNER_TEMP/candidate" -type f -path '*/build/outputs/apk/*' -name '*.apk' -print0)
+          fi
+          {
+            echo "Project: $PROJECT"
+            echo "Source URL: $SOURCE_URL"
+            echo "Pinned commit: $PINNED_COMMIT"
+            echo "Workflow run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+            echo "Collection-time job status: $JOB_STATUS"
+            echo "Collected at UTC: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          } > "$OUT/BUILD-INFO.txt"
+          find "$OUT" -type f -name '*.apk' -print0 | sort -z | xargs -0 -r sha256sum > "$OUT/SHA256SUMS.txt"
+          if ! find "$OUT" -type f -name '*.apk' -print -quit | grep -q .; then
+            echo "No APK was produced. Inspect build.log and the workflow job log." >> "$OUT/BUILD-INFO.txt"
+          fi
+
+      - name: Upload research artifacts
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: r15-tv-${{ matrix.project }}-${{ github.run_number }}
+          path: ${{ runner.temp }}/research-output/
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 1
