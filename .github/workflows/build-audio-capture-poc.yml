@@ -241,6 +241,15 @@ jobs:
           install -m 644 "$model_source/joiner-epoch-99-avg-1.int8.onnx" "$model_target/"
           install -m 644 "$model_source/tokens.txt" "$model_target/"
           install -m 644 sources/sherpa-onnx/LICENSE "$model_target/SHERPA-ONNX-LICENSE.txt"
+          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/ASR-MODEL-APACHE-2.0-LICENSE.txt"
+          cat > "$model_target/ASR-MODEL-LICENSE-NOTICE.txt" <<'EOF_MODEL_LICENSE'
+          Model: sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16
+          Official sherpa-onnx model documentation says this small model was converted from:
+          https://huggingface.co/csukuangfj/k2fsa-zipformer-bilingual-zh-en-t
+          The Hugging Face model card identifies the model as Apache-2.0 licensed.
+          Model files in this APK are the small streaming conversion published by sherpa-onnx.
+          Retain this notice and the accompanying Apache-2.0 license with redistributed copies.
+          EOF_MODEL_LICENSE
           cp "$model_source/README.md" "$model_target/ASR-MODEL-README.txt" || true
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
