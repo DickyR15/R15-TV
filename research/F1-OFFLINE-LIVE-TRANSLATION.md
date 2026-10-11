@@ -13,8 +13,8 @@ POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlayba
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
 1. **先驗證 App 內 AudioPlaybackCapture。** 它可以限制只讀 R15 TV 自己 UID 的播放音訊，先避免 native 重編；需要 `RECORD_AUDIO` 與使用者同意的 MediaProjection 工作階段。若電視上的 MPV 聲音不可擷取，才改為研究 MPV native PCM tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 不是已證實的 PCM callback。
-2. **英文語音辨識：先評估 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)。** 它使用 MIT 授權，支援 Android，提供連續取樣的示範流程。由於 F1 國際轉播解說通常以英文為主，先測 `base.en` 量化模型；若速度與 RAM 允許，再比較 `small.en`。Android 上模型越大不代表能維持即時，必須以實際 SoC 跑測試。
-3. **離線翻譯：選可本機執行、明確支援 English → Chinese 的翻譯模型。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
+2. **第一輪 ASR POC：使用 sherpa-onnx 中英串流 small 模型。** 官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB，較適合先驗證 Android TV 音訊擷取與裝置資源負擔。模型支援中英雙語，但不代表 F1 英文專有名詞一定準確；音訊擷取成功後，再比較 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) `base.en` 或英文專用串流模型。最終 ASR 引擎未定案，準確率及效能均需實機測試。
+3. **離線翻譯：第一版使用可在裝置端執行的 ML Kit Translation SDK。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
 4. **臺灣繁體中文輸出：使用 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `s2twp`／臺灣正體流程做字形與常用詞轉換。** OpenCC 是離線簡繁／地區詞轉換，不是英翻中的翻譯器；必須先有翻譯模型，再做字詞轉換。
 5. **F1 詞庫：** 為車手、車隊、賽道與常用戰術詞建立可維護的字典／譯名表，例如 Leclerc、Verstappen、Norris、Piastri、undercut、overcut、tyre degradation、DRS、Safety Car、Virtual Safety Car、track limits、box、pit wall。只能用於術語校正，不應盲目替換一般句子中的相似字串。
 
