@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。第一輪（不含翻譯的早期快照）正在建置，含翻譯的最新程式碼已排入後續建置；尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
+**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。ASR 第一版改用較小的 sherpa-onnx 中英串流模型，以減少 APK 體積與 TV 記憶體負擔；最新工作流仍待建置驗證，尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -26,6 +26,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 ### 階段 1：App 內音訊擷取＋ASR＋本機翻譯 POC（建置驗證中）
 
 - 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
+- ASR 先使用 [sherpa-onnx streaming small bilingual zh-en 模型](https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2)。官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB；這是為了先降低 APK 與記憶體負擔，但 F1 英文專有名詞辨識品質仍需在實機驗證。
 - 採用 `AudioRecord` 讀取 48 kHz stereo PCM16；背景執行緒只量測音量、轉送資料，語音辨識在另一條 worker thread 執行，不阻塞播放。
 - 在 `AndroidManifest.xml` 宣告 `RECORD_AUDIO` 與 `android:allowAudioPlaybackCapture="true"`；由使用者明確按下字幕測試後才要求系統 MediaProjection 同意。
 - 最新原型會在句段結束後使用 ML Kit 本機 English → Chinese 翻譯，再以 OpenCC S2TWP 轉成臺灣繁體；首次需下載翻譯模型。此整合仍待建置與實機測試。
@@ -47,7 +48,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ### 階段 3：免費本機語音辨識與翻譯
 
-- 先測試量化的 Whisper `base.en`；只有持續低於即時處理速度時，才比較更小模型或替代引擎。
+- 第一輪 POC 用小型中英串流模型先驗證擷取與即時辨識，較適合控制 APK 體積。若 F1 英文專有名詞辨識不足，再比較 Whisper `base.en` 或英文專用串流模型；最終 ASR 引擎尚未定案。
 - 翻譯獨立成可更換元件，英文句段穩定後才送翻譯，避免每個臨時辨識結果都重翻。
 - 翻譯模型需明確支援 English → Chinese、能在 Android 裝置本機執行並核對模型授權。模型應可另行下載，避免初始 APK 過大。
 - 最後用 OpenCC 臺灣正體／詞彙轉換（例如 `s2twp`）調整字形與用詞；OpenCC 本身不負責英翻中。
@@ -63,7 +64,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 ## 驗收順序
 
 1. CI 可重現建置，提供測試 APK、來源 commit、patch、日誌與 SHA-256。
-2. 以合法且可本機使用的短英文測試片段，確認 PCM tap 不干擾主音訊。
+2. 以合法且可本機使用的短英文測試片段，確認音訊擷取不干擾主音訊。
 3. 確認 ASR 可長時間追上播放時間，且緩衝區不持續累積。
 4. 加入本機翻譯與臺灣正體轉換，檢查字幕重複、漏字、F1 專有名詞與延遲。
 5. 再於 Android TV 實機測試直播 M3U/M3U8，記錄記憶體、CPU、音訊中斷及長時間穩定性。
