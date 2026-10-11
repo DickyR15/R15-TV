@@ -1,13 +1,13 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 原始碼調查與設計階段；尚未把 PCM tap、語音辨識或翻譯接進播放器，也尚未完成實機測試。  
+**狀態：** 已新增第一個 App 內音訊擷取＋串流語音辨識 POC，GitHub Actions 正在建置驗證；尚未證明能在目標電視捕捉 MPV 音訊，且此版本尚未加入翻譯。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
 
 Hearth 是獨立 App，必須額外安裝、下載模型、授權音訊擷取，再測試是否能覆蓋 IPTV 畫面。這對使用者來說步驟多，也不能保證每個直播 App 都允許系統擷取音訊。
 
-因此 Hearth 改為**可選參考工具**，不再是進入 R15 TV 開發的前置條件。新路線先在原始碼與 CI 中查證 MPV 音訊接入方式，之後再提供一個可安裝的 R15 TV 測試版給使用者驗證。
+因此 Hearth 改為**可選參考工具**。第一個實作改採 Android `AudioPlaybackCapture`，只擷取 R15 TV 自己 UID 的播放音訊，並把副本送進語音辨識佇列；這樣暫時不必重編 MPV native library。它仍需要一次系統擷取授權及錄音權限，音訊是否真的可被捕捉須經 TV 實測。若失敗，再回到 MPV 原生 PCM tap。
 
 ## 已核對的原始碼
 
@@ -23,12 +23,19 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 推薦實作方案
 
-### 階段 1：確認 native 接入點（不需使用者操作）
+### 階段 1：App 內音訊擷取＋ASR POC（正在建置驗證）
 
-- 盤點建置實際使用的 MPV wrapper、libmpv 與 JNI 原始碼版本。
-- 確認是否存在可安全擴充的音訊 filter/output callback；不要把既有 EQ listener 誤用為 PCM tap。
-- 若沒有現成 API，設計 native 音訊分流 tap，先只把音訊副本送去分析，不改變主音訊輸出。
-- 決定要在上游來源上維護 patch，並把 patch 套用步驟納入 R15 TV 的可重現 CI；不能只在一次性工作目錄手動改檔。
+- 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
+- 採用 `AudioRecord` 讀取 48 kHz stereo PCM16；背景執行緒只量測音量、轉送資料，語音辨識在另一條 worker thread 執行，不阻塞播放。
+- 在 `AndroidManifest.xml` 宣告 `RECORD_AUDIO` 與 `android:allowAudioPlaybackCapture="true"`；由使用者明確按下字幕測試後才要求系統 MediaProjection 同意。
+- 第一版先證明有音訊訊號並產生來源語言字幕，尚未做英翻中；成功建置也不等同於實機音訊能被擷取。
+- 原型程式與建置流程：[patches/audio-capture](../patches/audio-capture)、[套用腳本](../scripts/apply-audio-capture-poc.py)、[Audio Capture POC workflow](../.github/workflows/build-audio-capture-poc.yml)。
+
+### 階段 2：必要時才做 MPV native PCM tap
+
+- 若 Android capture 在 TV 韌體或 MPV 音訊路徑下回傳靜音，重新確認使用的 wrapper、libmpv 與 native build 版本。
+- 不把既有 `setAudioOutputListener(effect::applyAudioEffect)` 當成 PCM callback；它的已知用途是重新套用音效設定。
+- 如確實需要原生 tap，讓 native 音訊執行緒只複製資料到有界佇列，不要做推論、翻譯或磁碟 I/O；將 patch 和 native rebuild 固定納入 CI，不能只修改一次性工作目錄。
 
 ### 階段 2：PCM 原型
 
@@ -65,7 +72,7 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 本階段尚未完成的事
 
-- 尚未確認最終可用的 native PCM callback/API。
-- 尚未提交實際音訊 tap、ASR、翻譯或字幕 UI 程式碼。
-- 尚未證實目標電視能在完全本機模式下維持即時翻譯。
-- Hearth 的 QA APK 建置成功，只能證明上游候選在 CI 能編譯；不是 R15 TV 的功能建置或實機成功證據。
+- App 內 AudioPlaybackCapture POC 尚待 GitHub Actions 編譯結果與 TV 實機音訊檢查。
+- 本版目前只有來源語言 ASR，不含英文→中文翻譯，也尚未接 OpenCC 臺灣正體轉換。
+- 尚未證實目標電視能在完整本機 ASR＋翻譯模式維持即時效能。
+- 即使 APK 成功建置，也不等於目標 TV 的 MPV 聲音會被捕捉；這必須實測。
