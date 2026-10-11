@@ -168,16 +168,17 @@ def patch_player_manager(path: Path) -> None:
 def patch_player_setting(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     constants_anchor = "    private static final int MAX_BUFFER = 10;\n"
-    constants_new = constants_anchor + """    public static final int PLAYBACK_QUALITY_ADAPTIVE = 0;
-    public static final int PLAYBACK_QUALITY_MAXIMUM = 1;
+    constants_new = constants_anchor + """    public static final int PLAYBACK_QUALITY_STABLE_1080P = 0;
+    public static final int PLAYBACK_QUALITY_ADAPTIVE = 1;
+    public static final int PLAYBACK_QUALITY_MAXIMUM = 2;
 """
     if "PLAYBACK_QUALITY_STABLE_1080P" not in text:
         text = replace_once(text, constants_anchor, constants_new, path)
 
     method_anchor = "    public static int getScale() {\n"
     methods = """    public static int getPlaybackQuality() {
-        return Math.clamp(Prefers.getInt("r15_playback_quality", PLAYBACK_QUALITY_ADAPTIVE),
-                PLAYBACK_QUALITY_ADAPTIVE, PLAYBACK_QUALITY_MAXIMUM);
+        return Math.clamp(Prefers.getInt("r15_playback_quality", PLAYBACK_QUALITY_STABLE_1080P),
+                PLAYBACK_QUALITY_STABLE_1080P, PLAYBACK_QUALITY_MAXIMUM);
     }
 
     public static void putPlaybackQuality(int mode) {
@@ -187,8 +188,9 @@ def patch_player_setting(path: Path) -> None:
 
     public static String getPlaybackQualityText() {
         return switch (getPlaybackQuality()) {
+            case PLAYBACK_QUALITY_ADAPTIVE -> "自動適應（允許 4K）";
             case PLAYBACK_QUALITY_MAXIMUM -> "最高畫質（可能卡頓）";
-            default -> "自動適應（建議）";
+            default -> "1080p 優先（建議，減少卡頓）";
         };
     }
 
@@ -217,31 +219,43 @@ def patch_setting_activity(path: Path) -> None:
 
 def patch_setting_activity_layout(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    anchor = '''        <androidx.appcompat.widget.LinearLayoutCompat
-            android:id="@+id/danmaku"'''
-    row = '''        <androidx.appcompat.widget.LinearLayoutCompat
+    root_anchor = '''    <androidx.appcompat.widget.LinearLayoutCompat
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="24dp">'''
+    row = '''        
+        <androidx.appcompat.widget.LinearLayoutCompat
             android:id="@+id/aiSubtitle"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
+            android:layout_marginBottom="16dp"
             android:background="@drawable/selector_item"
-            android:contentDescription="AI 字幕與語音辨識設定"
+            android:contentDescription="AI 即時字幕／語音設定"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:orientation="horizontal">
+            android:orientation="vertical"
+            android:padding="14dp">
 
             <com.google.android.material.textview.MaterialTextView
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:text="AI 字幕／語音設定"
+                android:text="AI 即時字幕／語音設定"
                 android:textColor="@color/white"
-                android:textSize="18sp" />
+                android:textSize="20sp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Whisper Base · Google ML Kit · OpenCC 臺灣繁體"
+                android:textColor="#FFBFD7FF"
+                android:textSize="14sp" />
 
         </androidx.appcompat.widget.LinearLayoutCompat>
-
 '''
     if 'android:id="@+id/aiSubtitle"' not in text:
-        text = replace_once(text, anchor, row + anchor, path)
+        text = replace_once(text, root_anchor, root_anchor + "\\n" + row, path)
     path.write_text(text, encoding="utf-8")
 
 
@@ -347,16 +361,23 @@ def patch_manifest(path: Path) -> None:
 
 
 def patch_exo_adaptive_bitrate(path: Path) -> None:
-    """Apply stable-by-default, adaptive, or maximum quality on EXO/HLS."""
+    """Cap EXO/HLS at 1080p by default; allow adaptive and maximum quality options."""
     text = path.read_text(encoding="utf-8")
-    if "switch (PlayerSetting.getPlaybackQuality())" in text:
+    if "case PlayerSetting.PLAYBACK_QUALITY_STABLE_1080P:" in text:
         return
     old = "builder.setForceHighestSupportedBitrate(true);"
     new = """switch (PlayerSetting.getPlaybackQuality()) {
+            case PlayerSetting.PLAYBACK_QUALITY_ADAPTIVE:
+                builder.clearVideoSizeConstraints();
+                builder.setForceHighestSupportedBitrate(false);
+                break;
             case PlayerSetting.PLAYBACK_QUALITY_MAXIMUM:
+                builder.clearVideoSizeConstraints();
                 builder.setForceHighestSupportedBitrate(true);
                 break;
+            case PlayerSetting.PLAYBACK_QUALITY_STABLE_1080P:
             default:
+                builder.setMaxVideoSize(1920, 1080);
                 builder.setForceHighestSupportedBitrate(false);
                 break;
         }"""
@@ -481,11 +502,11 @@ def main() -> None:
         raise SystemExit(f"{mpv_engine}: unsupported 4K format errors were not handled")
     if "mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);" not in setting_activity.read_text(encoding="utf-8"):
         raise SystemExit(f"{setting_activity}: AI subtitle entry was not applied")
-    if "PLAYBACK_QUALITY_ADAPTIVE" not in player_setting.read_text(encoding="utf-8"):
+    if "PLAYBACK_QUALITY_STABLE_1080P" not in player_setting.read_text(encoding="utf-8"):
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
-    print("Applied Whisper Base subtitle POC with main Settings entry and visible playback shortcut.")
-    print("EXO/HLS quality defaults to stable 1080p, with adaptive and maximum options.")
+    print("Applied Whisper Base subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
+    print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
