@@ -7,9 +7,9 @@
 1. 請從 [Audio Capture POC 工作流](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)下載套用 LiveActivity 修正後的最新成功 Artifact。不要再用 [POC-43 舊包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)測試 M3U／M3U8 直播字幕，因為舊包不會顯示直播字幕設定。
 2. 解壓縮後安裝 R15 TV-POC-leanback-arm64-v8a.apk。測試版套件名稱應為 com.dicky.r15tv.poc、顯示名稱為「R15 TV 字幕測試」，不會覆蓋既有 R15 TV 正式 App。若最新工作流失敗，先不要安裝。
 3. 在測試版內重新載入 M3U／M3U8 播放清單；由於這是獨立測試 App，原 App 的清單與設定不會自動複製過來。播放器仍保留 MPV。
-4. 先到 **主畫面 → 設定 → AI 字幕／語音設定** 下載 Whisper Base 多語模型；播放時，畫面右上角也會固定顯示 **AI 字幕／語音設定** 按鈕。打開後按 **「啟動即時字幕測試」**。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內已驗證包含 `libr15whisper.so`，沒有把 Base 模型權重打包進去。
+4. 先到 **主畫面 → 設定 → AI 字幕／語音設定** 下載 Whisper Base 多語模型。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內含 `libr15whisper.so`，不會把約 148 MB 的 Base 權重打包進去。
 5. 第一次翻譯時，Google ML Kit 也會下載英翻中模型。第一次下載需要網路；模型就緒後語音辨識與翻譯設計為本機執行，不需 API 金鑰或付費雲端翻譯。
-5. 按 **「啟動即時字幕測試」**，允許錄音權限及 Android 系統音訊擷取。MediaProjection 是擷取工作階段的系統授權，重新啟動擷取時可能再次詢問。
+6. 播放 M3U／M3U8 英文 F1 直播時，畫面右上角會顯示 **AI 字幕／語音設定** 按鈕。打開後按 **「啟動即時字幕測試」**，允許錄音權限及 Android 系統音訊擷取。MediaProjection 是擷取工作階段的系統授權，重新啟動擷取時可能再次詢問。
 
 ## 4K 播放策略
 
