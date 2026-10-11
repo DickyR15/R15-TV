@@ -166,9 +166,9 @@ jobs:
             module="${aar_name#lib-}"
             module="${module%-release.aar}"
             module_dir="${module//-/_}"
-            aar_path="libraries/$module_dir/build/outputs/aar/$aar_name"
+            aar_path="libraries/$module_dir/buildout/outputs/aar/$aar_name"
             if [[ ! -f "$aar_path" ]]; then
-              aar_path=$(find libraries -type f -path "*/build/outputs/aar/$aar_name" -print -quit)
+              aar_path=$(find libraries -type f -name "$aar_name" -print -quit)
             fi
             if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
               echo "Missing expected AAR: $aar_name" >&2
