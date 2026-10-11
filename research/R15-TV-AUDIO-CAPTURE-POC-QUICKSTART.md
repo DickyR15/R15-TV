@@ -1,10 +1,10 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功並上傳 [POC-58 ZIP](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)；已通過 Android TV APK 編譯、Whisper JNI 與 OpenCC 資產檢查。仍需在 TCL Google TV 實機確認音訊擷取、即時翻譯和 4K 播放效果。
+> 這是研究分支的實驗測試版，不是正式發行版。最新 [第 61 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38144514840) 已成功並上傳 [POC-61 ZIP](https://github.com/DickyR15/R15-TV/actions/runs/38144514840/artifacts/11703699438)，已通過 Android TV APK 編譯、Whisper JNI 與 OpenCC 資產檢查。仍需在 TCL Google TV 實機確認音訊擷取、即時翻譯和 4K 播放效果。
 
 ## 安裝與第一次設定
 
-1. 直接下載 [R15 TV Whisper Base Subtitle POC-58 ZIP（約 80 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)。若連結過期，開啟[第 58 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38143827319)，在 Artifacts 下載 `R15 TV Whisper Base Subtitle POC-58`。舊版 POC-43 不含完整直播字幕入口，請勿用來驗證現在的 M3U／M3U8 功能。
+1. 直接下載 [R15 TV Whisper Base Subtitle POC-61 ZIP（約 80 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38144514840/artifacts/11703699438)。若連結過期，開啟[第 61 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38144514840)，在 Artifacts 下載 `R15 TV Whisper Base Subtitle POC-61`。請不要再用 POC-58 或更早的版本驗證這次的設定入口與 1080p 預設修正。
 2. 解壓縮後安裝 R15 TV-POC-leanback-arm64-v8a.apk。測試版套件名稱應為 com.dicky.r15tv.poc、顯示名稱為「R15 TV 字幕測試」，不會覆蓋既有 R15 TV 正式 App。若最新工作流失敗，先不要安裝。
 3. 在測試版內重新載入 M3U／M3U8 播放清單；由於這是獨立測試 App，原 App 的清單與設定不會自動複製過來。播放器仍保留 MPV。
 4. 先到 **主畫面 → 設定 → 第一個選項「AI 即時字幕／語音設定」** 下載 Whisper Base 多語模型。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內含 `libr15whisper.so`，不會把約 148 MB 的 Base 權重打包進去。
@@ -13,7 +13,7 @@
 
 ## 4K 播放策略
 
-到 **設定 → 播放器設定 → 解碼設定 → EXO／HLS 畫質策略**，新版預設「1080p 優先（建議，減少卡頓）」，也可切換「自動適應（允許 4K）」或「最高畫質」。預設自動適應不會強制選最高碼率；若 HLS/M3U8 清單有多種畫質，播放器可依實際頻寬調整。單一固定 4K 串流／檔案不會被轉碼，因此若卡頓來自硬體解碼效能，仍需更換來源的 1080p 版本或確認 MPV/EXO 解碼能力。若 MPV 明確回報不支援的解碼格式，或重複出現解碼錯誤，測試版會暫時改用 EXO 播放該來源，不會永久改掉你選擇的 MPV 偏好。若單一路徑 4K 仍掉幀，需要依 codec、碼率和實際解碼器再診斷。
+到 **設定 → 播放器設定 → 解碼設定 → EXO／HLS 畫質策略**，POC-61 預設「1080p 優先（建議，減少卡頓）」，也可切換「自動適應（允許 4K）」或「最高畫質」。1080p 上限只對有多個畫質版本的 EXO/HLS/M3U8 清單有效；若來源只有單一路徑 4K 檔／串流，應用程式無法將它即時轉碼成 1080p，仍可能因 codec、碼率或硬體解碼能力而卡頓。MPV 對不支援的解碼格式或重複解碼失敗會暫時改由 EXO 播放該來源，不會永久改掉 MPV 偏好。
 
 ## 怎樣判斷測試結果？
 
