@@ -245,6 +245,9 @@ jobs:
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+            app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java \
+          grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
+          grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
           test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
           echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
