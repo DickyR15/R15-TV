@@ -186,11 +186,12 @@ public final class AiSubtitleOverlay {
     }
 
     private void startCapture(int resultCode, Intent data) {
+        MediaProjection projection = null;
         try {
             MediaProjectionManager manager =
                     (MediaProjectionManager) activity.getSystemService(Context.MEDIA_PROJECTION_SERVICE);
             if (manager == null) throw new IllegalStateException("系統沒有提供 MediaProjectionManager");
-            MediaProjection projection = manager.getMediaProjection(resultCode, data);
+            projection = manager.getMediaProjection(resultCode, data);
             if (projection == null) throw new IllegalStateException("系統未建立音訊擷取工作階段");
 
             translationEngine = new AiSubtitleTranslationEngine(activity,
@@ -231,7 +232,13 @@ public final class AiSubtitleOverlay {
                     new AiSubtitlePlaybackCapture.Listener() {
                         @Override
                         public void onStatus(String message) {
-                            if (enabled) status.setText(message);
+                            if (!enabled) return;
+                            status.setText(message);
+                            if ("系統已停止音訊擷取".equals(message)
+                                    || message.startsWith("音訊讀取失敗：")
+                                    || message.startsWith("音訊擷取讀取錯誤")) {
+                                stopCapture(message);
+                            }
                         }
 
                         @Override
@@ -242,6 +249,10 @@ public final class AiSubtitleOverlay {
                         }
                     });
         } catch (Throwable error) {
+            try {
+                if (projection != null) projection.stop();
+            } catch (Throwable ignored) {
+            }
             AiSubtitleEngine.stop();
             resetAfterDenial("啟動失敗：" + readableMessage(error));
         }
