@@ -64,7 +64,7 @@ def patch_player_manager(path: Path) -> None:
     """Temporarily fall back to ExoPlayer if MPV fails both HW and SW decoder attempts."""
     text = path.read_text(encoding="utf-8")
     field_anchor = "    private int retry;\n"
-    field_new = "    private int retry;\n    private boolean fallbackExoForCurrentMedia;\n"
+    field_new = "    private int retry;\n    private int mpvDecodeFailuresForCurrentMedia;\n    private boolean fallbackExoForCurrentMedia;\n"
     if field_new not in text:
         text = replace_once(text, field_anchor, field_new, path)
 
@@ -72,6 +72,7 @@ def patch_player_manager(path: Path) -> None:
         PlayerSetting.putEngine(targetEngine);"""
     new_set_engine = """    public void setEngine(int targetEngine) {
         fallbackExoForCurrentMedia = false;
+        mpvDecodeFailuresForCurrentMedia = 0;
         PlayerSetting.putEngine(targetEngine);"""
     if new_set_engine not in text:
         text = replace_once(text, old_set_engine, new_set_engine, path)
@@ -80,6 +81,7 @@ def patch_player_manager(path: Path) -> None:
         reset();"""
     new_browse = """    public void browse(PlaySpec spec, long startPositionMs) {
         fallbackExoForCurrentMedia = false;
+        mpvDecodeFailuresForCurrentMedia = 0;
         reset();"""
     if new_browse not in text:
         text = replace_once(text, old_browse, new_browse, path)
@@ -88,6 +90,7 @@ def patch_player_manager(path: Path) -> None:
         this.spec = spec;"""
     new_start = """    public void start(PlaySpec spec, long timeout, long startPositionMs) {
         fallbackExoForCurrentMedia = false;
+        mpvDecodeFailuresForCurrentMedia = 0;
         this.spec = spec;"""
     if new_start not in text:
         text = replace_once(text, old_start, new_start, path)
@@ -96,6 +99,7 @@ def patch_player_manager(path: Path) -> None:
         stopParse();"""
     new_parse = """    public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, long startPositionMs) {
         fallbackExoForCurrentMedia = false;
+        mpvDecodeFailuresForCurrentMedia = 0;
         stopParse();"""
     if new_parse not in text:
         text = replace_once(text, old_parse, new_parse, path)
@@ -105,8 +109,10 @@ def patch_player_manager(path: Path) -> None:
         else retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
     }"""
     new_error = """    private void handleDecodeError(PlaybackException e) {
-        if (++retry > 1) {
-            if (engine != null && engine.getType() == PlayerEngine.Type.MPV && !fallbackExoForCurrentMedia) {
+        if (engine != null && engine.getType() == PlayerEngine.Type.MPV && !fallbackExoForCurrentMedia) {
+            // Count across Player.STATE_READY resets so repeated MPV decoder errors actually trigger fallback.
+            mpvDecodeFailuresForCurrentMedia++;
+            if (mpvDecodeFailuresForCurrentMedia >= 2) {
                 // Keep MPV as the user's preference, but use ExoPlayer for this one failing source.
                 fallbackExoForCurrentMedia = true;
                 decode = PlayerEngine.HARD;
@@ -116,11 +122,12 @@ def patch_player_manager(path: Path) -> None:
                 callback.onDecodeChanged();
                 Notify.show("MPV 解碼失敗，已暫時切換 EXO 播放此來源");
             } else {
-                callback.onError(engine.getErrorMessage(e));
+                retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
             }
-        } else {
-            retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
+            return;
         }
+        if (++retry > 1) callback.onError(engine.getErrorMessage(e));
+        else retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
     }"""
     if new_error not in text:
         text = replace_once(text, old_error, new_error, path)
