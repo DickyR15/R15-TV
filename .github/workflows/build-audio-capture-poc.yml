@@ -29,8 +29,7 @@ env:
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   NDK_VERSION: 29.0.14206865
-  NDK_VERSION_SHERPA: 28.2.13676358
-  SHERPA_ONNX_COMMIT: 9db1af1871ed78cee9357c23898e5a7d8702d21a
+  WHISPER_CPP_COMMIT: 7e26d3b0d5bced6c8217ef09710ec2f969001241
 
 jobs:
   build:
@@ -133,8 +132,7 @@ jobs:
             "platforms;android-37.0" \
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
-            "ndk;${NDK_VERSION}" \
-            "ndk;${NDK_VERSION_SHERPA}"
+            "ndk;${NDK_VERSION}"
 
       - name: Build official FongMi Media3 and MPV AAR dependencies
         working-directory: sources/media
@@ -193,64 +191,37 @@ jobs:
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
 
-      - name: Build speech runtime/model and stage local translation POC
+      - name: Build whisper.cpp Android JNI library and stage local translation POC
         shell: bash
-        env:
-          BUILD_SHARED_LIBS: "OFF"
-          SHERPA_ONNX_ENABLE_TTS: "OFF"
-          SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION: "OFF"
-          SHERPA_ONNX_ENABLE_BINARY: "OFF"
-          SHERPA_ONNX_ENABLE_C_API: "OFF"
-          SHERPA_ONNX_ENABLE_RKNN: "OFF"
-          SHERPA_ONNX_ENABLE_QNN: "OFF"
         run: |
           set -euo pipefail
-          mkdir -p sources/sherpa-onnx
-          git -C sources/sherpa-onnx init
-          git -C sources/sherpa-onnx remote add origin https://github.com/k2-fsa/sherpa-onnx.git
-          git -C sources/sherpa-onnx fetch --depth=1 origin "$SHERPA_ONNX_COMMIT"
-          git -C sources/sherpa-onnx checkout --detach FETCH_HEAD
-          test "$(git -C sources/sherpa-onnx rev-parse HEAD)" = "$SHERPA_ONNX_COMMIT"
+          export WHISPER_SOURCE_DIR="$GITHUB_WORKSPACE/sources/whisper.cpp"
+          mkdir -p sources/whisper.cpp
+          git -C sources/whisper.cpp init
+          git -C sources/whisper.cpp remote add origin https://github.com/ggml-org/whisper.cpp.git
+          git -C sources/whisper.cpp fetch --depth=1 origin "$WHISPER_CPP_COMMIT"
+          git -C sources/whisper.cpp checkout --detach FETCH_HEAD
+          test "$(git -C sources/whisper.cpp rev-parse HEAD)" = "$WHISPER_CPP_COMMIT"
 
-          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION_SHERPA}"
-          test -x "$ANDROID_NDK/ndk-build"
-          (
-            cd sources/sherpa-onnx
-            ./build-android-arm64-v8a.sh
-            ./build-android-armv7-eabi.sh
-            mvn -B -f sherpa-onnx/java-api/pom.xml clean package
-          )
-
-          mkdir -p sources/TV/app/libs
           mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a
           mkdir -p sources/TV/app/src/main/jniLibs/armeabi-v7a
-          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/target/sherpa-onnx-jvm-1.13.8.jar sources/TV/app/libs/sherpa-onnx.jar
-          install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
-          install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
-
-          model_archive="$RUNNER_TEMP/sherpa-onnx-small-zh-en.tar.bz2"
-          curl --fail --silent --show-error --location \
-            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2" \
-            --output "$model_archive"
-          tar -xjf "$model_archive" -C "$RUNNER_TEMP"
-          model_source="$RUNNER_TEMP/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16"
-          model_target="sources/TV/app/src/main/assets/ai-subtitle-model"
-          mkdir -p "$model_target"
-          install -m 644 "$model_source/encoder-epoch-99-avg-1.int8.onnx" "$model_target/"
-          install -m 644 "$model_source/decoder-epoch-99-avg-1.onnx" "$model_target/"
-          install -m 644 "$model_source/joiner-epoch-99-avg-1.int8.onnx" "$model_target/"
-          install -m 644 "$model_source/tokens.txt" "$model_target/"
-          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/SHERPA-ONNX-LICENSE.txt"
-          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/ASR-MODEL-APACHE-2.0-LICENSE.txt"
-          cat > "$model_target/ASR-MODEL-LICENSE-NOTICE.txt" <<'EOF_MODEL_LICENSE'
-          Model: sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16
-          Official sherpa-onnx model documentation says this small model was converted from:
-          https://huggingface.co/csukuangfj/k2fsa-zipformer-bilingual-zh-en-t
-          The Hugging Face model card identifies the model as Apache-2.0 licensed.
-          Model files in this APK are the small streaming conversion published by sherpa-onnx.
-          Retain this notice and the accompanying Apache-2.0 license with redistributed copies.
-          EOF_MODEL_LICENSE
-          cp "$model_source/README.md" "$model_target/ASR-MODEL-README.txt" || true
+          for abi in arm64-v8a armeabi-v7a; do
+            build_dir="$GITHUB_WORKSPACE/build/whisper-$abi"
+            cmake -S patches/whisper-native -B "$build_dir" \
+              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$abi" \
+              -DANDROID_PLATFORM=android-24 \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DGGML_OPENMP=OFF \
+              -DGGML_NATIVE=OFF \
+              -DGGML_CPU_KLEIDIAI=OFF \
+              -DWHISPER_BUILD_TESTS=OFF \
+              -DWHISPER_BUILD_EXAMPLES=OFF \
+              -DWHISPER_BUILD_SERVER=OFF
+            cmake --build "$build_dir" --config Release --parallel 2
+            install -m 755 "$build_dir/libr15whisper.so" \
+              "sources/TV/app/src/main/jniLibs/$abi/libr15whisper.so"
+          done
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
           python3 scripts/apply-audio-capture-poc.py --tv-dir sources/TV --patch-dir patches/audio-capture
@@ -259,18 +230,15 @@ jobs:
           grep -Fq 'addMatchingUid(Process.myUid())' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java
           grep -Fq "com.google.mlkit:translate:17.0.3" sources/TV/app/build.gradle
           grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
-          test -s sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
-          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
-          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
-          test -s sources/TV/app/libs/sherpa-onnx.jar
-          test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
-          test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
-          test -s "$model_target/encoder-epoch-99-avg-1.int8.onnx"
-          test -s "$model_target/decoder-epoch-99-avg-1.onnx"
-          test -s "$model_target/joiner-epoch-99-avg-1.int8.onnx"
-          echo "Public sherpa-onnx runtime, model, Android playback-capture ASR, ML Kit local translation and OpenCC Taiwan conversion staged."
-          echo "English-to-Chinese translation runs on-device after its first-use model download; real-TV audio capture and latency still need testing."
+          grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
+          test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
+          test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
+          echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
+          echo "The multilingual Whisper Base model is downloaded inside the app after the user taps the model button; model weights are not bundled in the APK."
+          echo "ML Kit English-to-Chinese translation and OpenCC S2TWP remain on-device after first-use translation model download."
+          echo "Real-TV audio capture, translation quality, RAM use and latency still require device testing."
 
       - name: Configure debug signing and local.properties
         working-directory: sources/TV
@@ -372,33 +340,33 @@ jobs:
           ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
             :app:assembleLeanbackDebug
 
-      - name: Verify playback-capture ASR and translation assets in experimental APKs
+      - name: Verify Whisper JNI and OpenCC assets in experimental APKs
         shell: bash
         run: |
           set -euo pipefail
           apk_root="sources/TV/app/build/outputs/apk"
-          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
-          test "${#apks[@]}" -eq 2
-          for apk in "${apks[@]}"; do
+          count=$(find "$apk_root" -type f -name "*.apk" | wc -l)
+          test "$count" -eq 2
+          while IFS= read -r apk; do
             entries=$(unzip -Z1 "$apk")
-            grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/tokens.txt" <<<"$entries"
+            if ! grep -Fq "lib/arm64-v8a/libr15whisper.so" <<<"$entries" \
+               && ! grep -Fq "lib/armeabi-v7a/libr15whisper.so" <<<"$entries"; then
+              echo "Missing Whisper JNI library in $apk" >&2
+              exit 1
+            fi
             grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
             if ! grep -Fq "lib/arm64-v8a/libChineseConverter.so" <<<"$entries" \
                && ! grep -Fq "lib/armeabi-v7a/libChineseConverter.so" <<<"$entries"; then
               echo "Missing OpenCC native library in $apk" >&2
               exit 1
             fi
-            if ! grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" \
-               && ! grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"; then
-              echo "Missing sherpa-onnx JNI library in $apk" >&2
+            if grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"; then
+              echo "Legacy sherpa model unexpectedly bundled in $apk" >&2
               exit 1
             fi
-            echo "ASR model and native runtime verified in $apk"
-          done
-          echo "ASR runtime, OpenCC dictionary and OpenCC native library verified. Device audio capture, translation model download, translation quality and latency still require TV testing."
+            echo "Whisper JNI and OpenCC assets verified in $apk"
+          done < <(find "$apk_root" -type f -name "*.apk" | sort)
+          echo "Whisper JNI and OpenCC assets verified. The Whisper Base model is downloaded by the user in the app; device playback capture, model loading, translation and latency still require TV testing."
 
       - name: Package APKs and verification metadata
         env:
@@ -412,6 +380,7 @@ jobs:
           BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
           BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          WHISPER_CPP_COMMIT: ${{ env.WHISPER_CPP_COMMIT }}
         run: |
           set -euo pipefail
           TV_DIR="$GITHUB_WORKSPACE/sources/TV"
@@ -445,6 +414,8 @@ jobs:
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleOverlay.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperCpp.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java \
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
             app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
@@ -454,6 +425,11 @@ jobs:
           cp "$GITHUB_WORKSPACE/third-party-licenses/ANDROID-OPENCC-MIT.txt" dist/
           cp "$GITHUB_WORKSPACE/third-party-licenses/OPENCC-APACHE-2.0.txt" dist/
           cp "$GITHUB_WORKSPACE/third-party-licenses/ML-KIT-AND-SUBTITLE-NOTICES.md" dist/
+          cp "$GITHUB_WORKSPACE/third-party-licenses/WHISPER-CPP-NOTICES.md" dist/
+          cp "$GITHUB_WORKSPACE/sources/whisper.cpp/LICENSE" dist/WHISPER-CPP-LICENSE.txt
+          cp "$GITHUB_WORKSPACE/sources/whisper.cpp/ggml/LICENSE" dist/GGML-LICENSE.txt
+          cp "$GITHUB_WORKSPACE/patches/whisper-native/CMakeLists.txt" dist/R15-TV-Whisper-CMakeLists.txt
+          cp "$GITHUB_WORKSPACE/patches/whisper-native/native-whisper.cpp" dist/R15-TV-Whisper-native.cpp
           jq -n \
             --arg mode "$BUILD_MODE" \
             --arg versionName "$VERSION_NAME" \
@@ -467,7 +443,8 @@ jobs:
             --arg mediaBranch "$MEDIA_BRANCH" \
             --arg mediaSha "$MEDIA_SHA" \
             --arg runUrl "$RUN_URL" \
-            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},workflowRun:$runUrl}' \
+            --arg whisperCommit "$WHISPER_CPP_COMMIT" \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},whisperCpp:{repository:"ggml-org/whisper.cpp",commit:$whisperCommit,model:"ggml-base.bin",downloadUrl:"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
 
           (
@@ -475,7 +452,7 @@ jobs:
             sha256sum "R15 TV-POC-"*.apk > SHA256SUMS.txt
           )
           {
-            echo "## R15 TV Audio Playback Capture POC build result"
+            echo "## R15 TV Whisper Base Subtitle POC build result"
             echo "- For easier installation, this artifact contains only the Android TV arm64 APK."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
@@ -483,8 +460,8 @@ jobs:
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- Experimental debug APK only; not a release and not ready for general use."
-            echo "- Scope: in-app playback audio capture + streaming ASR + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
-            echo "- Initial translation model download requires network; translation is intended to run locally after model download."
+            echo "- Scope: in-app playback audio capture + downloadable multilingual Whisper Base + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
+            echo "- First use downloads Whisper Base and the ML Kit translation model; inference and translation are intended to run locally afterward."
             else
               echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
             fi
@@ -493,7 +470,7 @@ jobs:
       - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v4
         with:
-          name: R15 TV Audio Capture POC-${{ github.run_number }}
+          name: R15 TV Whisper Base Subtitle POC-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
