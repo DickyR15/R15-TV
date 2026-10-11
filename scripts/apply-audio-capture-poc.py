@@ -113,6 +113,7 @@ def patch_player_manager(path: Path) -> None:
                 PlaybackSnapshot snapshot = PlaybackSnapshot.capture(player);
                 startCurrent(snapshot.positionMs());
                 snapshot.restore(player);
+                callback.onDecodeChanged();
                 Notify.show("MPV 解碼失敗，已暫時切換 EXO 播放此來源");
             } else {
                 callback.onError(engine.getErrorMessage(e));
