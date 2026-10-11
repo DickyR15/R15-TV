@@ -59,6 +59,101 @@ def patch_player_activity(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+
+def patch_player_manager(path: Path) -> None:
+    """Temporarily fall back to ExoPlayer if MPV fails both HW and SW decoder attempts."""
+    text = path.read_text(encoding="utf-8")
+    field_anchor = "    private int retry;\n"
+    field_new = "    private int retry;\n    private boolean fallbackExoForCurrentMedia;\n"
+    if field_new not in text:
+        text = replace_once(text, field_anchor, field_new, path)
+
+    old_set_engine = """    public void setEngine(int targetEngine) {
+        PlayerSetting.putEngine(targetEngine);"""
+    new_set_engine = """    public void setEngine(int targetEngine) {
+        fallbackExoForCurrentMedia = false;
+        PlayerSetting.putEngine(targetEngine);"""
+    if new_set_engine not in text:
+        text = replace_once(text, old_set_engine, new_set_engine, path)
+
+    old_browse = """    public void browse(PlaySpec spec, long startPositionMs) {
+        reset();"""
+    new_browse = """    public void browse(PlaySpec spec, long startPositionMs) {
+        fallbackExoForCurrentMedia = false;
+        reset();"""
+    if new_browse not in text:
+        text = replace_once(text, old_browse, new_browse, path)
+
+    old_start = """    public void start(PlaySpec spec, long timeout, long startPositionMs) {
+        this.spec = spec;"""
+    new_start = """    public void start(PlaySpec spec, long timeout, long startPositionMs) {
+        fallbackExoForCurrentMedia = false;
+        this.spec = spec;"""
+    if new_start not in text:
+        text = replace_once(text, old_start, new_start, path)
+
+    old_parse = """    public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, long startPositionMs) {
+        stopParse();"""
+    new_parse = """    public void parse(String key, Result result, boolean useParse, MediaMetadata metadata, long startPositionMs) {
+        fallbackExoForCurrentMedia = false;
+        stopParse();"""
+    if new_parse not in text:
+        text = replace_once(text, old_parse, new_parse, path)
+
+    old_error = """    private void handleDecodeError(PlaybackException e) {
+        if (++retry > 1) callback.onError(engine.getErrorMessage(e));
+        else retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
+    }"""
+    new_error = """    private void handleDecodeError(PlaybackException e) {
+        if (++retry > 1) {
+            if (engine != null && engine.getType() == PlayerEngine.Type.MPV && !fallbackExoForCurrentMedia) {
+                // Keep MPV as the user's preference, but use ExoPlayer for this one failing source.
+                fallbackExoForCurrentMedia = true;
+                decode = PlayerEngine.HARD;
+                PlaybackSnapshot snapshot = PlaybackSnapshot.capture(player);
+                startCurrent(snapshot.positionMs());
+                snapshot.restore(player);
+                Notify.show("MPV 解碼失敗，已暫時切換 EXO 播放此來源");
+            } else {
+                callback.onError(engine.getErrorMessage(e));
+            }
+        } else {
+            retryDecode(isHard() ? PlayerEngine.SOFT : PlayerEngine.HARD);
+        }
+    }"""
+    if new_error not in text:
+        text = replace_once(text, old_error, new_error, path)
+
+    old_ensure = """    private void ensureEngine(PlaySpec spec) {
+        if (PlayerEngineFactory.matches(engine, spec)) return;
+        PlayerEngine old = engine;
+        player.removeListener(listener);
+        engine = PlayerEngineFactory.create(decode, spec, listener);
+        setPlayer(engine.getPlayer());
+        old.release();
+    }"""
+    new_ensure = """    private void ensureEngine(PlaySpec spec) {
+        if (fallbackExoForCurrentMedia) {
+            if (engine != null && engine.getType() == PlayerEngine.Type.EXO) return;
+            PlayerEngine old = engine;
+            player.removeListener(listener);
+            engine = PlayerEngineFactory.create(decode, PlayerEngine.Type.EXO, listener);
+            setPlayer(engine.getPlayer());
+            old.release();
+            return;
+        }
+        if (PlayerEngineFactory.matches(engine, spec)) return;
+        PlayerEngine old = engine;
+        player.removeListener(listener);
+        engine = PlayerEngineFactory.create(decode, spec, listener);
+        setPlayer(engine.getPlayer());
+        old.release();
+    }"""
+    if new_ensure not in text:
+        text = replace_once(text, old_ensure, new_ensure, path)
+
+    path.write_text(text, encoding="utf-8")
+
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     permission = '<uses-permission android:name="android.permission.RECORD_AUDIO" />'
@@ -108,9 +203,10 @@ def main() -> None:
     gradle = tv / "app/build.gradle"
     proguard = tv / "app/proguard-rules.pro"
     exo_util = tv / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java"
+    player_manager = tv / "app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java"
 
     activities = [leanback_video, mobile_video, leanback_live, mobile_live]
-    required = activities + [manifest, gradle, proguard, exo_util]
+    required = activities + [manifest, gradle, proguard, exo_util, player_manager]
     for path in required:
         if not path.is_file():
             raise SystemExit(f"Missing required upstream source file: {path}")
@@ -171,6 +267,8 @@ def main() -> None:
         patch_player_activity(activity_path)
     # On adaptive HLS streams, avoid forcing the highest bitrate when it causes rebuffering.
     patch_exo_adaptive_bitrate(exo_util)
+    # If MPV still fails after HW/SW decode retry, fall back to Exo for this item only.
+    patch_player_manager(player_manager)
 
     for path in activities:
         patched = path.read_text(encoding="utf-8")
@@ -182,6 +280,9 @@ def main() -> None:
     exo_text = exo_util.read_text(encoding="utf-8")
     if "builder.setForceHighestSupportedBitrate(false);" not in exo_text:
         raise SystemExit(f"{exo_util}: adaptive HLS bitrate selection was not enabled")
+    manager_text = player_manager.read_text(encoding="utf-8")
+    if "fallbackExoForCurrentMedia" not in manager_text or "MPV 解碼失敗，已暫時切換 EXO" not in manager_text:
+        raise SystemExit(f"{player_manager}: per-source MPV-to-Exo fallback was not applied")
 
     print("Applied Whisper Base subtitle POC to VOD and LiveActivity (M3U/M3U8).")
     print("ExoPlayer adaptive HLS bitrate selection enabled to avoid forcing a high-bitrate variant.")
