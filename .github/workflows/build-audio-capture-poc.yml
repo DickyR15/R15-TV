@@ -329,6 +329,37 @@ jobs:
           print("Application ID changed to com.dicky.r15tv.poc so it can coexist with any installed R15 TV build.")
           PY
 
+      - name: Configure persistent POC debug signing key
+        working-directory: sources/TV
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp "$GITHUB_WORKSPACE/patches/test-signing/r15tv-poc-test.keystore" ./r15tv-poc-test.keystore
+          python3 - <<'PY'
+          from pathlib import Path
+
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          marker = 'storeFile file("${rootProject.projectDir}/r15tv-poc-test.keystore")'
+          if marker not in text:
+              anchor = "    signingConfigs {"
+              if text.count(anchor) != 1:
+                  raise SystemExit("Unable to find unique signingConfigs block in app/build.gradle")
+              debug_config = '''    signingConfigs {
+                  // Public, POC-only test key. Never use for production or release builds.
+                  debug {
+                      storeFile file("${rootProject.projectDir}/r15tv-poc-test.keystore")
+                      storePassword "R15TVPOC-test-2026"
+                      keyAlias "r15tv-poc-test"
+                      keyPassword "R15TVPOC-test-2026"
+                  }
+          '''
+              text = text.replace(anchor, debug_config, 1)
+              gradle_file.write_text(text, encoding="utf-8")
+          PY
+          keytool -list -keystore ./r15tv-poc-test.keystore -storepass 'R15TVPOC-test-2026' -alias r15tv-poc-test >/dev/null
+          echo "Configured persistent POC-only debug signing key for installable test updates."
+
       - name: Record exact upstream source revisions
         env:
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
