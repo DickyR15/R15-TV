@@ -12,6 +12,7 @@
 
 ## 候選分析與決策
 
+- [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
