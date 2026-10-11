@@ -27,6 +27,9 @@ env:
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
+  LIBASS_REPOSITORY: FongMi/media
+  LIBASS_SHA: 9dae39e9689ee305c83f94bd11cf3bcecb9d6171
+  LIBASS_SUBMODULE: d3f00a43ca66e42a2c34de964b1a7dbbfa9dbc8b
   NDK_VERSION: 29.0.14206865
 
 jobs:
@@ -93,6 +96,7 @@ jobs:
           test -f sources/TV/app/libs/forcetech-release.aar
           test -f sources/TV/LICENSE.md
           test -f sources/TV/chaquo/requirements.txt
+          mkdir -p sources/TV/app/src/main/java/androidx/media3/ui/danmaku
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
@@ -185,6 +189,167 @@ jobs:
           echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
+
+      - name: Add FongMi danmaku PlayerView bridge
+        run: |
+          set -euo pipefail
+          bridge="$GITHUB_WORKSPACE/sources/TV/app/src/main/java/androidx/media3/ui/danmaku/DanmakuPlayerViewController.java"
+          cat > "$bridge" <<'JAVA'
+/*
+ * Real danmaku controller facade, wires androidx.media3's danmaku rendering
+ * pipeline (DanmakuController + DanmakuView) to a PlayerView. Kept in the app
+ * source tree because neither our public ui_danmaku module nor the official
+ * media3 exposes this FongMi-specific entry point.
+ */
+package androidx.media3.ui.danmaku;
+
+import android.net.Uri;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import androidx.annotation.MainThread;
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.media3.common.Player;
+import androidx.media3.common.util.UnstableApi;
+import androidx.media3.ui.PlayerView;
+import okhttp3.OkHttpClient;
+
+/** Coordinates danmaku rendering with a {@link PlayerView}. */
+@MainThread
+@UnstableApi
+public final class DanmakuPlayerViewController {
+
+  private final DanmakuController controller;
+  @Nullable private DanmakuView danmakuView;
+  @Nullable private PlayerView playerView;
+  private boolean playerBound;
+
+  /** Creates a controller with the default loading window and retry timings. */
+  public DanmakuPlayerViewController() {
+    controller = new DanmakuController();
+  }
+
+  /** The target frame layout holding the danmaku overlay. */
+  @Nullable
+  protected FrameLayout getOverlayFrameLayout(@NonNull PlayerView playerView) {
+    return playerView.getOverlayFrameLayout();
+  }
+
+  /** Attaches the controller to {@code playerView}, adding the danmaku overlay if needed. */
+  public void bind(@NonNull PlayerView playerView) {
+    this.playerView = playerView;
+    Player player = playerView.getPlayer();
+    FrameLayout overlay = getOverlayFrameLayout(playerView);
+    if (danmakuView == null) {
+      DanmakuView view = new DanmakuView(playerView.getContext());
+      FrameLayout.LayoutParams params =
+          new FrameLayout.LayoutParams(
+              ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
+      if (overlay != null) {
+        overlay.addView(view, params);
+      } else {
+        playerView.addView(view, params);
+      }
+      danmakuView = view;
+    }
+    controller.setView(danmakuView);
+    bindPlayer(player);
+  }
+
+  private void bindPlayer(@Nullable Player player) {
+    if (playerBound) {
+      return;
+    }
+    playerBound = true;
+    controller.setPlayer(player);
+  }
+
+  /** Sets the HTTP client used for network danmaku sources, or clears it if {@code null}. */
+  public void setOkHttpClient(@Nullable OkHttpClient client) {
+    controller.setOkHttpClient(client);
+  }
+
+  /** Sets whether danmaku rendering is enabled. */
+  public void setEnabled(boolean enabled) {
+    controller.setEnabled(enabled);
+  }
+
+  /** Sets the rendering configuration. */
+  public void setConfig(@NonNull DanmakuConfig config) {
+    controller.setConfig(config);
+  }
+
+  /** Sets the danmaku source URI, or clears the current source if {@code uri} is {@code null}. */
+  public void setDataSource(@Nullable Uri uri) {
+    PlayerView view = playerView;
+    if (!playerBound && view != null) {
+      bindPlayer(view.getPlayer());
+    }
+    controller.setDataSource(uri);
+  }
+
+  /** Sends text at the current playback position. */
+  public void sendNow(@NonNull String text) {
+    controller.sendNow(text);
+  }
+
+  /** Releases loading resources and detaches the controller from the view. */
+  public void close() {
+    controller.setPlayer(null);
+    controller.setView(null);
+    controller.release();
+    playerView = null;
+    danmakuView = null;
+    playerBound = false;
+  }
+}
+JAVA
+          grep -q "class DanmakuPlayerViewController" "$bridge"
+
+      - name: Fetch matching FongMi libass source and pinned native submodule
+        run: |
+          set -euo pipefail
+          mkdir -p sources/media-ass
+          git -C sources/media-ass init
+          git -C sources/media-ass remote add origin https://github.com/${LIBASS_REPOSITORY}.git
+          git -C sources/media-ass fetch --depth=1 origin "$LIBASS_SHA"
+          git -C sources/media-ass checkout --detach FETCH_HEAD
+          actual_sha=$(git -C sources/media-ass rev-parse HEAD)
+          test "$actual_sha" = "$LIBASS_SHA"
+          git -C sources/media-ass submodule update --init --recursive libraries/exoplayer_libass/src/main/jni/libass-cmake
+          submodule_sha=$(git -C sources/media-ass ls-tree HEAD libraries/exoplayer_libass/src/main/jni/libass-cmake | awk '{print $3}')
+          test "$submodule_sha" = "$LIBASS_SUBMODULE"
+          chmod +x sources/media-ass/gradlew
+          echo "Pinned libass source: $actual_sha (submodule $submodule_sha)"
+
+      - name: Build native libass AAR and verify compatible Java API
+        working-directory: sources/media-ass
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          bash libraries/exoplayer_libass/src/main/jni/prepare_libass.sh
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :lib-exoplayer-libass:assembleRelease
+          aar=$(find . -type f -path '*/outputs/aar/lib-exoplayer-libass-release.aar' -print -quit)
+          test -n "$aar"
+          mkdir -p "$GITHUB_WORKSPACE/libass-check"
+          unzip -q "$aar" -d "$GITHUB_WORKSPACE/libass-check"
+          jar tf "$GITHUB_WORKSPACE/libass-check/classes.jar" > "$GITHUB_WORKSPACE/libass-check/classes.txt"
+          grep -Fxq "androidx/media3/exoplayer/libass/LibassPlaybackSession.class" "$GITHUB_WORKSPACE/libass-check/classes.txt"
+          for abi in arm64-v8a armeabi-v7a; do
+            test -s "$GITHUB_WORKSPACE/libass-check/jni/$abi/libmedia3ass.so"
+          done
+          cp "$aar" "$GITHUB_WORKSPACE/sources/TV/app/libs/lib-exoplayer-libass-release.aar"
+          for class in \
+            androidx/media3/exoplayer/libass/LibassConfiguration.class \
+            androidx/media3/exoplayer/libass/LibassSubtitleController.class; do
+            if ! grep -Fxq "$class" "$GITHUB_WORKSPACE/libass-check/classes.txt"; then
+              echo "::error::Pinned public libass source does not provide required TV API: $class" >&2
+              echo "::error::Stop before compiling APKs; an exact API-compatible source revision is required." >&2
+              exit 1
+            fi
+          done
+          echo "Compatible libass classes verified."
 
       - name: Configure signing and local.properties
         id: signing
@@ -285,6 +450,8 @@ jobs:
           MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
           MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
           MEDIA_SHA: ${{ env.MEDIA_SHA }}
+          LIBASS_REPOSITORY: ${{ env.LIBASS_REPOSITORY }}
+          LIBASS_SHA: ${{ env.LIBASS_SHA }}
         run: |
           mkdir -p dist
           jq -n \
@@ -296,7 +463,7 @@ jobs:
             --arg mediaSha "$MEDIA_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha},Media3:{repository:$mediaRepository,branch:$mediaBranch,sha:$mediaSha}}}' \
             > dist/SOURCE_REFS.json
-          printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
+          printf 'TV=%s\nMedia3=%s\nLibass=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" "$LIBASS_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
@@ -325,6 +492,8 @@ jobs:
           MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
           MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
           MEDIA_SHA: ${{ env.MEDIA_SHA }}
+          LIBASS_REPOSITORY: ${{ env.LIBASS_REPOSITORY }}
+          LIBASS_SHA: ${{ env.LIBASS_SHA }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
@@ -376,8 +545,10 @@ jobs:
             --arg mediaRepository "$MEDIA_REPOSITORY" \
             --arg mediaBranch "$MEDIA_BRANCH" \
             --arg mediaSha "$MEDIA_SHA" \
+            --arg libassRepository "$LIBASS_REPOSITORY" \
+            --arg libassSha "$LIBASS_SHA" \
             --arg runUrl "$RUN_URL" \
-            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},workflowRun:$runUrl}' \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},libass:{repository:$libassRepository,commit:$libassSha},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
 
           (
@@ -389,6 +560,7 @@ jobs:
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
+            echo "- libass source: [FongMi/media@$LIBASS_SHA](https://github.com/FongMi/media/commit/$LIBASS_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
@@ -417,6 +589,7 @@ jobs:
             - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
             - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
             - Media3/MPV source: https://github.com/FongMi/media/commit/${{ env.MEDIA_SHA }}
+            - libass source: https://github.com/FongMi/media/commit/${{ env.LIBASS_SHA }}
             - Build metadata and SHA-256 checksums are attached.
             - The app does not include IPTV/live-playlist sources.
           files: |
