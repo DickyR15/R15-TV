@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 已新增第一個 App 內音訊擷取＋串流語音辨識 POC，GitHub Actions 正在建置驗證；尚未證明能在目標電視捕捉 MPV 音訊，且此版本尚未加入翻譯。  
+**狀態：** 已新增 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC S2TWP 的實驗程式。第一輪（不含翻譯的早期快照）正在建置，含翻譯的最新程式碼已排入後續建置；尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -23,12 +23,12 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 
 ## 推薦實作方案
 
-### 階段 1：App 內音訊擷取＋ASR POC（正在建置驗證）
+### 階段 1：App 內音訊擷取＋ASR＋本機翻譯 POC（建置驗證中）
 
 - 透過 Android `AudioPlaybackCaptureConfiguration` 過濾 `Process.myUid()` 與 `USAGE_MEDIA`／`UNKNOWN`／`GAME`，避免擷取其他 App 的聲音。
 - 採用 `AudioRecord` 讀取 48 kHz stereo PCM16；背景執行緒只量測音量、轉送資料，語音辨識在另一條 worker thread 執行，不阻塞播放。
 - 在 `AndroidManifest.xml` 宣告 `RECORD_AUDIO` 與 `android:allowAudioPlaybackCapture="true"`；由使用者明確按下字幕測試後才要求系統 MediaProjection 同意。
-- 第一版先證明有音訊訊號並產生來源語言字幕，尚未做英翻中；成功建置也不等同於實機音訊能被擷取。
+- 最新原型會在句段結束後使用 ML Kit 本機 English → Chinese 翻譯，再以 OpenCC S2TWP 轉成臺灣繁體；首次需下載翻譯模型。此整合仍待建置與實機測試。
 - 原型程式與建置流程：[patches/audio-capture](../patches/audio-capture)、[套用腳本](../scripts/apply-audio-capture-poc.py)、[Audio Capture POC workflow](../.github/workflows/build-audio-capture-poc.yml)。
 
 ### 階段 2：必要時才做 MPV native PCM tap
@@ -73,6 +73,6 @@ MPV 官方手冊有 PCM/WAVE 檔案輸出模式，但它屬於音訊輸出 drive
 ## 本階段尚未完成的事
 
 - App 內 AudioPlaybackCapture POC 尚待 GitHub Actions 編譯結果與 TV 實機音訊檢查。
-- 本版目前只有來源語言 ASR，不含英文→中文翻譯，也尚未接 OpenCC 臺灣正體轉換。
+- 最新原型已包含英文→中文翻譯與 OpenCC 字詞轉換程式，但尚未有成功建置證據或 TV 實機驗收。
 - 尚未證實目標電視能在完整本機 ASR＋翻譯模式維持即時效能。
 - 即使 APK 成功建置，也不等於目標 TV 的 MPV 聲音會被捕捉；這必須實測。
