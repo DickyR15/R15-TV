@@ -4,15 +4,15 @@
 
 ## 建議方案
 
-### 優先路線：直接研究 R15 TV 的 MPV 音訊路徑
+### 優先路線：先測 R15 TV 內部音訊擷取，再視結果決定 native tap
 
-為了減少使用者設定步驟，不要求先安裝 Hearth。先確認 R15 TV 建置時使用的 MPV wrapper／libmpv 版本，以及是否有可用的 PCM callback；若目前沒有，評估低侵入的 native 音訊分流 tap。完整的原始碼調查與分階段做法見 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md)。
+為了減少使用者設定步驟，不要求先安裝 Hearth。已新增 App 內 AudioPlaybackCapture＋串流 ASR 原型，讓使用者在 R15 TV 播放畫面按一次測試，授權後量測是否取得 MPV 音訊並產生來源語言字幕。此方法只匹配 R15 TV 自己的 UID；若音訊為靜音或擷取器不相容，再評估 MPV/libmpv native PCM tap。
 
-Hearth 0.23.9 與 SUBRIMA 保留為可選的實機／程式碼參考。它們不取代 R15 TV，也不作為開發前置條件。跨 App 音訊擷取可能受來源播放器或系統政策限制，因此最終仍以 R15 TV 自己的 MPV 音訊路徑為目標。
+POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。目前僅是字幕辨識測試版，**還沒加入英翻中**；Hearth 與 SUBRIMA 仍是可選參考工具。
 
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
-1. **音訊來源：優先從 R15 TV 自己的 MPV 播放管線取得 PCM。** 這樣不必依賴別的 App 是否允許 Android `AudioPlaybackCapture`。先確認目前的 MPV wrapper 是否公開 PCM/audio tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 是一個調查線索，但還不能證明可以安全地分流 PCM 給 ASR。
+1. **先驗證 App 內 AudioPlaybackCapture。** 它可以限制只讀 R15 TV 自己 UID 的播放音訊，先避免 native 重編；需要 `RECORD_AUDIO` 與使用者同意的 MediaProjection 工作階段。若電視上的 MPV 聲音不可擷取，才改為研究 MPV native PCM tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 不是已證實的 PCM callback。
 2. **英文語音辨識：先評估 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)。** 它使用 MIT 授權，支援 Android，提供連續取樣的示範流程。由於 F1 國際轉播解說通常以英文為主，先測 `base.en` 量化模型；若速度與 RAM 允許，再比較 `small.en`。Android 上模型越大不代表能維持即時，必須以實際 SoC 跑測試。
 3. **離線翻譯：選可本機執行、明確支援 English → Chinese 的翻譯模型。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
 4. **臺灣繁體中文輸出：使用 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `s2twp`／臺灣正體流程做字形與常用詞轉換。** OpenCC 是離線簡繁／地區詞轉換，不是英翻中的翻譯器；必須先有翻譯模型，再做字詞轉換。
@@ -52,7 +52,7 @@ MPV decoded PCM
 
 ## 驗收清單
 
-- [ ] 在 R15 TV 的 MPV 播放 F1 測試片段時取得正確 PCM；不影響主音訊、聲道與音量。
+- [ ] 在 R15 TV 的 MPV 播放 F1 測試片段時取得非靜音音訊；不影響主音訊、聲道與音量。
 - [ ] 在英文評論與較吵雜的 team radio 中持續產生字幕。
 - [ ] 翻譯成自然、可讀的臺灣繁體中文；OpenCC 不應被誤當成翻譯。
 - [ ] F1 車手、車隊、輪胎、進站策略與賽事術語不頻繁誤認。
