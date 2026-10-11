@@ -427,7 +427,6 @@ jobs:
           cp "$GITHUB_WORKSPACE/third-party-licenses/ML-KIT-AND-SUBTITLE-NOTICES.md" dist/
           cp "$GITHUB_WORKSPACE/third-party-licenses/WHISPER-CPP-NOTICES.md" dist/
           cp "$GITHUB_WORKSPACE/sources/whisper.cpp/LICENSE" dist/WHISPER-CPP-LICENSE.txt
-          cp "$GITHUB_WORKSPACE/sources/whisper.cpp/ggml/LICENSE" dist/GGML-LICENSE.txt
           cp "$GITHUB_WORKSPACE/patches/whisper-native/CMakeLists.txt" dist/R15-TV-Whisper-CMakeLists.txt
           cp "$GITHUB_WORKSPACE/patches/whisper-native/native-whisper.cpp" dist/R15-TV-Whisper-native.cpp
           jq -n \
