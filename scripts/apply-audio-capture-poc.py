@@ -14,7 +14,7 @@ def replace_once(text: str, old: str, new: str, path: Path) -> str:
     return text.replace(old, new, 1)
 
 
-def patch_video_activity(path: Path) -> None:
+def patch_player_activity(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     import_anchor = "import com.fongmi.android.tv.App;\n"
     import_line = "import com.fongmi.android.tv.ai.subtitle.AiSubtitleOverlay;\n"
@@ -88,13 +88,16 @@ def main() -> None:
 
     tv = args.tv_dir.resolve()
     patch_dir = args.patch_dir.resolve()
-    leanback = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
-    mobile = tv / "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
+    leanback_video = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
+    mobile_video = tv / "app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java"
+    leanback_live = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"
+    mobile_live = tv / "app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"
     manifest = tv / "app/src/main/AndroidManifest.xml"
     gradle = tv / "app/build.gradle"
     proguard = tv / "app/proguard-rules.pro"
 
-    required = [leanback, mobile, manifest, gradle, proguard]
+    activities = [leanback_video, mobile_video, leanback_live, mobile_live]
+    required = activities + [manifest, gradle, proguard]
     for path in required:
         if not path.is_file():
             raise SystemExit(f"Missing required upstream source file: {path}")
@@ -149,17 +152,19 @@ def main() -> None:
         proguard.write_text(text, encoding="utf-8")
 
     patch_manifest(manifest)
-    patch_video_activity(leanback)
-    patch_video_activity(mobile)
+    # VideoActivity is the VOD/detail route. LiveActivity is the M3U/M3U8 live-TV route.
+    # Attach to both so the AI subtitle controls are available while watching live channels.
+    for activity_path in activities:
+        patch_player_activity(activity_path)
 
-    for path in (leanback, mobile):
+    for path in activities:
         patched = path.read_text(encoding="utf-8")
         if "AiSubtitleOverlay.attach(this, mBinding.player);" not in patched:
             raise SystemExit(f"{path}: attach call missing after patch")
         if "AiSubtitleOverlay.detach(mBinding.player);" not in patched:
             raise SystemExit(f"{path}: detach call missing after patch")
 
-    print("Applied MPV-compatible Whisper Base subtitle POC.")
+    print("Applied Whisper Base subtitle POC to VOD and LiveActivity (M3U/M3U8).")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
