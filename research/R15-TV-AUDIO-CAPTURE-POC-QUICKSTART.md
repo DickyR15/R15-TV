@@ -1,11 +1,11 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。第 20 輪已成功編譯並上傳 APK，但尚未在 TCL Google TV 實機驗證。建置成功不代表音訊擷取或即時字幕已在電視上通過。
+> 這是研究分支的實驗測試版，不是正式發行版。第 20 輪已成功編譯並上傳 APK，但它是在套件隔離修改前建出的舊包。若電視上已有另一個 R15 TV（套件名稱 com.dicky.r15tv），請先不要安裝第 20 輪，以免簽章衝突；先按下方說明手動重跑最新版工作流，取得獨立的「R15 TV 字幕測試」APK。建置成功也不代表音訊擷取或即時字幕已在電視上通過。
 
 ## 只需要做一次的設定
 
-1. 直接下載 [R15 TV Audio Capture POC-20 ZIP（約 140 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。若之後連結過期，開啟[第 20 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38132010463)。解壓縮後找到 `R15 TV-POC-leanback-arm64-v8a.apk`；同一包內有 `SHA256SUMS.txt`、來源 commit 和 source patch。
-2. 在 ZIP 裡先選 `R15 TV-POC-leanback-arm64-v8a.apk` 安裝到 Google TV。這是測試 APK，會以獨立套件安裝，不是正式版更新。
+1. 先開啟 [Audio Capture POC 工作流](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)，按 **Run workflow**，Branch 選 `research/realtime-subtitles-tv`，再按一次 **Run workflow**。這次是為了把 APK 改成獨立套件名稱，保留現有 R15 TV 不被覆蓋。完成後下載最新 `R15 TV Audio Capture POC-…` ZIP。舊的 [第 20 輪 ZIP](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020) 雖然編譯成功，但尚未套用套件隔離，不建議在已有 R15 TV 的電視上安裝。
+2. 在新 ZIP 裡選 `R15 TV-POC-leanback-arm64-v8a.apk` 安裝到 Google TV。最新版 workflow 會把套件名稱設為 `com.dicky.r15tv.poc`、App 名稱設為「R15 TV 字幕測試」，與現有 R15 TV 分開。這仍是測試 APK，不是正式版更新。
 3. 打開測試版，播放你原本的 M3U／M3U8 英文直播。播放引擎仍是 MPV，不需換播放器或匯入新的播放清單。
 4. 在播放畫面按 **「啟動即時字幕測試」**，依系統提示允許錄音權限與音訊擷取。這是 Android 的一次性系統授權；沒有授權時不能擷取音訊。
 5. 目前 POC 的 sherpa-onnx 中英串流辨識模型已包含在 APK 內；它是為了先驗證即時擷取與低負擔串流辨識，不是 Whisper Base。首次使用時讓 ML Kit 英文→中文翻譯模型下載完成。之後本機語音辨識、翻譯及臺灣繁體轉換預期都在裝置上執行，不需要付費 API。待音訊擷取和整體流程驗證成功後，再把 Whisper.cpp Base 多語模型做成可選下載的辨識引擎。
