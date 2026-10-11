@@ -5,6 +5,9 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
+# Keep GGML static so libr15whisper.so does not depend on extra unpackaged libggml*.so files.
+set(BUILD_SHARED_LIBS OFF CACHE BOOL "Embed GGML dependencies into the R15 Whisper library" FORCE)
+
 include(FetchContent)
 FetchContent_Declare(ggml SOURCE_DIR $ENV{WHISPER_SOURCE_DIR}/ggml)
 FetchContent_MakeAvailable(ggml)
