@@ -251,8 +251,11 @@ def patch_setting_decode_activity(path: Path) -> None:
     event_new = event_anchor + "        mBinding.playbackQuality.setOnClickListener(this::setPlaybackQuality);\n"
     if event_new not in text:
         text = replace_once(text, event_anchor, event_new, path)
-    refresh_anchor = "        mBinding.audioPassThroughText.setText(Setting.getSwitch(DecodeSetting.isAudioPassThrough()));\n"
-    refresh_new = "        mBinding.playbackQualityText.setText(PlayerSetting.getPlaybackQualityText());\n" + refresh_anchor
+    refresh_anchor = """        mBinding.dolbyVisionOutputText.setText(ResUtil.getStringArray(R.array.select_dolby_vision_output)[DecodeSetting.getDolbyVisionOutputPolicy()]);
+        mBinding.audioPassThroughText.setText(Setting.getSwitch(DecodeSetting.isAudioPassThrough()));"""
+    refresh_new = """        mBinding.dolbyVisionOutputText.setText(ResUtil.getStringArray(R.array.select_dolby_vision_output)[DecodeSetting.getDolbyVisionOutputPolicy()]);
+        mBinding.playbackQualityText.setText(PlayerSetting.getPlaybackQualityText());
+        mBinding.audioPassThroughText.setText(Setting.getSwitch(DecodeSetting.isAudioPassThrough()));"""
     if refresh_new not in text:
         text = replace_once(text, refresh_anchor, refresh_new, path)
     method_anchor = "    private void setAAC(View view) {\n"
