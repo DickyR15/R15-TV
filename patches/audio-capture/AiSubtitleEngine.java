@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.AssetManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.media3.common.C;
 
@@ -35,6 +36,7 @@ public final class AiSubtitleEngine {
     public interface Listener {
         void onStatus(String status);
         void onSubtitle(String text);
+        default void onFinalSubtitle(String text) { }
     }
 
     private static final String ASSET_MODEL_DIR = "ai-subtitle-model";
@@ -180,7 +182,7 @@ public final class AiSubtitleEngine {
 
             recognizer = new OnlineRecognizer(config);
             stream = recognizer.createStream();
-            postStatus("AI 字幕已啟動（語音辨識原型，尚未翻譯）");
+            postStatus("本機語音辨識已啟動；翻譯將在句段結束後執行");
 
             String lastText = "";
             while (running || !audioQueue.isEmpty()) {
@@ -199,11 +201,12 @@ public final class AiSubtitleEngine {
                 while (recognizer.isReady(stream)) recognizer.decode(stream);
                 OnlineRecognizerResult result = recognizer.getResult(stream);
                 String text = result == null ? "" : result.getText();
-                if (text != null && !text.trim().isEmpty() && !text.equals(lastText)) {
-                    lastText = text;
-                    postSubtitle(text.trim());
+                if (text != null && !text.trim().isEmpty() && !text.trim().equals(lastText)) {
+                    lastText = text.trim();
+                    postSubtitle(lastText);
                 }
                 if (recognizer.isEndpoint(stream)) {
+                    if (!lastText.isEmpty()) postFinalSubtitle(lastText);
                     recognizer.reset(stream);
                     lastText = "";
                 }
@@ -257,6 +260,12 @@ public final class AiSubtitleEngine {
     private void postSubtitle(String message) {
         MAIN.post(() -> {
             if (ACTIVE.get() == this && listener != null) listener.onSubtitle(message);
+        });
+    }
+
+    private void postFinalSubtitle(String message) {
+        MAIN.post(() -> {
+            if (ACTIVE.get() == this && listener != null) listener.onFinalSubtitle(message);
         });
     }
 
