@@ -106,6 +106,8 @@ def main() -> None:
         "AiSubtitleOverlay.java",
         "AiSubtitlePlaybackCapture.java",
         "AiSubtitleTranslationEngine.java",
+        "WhisperCpp.java",
+        "WhisperModelManager.java",
     ):
         source = patch_dir / name
         if not source.is_file():
@@ -157,8 +159,8 @@ def main() -> None:
         if "AiSubtitleOverlay.detach(mBinding.player);" not in patched:
             raise SystemExit(f"{path}: detach call missing after patch")
 
-    print("Applied MPV-compatible AudioPlaybackCapture POC.")
-    print("Scope: in-app playback audio capture + streaming ASR + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
+    print("Applied MPV-compatible Whisper Base subtitle POC.")
+    print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
 
