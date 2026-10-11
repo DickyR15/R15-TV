@@ -48,8 +48,8 @@
 
 ## 目前技術決策（2026-10-11）
 
-- 先直接研究 MPV 原生 PCM 音訊接入，避免使用者先安裝另一個 App；Hearth 保留為可選 POC，不作為開發前置條件。
-- 新增 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md)，記錄已檢查的 Java/JNI 路徑與下一步。
+- 第一個原型改採 App 內 AudioPlaybackCapture（僅自己的 UID）＋串流 ASR，避免使用者另裝 Hearth；需一次 RECORD_AUDIO 與 MediaProjection 授權。
+- 新增 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md) 與 [Audio Capture POC 建置工作流](../.github/workflows/build-audio-capture-poc.yml)。若 TV 不提供非靜音擷取，再回退到 native PCM tap。
 - 使用 SUBRIMA 作為語音辨識與字幕流程的程式碼參考，不要求使用者安裝測試。
 - OpenTV 只參考 TV 操作與建置流程，不作為播放器底層，因其使用 Media3/ExoPlayer，而 R15 TV 保留 MPV 是既有要求。
 - 特別驗證繁體中文輸出：Hearth 與 SUBRIMA 的目前文件／語言路由都沒有證實能在所有翻譯模式明確強制輸出繁體中文。
@@ -64,5 +64,5 @@
 - 詳細方案與驗收標準：[F1 直播免費離線字幕方案](F1-OFFLINE-LIVE-TRANSLATION.md)。
 - 第一個 ASR 基準：whisper.cpp 英文模型 `base.en`，之後視效能比較 `small.en`；需在目標電視實測。
 - 翻譯需使用本機 English→Chinese 模型；OpenCC `s2twp` 僅負責轉成臺灣正體與地區用詞，不取代翻譯模型。
-- MPV PCM tap 必須先查證：目前音訊效果 listener 是研究線索，不代表 PCM API 已可直接使用。
+- App 內音訊擷取＋ASR 原型正在建置驗證；目前仍無翻譯。`setAudioOutputListener(effect::applyAudioEffect)` 是音效通知，不可當作 PCM callback。若系統擷取失敗，native MPV PCM tap 必須先確認能安全分流。
 - 若 TV SoC 無法維持可接受延遲，改評估本機區域網路 PC 執行模型；仍不以雲端 API 為必要條件。
