@@ -2,6 +2,9 @@ name: Build R15 TV APKs
 run-name: R15 TV APK Build (manual or source update)
 
 on:
+  push:
+    branches:
+      - "research/mpv-source-build"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -21,6 +24,10 @@ concurrency:
 env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
+  MEDIA_REPOSITORY: FongMi/media
+  MEDIA_BRANCH: release-1.11.0-fongmi
+  MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
+  MEDIA3_VERSION: 1.11.0
   NDK_VERSION: 28.2.13676358
 
 jobs:
@@ -59,6 +66,22 @@ jobs:
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
 
+      - name: Fetch pinned FongMi Media3 and MPV source
+        env:
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
+        run: |
+          set -euo pipefail
+          mkdir -p sources/media
+          git -C sources/media init
+          git -C sources/media remote add origin https://github.com/FongMi/media.git
+          git -C sources/media fetch --depth=1 origin "$MEDIA_SHA"
+          git -C sources/media checkout --detach FETCH_HEAD
+          actual_sha=$(git -C sources/media rev-parse HEAD)
+          test "$actual_sha" = "$MEDIA_SHA"
+          test -f sources/media/build-logic-settings/src/main/kotlin/gradlebuild.media3-settings-logic.settings.gradle.kts
+          test -f sources/media/libraries/mpvplayer/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java
+          echo "Pinned FongMi Media3/MPV source: $actual_sha"
+
       - name: Verify checkout and required public dependencies
         env:
           EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
@@ -74,6 +97,84 @@ jobs:
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
+
+      - name: Wire pinned Media3 modules and preserve MPV engine
+        working-directory: sources/TV
+        env:
+          MEDIA3_VERSION: ${{ env.MEDIA3_VERSION }}
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import os
+          from pathlib import Path
+
+          settings = Path("settings.gradle")
+          text = settings.read_text(encoding="utf-8")
+          marker = "pluginManagement {"
+          if "includeBuild('../media/build-logic-settings')" not in text:
+              text = text.replace(marker, marker + chr(10) + "    includeBuild('../media/build-logic-settings')", 1)
+
+          plugin_block = '''plugins {
+              id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+          }'''
+          replacement = '''plugins {
+              id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
+              id "gradlebuild.media3-settings-logic"
+          }
+
+          includeMedia3.execute(file("../media"))'''
+          if 'id "gradlebuild.media3-settings-logic"' not in text:
+              if plugin_block not in text:
+                  raise SystemExit("Unable to locate settings.gradle plugins block")
+              text = text.replace(plugin_block, replacement, 1)
+          if 'includeMedia3.execute(file("../media"))' not in text:
+              raise SystemExit("Composite Media3 source was not included")
+          settings.write_text(text, encoding="utf-8")
+
+          gradle_file = Path("app/build.gradle")
+          build = gradle_file.read_text(encoding="utf-8")
+          if "androidx.media3:media3-mpvplayer:" not in build:
+              version = os.environ["MEDIA3_VERSION"]
+              modules = [
+                  "common",
+                  "container",
+                  "database",
+                  "datasource",
+                  "datasource-okhttp",
+                  "datasource-rtmp",
+                  "decoder",
+                  "decoder-av1",
+                  "decoder-ffmpeg",
+                  "decoder-mpegh",
+                  "effect",
+                  "exoplayer",
+                  "exoplayer-dash",
+                  "exoplayer-hls",
+                  "exoplayer-rtsp",
+                  "exoplayer-smoothstreaming",
+                  "extractor",
+                  "session",
+                  "ui",
+                  "ui-danmaku",
+                  "mpvplayer",
+              ]
+              dependency_block = (
+                  chr(10)
+                  + "    // R15 TV uses source-built, pinned FongMi Media3 + MPV modules."
+                  + chr(10)
+                  + chr(10).join(
+                      f'    implementation "androidx.media3:media3-{module}:{version}"'
+                      for module in modules
+                  )
+                  + chr(10)
+              )
+              anchor = "    implementation libs.media" + chr(10)
+              if anchor not in build:
+                  raise SystemExit("Unable to locate app/build.gradle media dependency anchor")
+              build = build.replace(anchor, anchor + dependency_block, 1)
+              gradle_file.write_text(build, encoding="utf-8")
+          print("Configured Media3 source composite build and kept the MPV player module enabled.")
+          PY
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -196,20 +297,26 @@ jobs:
           print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
           PY
 
-      - name: Record exact upstream source revision
+      - name: Record exact upstream source revisions
         env:
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
           SOURCE_REPOSITORY: ${{ env.SOURCE_REPOSITORY }}
           SOURCE_BRANCH: ${{ env.SOURCE_BRANCH }}
+          MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
+          MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
         run: |
           mkdir -p dist
           jq -n \
             --arg repository "$SOURCE_REPOSITORY" \
             --arg branch "$SOURCE_BRANCH" \
             --arg sha "$SOURCE_SHA" \
-            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' \
+            --arg mediaRepository "$MEDIA_REPOSITORY" \
+            --arg mediaBranch "$MEDIA_BRANCH" \
+            --arg mediaSha "$MEDIA_SHA" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha},Media3:{repository:$mediaRepository,branch:$mediaBranch,sha:$mediaSha}}}' \
             > dist/SOURCE_REFS.json
-          printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
+          printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
@@ -235,6 +342,9 @@ jobs:
         env:
           BUILD_MODE: ${{ steps.signing.outputs.mode }}
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
+          MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
@@ -283,8 +393,11 @@ jobs:
             --arg repository "FongMi/TV" \
             --arg branch "fongmi" \
             --arg sourceSha "$SOURCE_SHA" \
+            --arg mediaRepository "$MEDIA_REPOSITORY" \
+            --arg mediaBranch "$MEDIA_BRANCH" \
+            --arg mediaSha "$MEDIA_SHA" \
             --arg runUrl "$RUN_URL" \
-            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},workflowRun:$runUrl}' \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
 
           (
@@ -295,6 +408,7 @@ jobs:
             echo "## R15 TV build result"
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
+            echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
@@ -322,6 +436,7 @@ jobs:
 
             - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
             - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
+            - Media3/MPV source: https://github.com/FongMi/media/commit/${{ env.MEDIA_SHA }}
             - Build metadata and SHA-256 checksums are attached.
             - The app does not include IPTV/live-playlist sources.
           files: |
