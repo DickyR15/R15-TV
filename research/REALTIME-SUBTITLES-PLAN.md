@@ -62,7 +62,7 @@
 新需求：即時辨識 F1 英文直播解說並翻譯為臺灣繁體中文字幕，優先免費、離線、無付費 API。
 
 - 詳細方案與驗收標準：[F1 直播免費離線字幕方案](F1-OFFLINE-LIVE-TRANSLATION.md)。
-- 第一個 ASR 基準：whisper.cpp 英文模型 `base.en`，之後視效能比較 `small.en`；需在目標電視實測。
+- 第一版 ASR 基準：Whisper.cpp 多語 `ggml-base.bin`，不使用 English-only 的 `base.en`。先完成 Base，再依 Google TV 實測效能評估 Whisper Small Q5_1 量化版。
 - 翻譯需使用本機 English→Chinese 模型；OpenCC `s2twp` 僅負責轉成臺灣正體與地區用詞，不取代翻譯模型。
 - 新版 Whisper Base workflow 正在編譯固定版本的 Whisper.cpp JNI，並檢查 OpenCC 資產與獨立套件 APK；待 CI 成功後再在 TV 實機驗證音訊擷取、翻譯品質與延遲。
 - `setAudioOutputListener(effect::applyAudioEffect)` 是音效通知，不可當作 PCM callback。若 Android 擷取在 TV 的 MPV 路徑下回傳靜音，native MPV PCM tap 必須先確認能安全分流。
