@@ -112,7 +112,9 @@ def patch_player_manager(path: Path) -> None:
         if (engine != null && engine.getType() == PlayerEngine.Type.MPV && !fallbackExoForCurrentMedia) {
             // Count across Player.STATE_READY resets so repeated MPV decoder errors actually trigger fallback.
             mpvDecodeFailuresForCurrentMedia++;
-            if (mpvDecodeFailuresForCurrentMedia >= 2) {
+            boolean unsupportedFormat = e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES
+                    || e.errorCode == PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED;
+            if (mpvDecodeFailuresForCurrentMedia >= 2 || unsupportedFormat) {}
                 // Keep MPV as the user's preference, but use ExoPlayer for this one failing source.
                 fallbackExoForCurrentMedia = true;
                 decode = PlayerEngine.HARD;
@@ -162,6 +164,162 @@ def patch_player_manager(path: Path) -> None:
 
     path.write_text(text, encoding="utf-8")
 
+
+def patch_player_setting(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    constants_anchor = "    private static final int MAX_BUFFER = 10;\n"
+    constants_new = constants_anchor + """    public static final int PLAYBACK_QUALITY_ADAPTIVE = 0;
+    public static final int PLAYBACK_QUALITY_STABLE_1080P = 1;
+    public static final int PLAYBACK_QUALITY_MAXIMUM = 2;
+"""
+    if "PLAYBACK_QUALITY_STABLE_1080P" not in text:
+        text = replace_once(text, constants_anchor, constants_new, path)
+
+    method_anchor = "    public static int getScale() {\n"
+    methods = """    public static int getPlaybackQuality() {
+        return Math.clamp(Prefers.getInt("r15_playback_quality", PLAYBACK_QUALITY_STABLE_1080P),
+                PLAYBACK_QUALITY_ADAPTIVE, PLAYBACK_QUALITY_MAXIMUM);
+    }
+
+    public static void putPlaybackQuality(int mode) {
+        Prefers.put("r15_playback_quality", Math.clamp(mode,
+                PLAYBACK_QUALITY_ADAPTIVE, PLAYBACK_QUALITY_MAXIMUM));
+    }
+
+    public static String getPlaybackQualityText() {
+        return switch (getPlaybackQuality()) {
+            case PLAYBACK_QUALITY_ADAPTIVE -> "自動適應（依網路狀況）";
+            case PLAYBACK_QUALITY_MAXIMUM -> "最高畫質（可能卡頓）";
+            default -> "穩定優先（最高 1080p）";
+        };
+    }
+
+"""
+    if "public static int getPlaybackQuality()" not in text:
+        text = replace_once(text, method_anchor, methods + method_anchor, path)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_setting_activity(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    listener_anchor = "        mBinding.player.setOnClickListener(this::onPlayer);\n"
+    listener_new = listener_anchor + "        mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);\n"
+    if listener_new not in text:
+        text = replace_once(text, listener_anchor, listener_new, path)
+    method_anchor = "    private void onDanmaku(View view) {\n"
+    method = """    private void onAiSubtitle(View view) {
+        AiSubtitleSettingsActivity.start(this);
+    }
+
+"""
+    if "private void onAiSubtitle(View view)" not in text:
+        text = replace_once(text, method_anchor, method + method_anchor, path)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_setting_activity_layout(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    anchor = '''        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/danmaku"'''
+    row = '''        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/aiSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:background="@drawable/selector_item"
+            android:contentDescription="AI 字幕與語音辨識設定"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="AI 字幕／語音設定"
+                android:textColor="@color/white"
+                android:textSize="18sp" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+'''
+    if 'android:id="@+id/aiSubtitle"' not in text:
+        text = replace_once(text, anchor, row + anchor, path)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_setting_decode_activity(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    event_anchor = "        mBinding.dolbyVisionOutput.setOnClickListener(this::setDolbyVisionOutput);\n"
+    event_new = event_anchor + "        mBinding.playbackQuality.setOnClickListener(this::setPlaybackQuality);\n"
+    if event_new not in text:
+        text = replace_once(text, event_anchor, event_new, path)
+    refresh_anchor = "        mBinding.audioPassThroughText.setText(Setting.getSwitch(DecodeSetting.isAudioPassThrough()));\n"
+    refresh_new = "        mBinding.playbackQualityText.setText(PlayerSetting.getPlaybackQualityText());\n" + refresh_anchor
+    if refresh_new not in text:
+        text = replace_once(text, refresh_anchor, refresh_new, path)
+    method_anchor = "    private void setAAC(View view) {\n"
+    method = """    private void setPlaybackQuality(View view) {
+        int next = (PlayerSetting.getPlaybackQuality() + 1)
+                % (PlayerSetting.PLAYBACK_QUALITY_MAXIMUM + 1);
+        PlayerSetting.putPlaybackQuality(next);
+        mBinding.playbackQualityText.setText(PlayerSetting.getPlaybackQualityText());
+    }
+
+"""
+    if "private void setPlaybackQuality(View view)" not in text:
+        text = replace_once(text, method_anchor, method + method_anchor, path)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_setting_decode_layout(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    anchor = '''        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/aac"'''
+    row = '''        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/playbackQuality"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="16dp"
+            android:background="@drawable/selector_item"
+            android:contentDescription="切換 EXO/HLS 畫質策略"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:orientation="horizontal">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginEnd="16dp"
+                android:text="EXO／HLS 畫質策略"
+                android:textColor="@color/white"
+                android:textSize="18sp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/playbackQualityText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="end"
+                android:textColor="@color/white"
+                android:textSize="18sp"
+                tools:text="穩定優先（最高 1080p）" />
+
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+'''
+    if 'android:id="@+id/playbackQuality"' not in text:
+        text = replace_once(text, anchor, row + anchor, path)
+    path.write_text(text, encoding="utf-8")
+
+
+def patch_mpv_engine(path: Path) -> None:
+    text = path.read_text(encoding="utf-8")
+    old = "case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED -> ErrorAction.DECODE;"
+    new = "case PlaybackException.ERROR_CODE_DECODER_INIT_FAILED, PlaybackException.ERROR_CODE_DECODER_QUERY_FAILED, PlaybackException.ERROR_CODE_DECODING_FAILED, PlaybackException.ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES, PlaybackException.ERROR_CODE_DECODING_FORMAT_UNSUPPORTED -> ErrorAction.DECODE;"
+    if new not in text:
+        text = replace_once(text, old, new, path)
+    path.write_text(text, encoding="utf-8")
+
+
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     permission = '<uses-permission android:name="android.permission.RECORD_AUDIO" />'
@@ -180,20 +338,34 @@ def patch_manifest(path: Path) -> None:
             'android:allowBackup="false"\n        ' + attr,
             path,
         )
+    crash_anchor = '        <activity\n            android:name=".ui.activity.CrashActivity"'
+    activity = '        <activity android:name=".ui.activity.AiSubtitleSettingsActivity" android:exported="false" />'
+    if activity not in text:
+        text = replace_once(text, crash_anchor, activity + '\n\n' + crash_anchor, path)
     path.write_text(text, encoding="utf-8")
-
-
 
 
 def patch_exo_adaptive_bitrate(path: Path) -> None:
-    """Let ExoPlayer adapt HLS quality to measured throughput instead of forcing 4K."""
+    """Apply stable-by-default, adaptive, or maximum quality on EXO/HLS."""
     text = path.read_text(encoding="utf-8")
-    old = "builder.setForceHighestSupportedBitrate(true);"
-    new = "builder.setForceHighestSupportedBitrate(false);"
-    if new in text:
+    if "switch (PlayerSetting.getPlaybackQuality())" in text:
         return
+    old = "builder.setForceHighestSupportedBitrate(true);"
+    new = """switch (PlayerSetting.getPlaybackQuality()) {
+            case PlayerSetting.PLAYBACK_QUALITY_STABLE_1080P:
+                builder.setMaxVideoSize(1920, 1080);
+                builder.setForceHighestSupportedBitrate(false);
+                break;
+            case PlayerSetting.PLAYBACK_QUALITY_MAXIMUM:
+                builder.setForceHighestSupportedBitrate(true);
+                break;
+            default:
+                builder.setForceHighestSupportedBitrate(false);
+                break;
+        }"""
     text = replace_once(text, old, new, path)
     path.write_text(text, encoding="utf-8")
+
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -212,15 +384,29 @@ def main() -> None:
     proguard = tv / "app/proguard-rules.pro"
     exo_util = tv / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java"
     player_manager = tv / "app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java"
+    mpv_engine = tv / "app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java"
+    player_setting = tv / "app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java"
+    setting_activity = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java"
+    setting_activity_layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
+    setting_decode_activity = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingDecodeActivity.java"
+    setting_decode_layout = tv / "app/src/leanback/res/layout/activity_setting_decode.xml"
 
     activities = [leanback_video, mobile_video, leanback_live, mobile_live]
-    required = activities + [manifest, gradle, proguard, exo_util, player_manager]
+    required = activities + [manifest, gradle, proguard, exo_util, player_manager, mpv_engine,
+                             player_setting, setting_activity, setting_activity_layout,
+                             setting_decode_activity, setting_decode_layout]
     for path in required:
         if not path.is_file():
             raise SystemExit(f"Missing required upstream source file: {path}")
 
     java_target = tv / "app/src/main/java/com/fongmi/android/tv/ai/subtitle"
     java_target.mkdir(parents=True, exist_ok=True)
+    settings_activity_target = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java"
+    settings_activity_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(patch_dir / "AiSubtitleSettingsActivity.java", settings_activity_target)
+    settings_layout_target = tv / "app/src/leanback/res/layout/activity_ai_subtitle_settings.xml"
+    settings_layout_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(patch_dir / "activity_ai_subtitle_settings.xml", settings_layout_target)
     for name in (
         "AiSubtitleEngine.java",
         "AiSubtitleOverlay.java",
@@ -269,13 +455,16 @@ def main() -> None:
         proguard.write_text(text, encoding="utf-8")
 
     patch_manifest(manifest)
-    # VideoActivity is the VOD/detail route. LiveActivity is the M3U/M3U8 live-TV route.
-    # Attach to both so the AI subtitle controls are available while watching live channels.
+    patch_player_setting(player_setting)
+    patch_setting_activity(setting_activity)
+    patch_setting_activity_layout(setting_activity_layout)
+    patch_setting_decode_activity(setting_decode_activity)
+    patch_setting_decode_layout(setting_decode_layout)
+    # VideoActivity is VOD; LiveActivity is the M3U/M3U8 live-TV route.
     for activity_path in activities:
         patch_player_activity(activity_path)
-    # On adaptive HLS streams, avoid forcing the highest bitrate when it causes rebuffering.
     patch_exo_adaptive_bitrate(exo_util)
-    # If MPV still fails after HW/SW decode retry, fall back to Exo for this item only.
+    patch_mpv_engine(mpv_engine)
     patch_player_manager(player_manager)
 
     for path in activities:
@@ -286,14 +475,21 @@ def main() -> None:
             raise SystemExit(f"{path}: detach call missing after patch")
 
     exo_text = exo_util.read_text(encoding="utf-8")
-    if "builder.setForceHighestSupportedBitrate(false);" not in exo_text:
-        raise SystemExit(f"{exo_util}: adaptive HLS bitrate selection was not enabled")
+    if "PLAYBACK_QUALITY_STABLE_1080P" not in exo_text or "setMaxVideoSize(1920, 1080)" not in exo_text:
+        raise SystemExit(f"{exo_util}: stable 1080p quality profile was not applied")
     manager_text = player_manager.read_text(encoding="utf-8")
     if "fallbackExoForCurrentMedia" not in manager_text or "MPV 解碼失敗，已暫時切換 EXO" not in manager_text:
         raise SystemExit(f"{player_manager}: per-source MPV-to-Exo fallback was not applied")
+    if "ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES" not in mpv_engine.read_text(encoding="utf-8"):
+        raise SystemExit(f"{mpv_engine}: unsupported 4K format errors were not handled")
+    if "mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);" not in setting_activity.read_text(encoding="utf-8"):
+        raise SystemExit(f"{setting_activity}: AI subtitle entry was not applied")
+    if "PLAYBACK_QUALITY_STABLE_1080P" not in player_setting.read_text(encoding="utf-8"):
+        raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
-    print("Applied Whisper Base subtitle POC to VOD and LiveActivity (M3U/M3U8).")
-    print("ExoPlayer adaptive HLS bitrate selection enabled to avoid forcing a high-bitrate variant.")
+    print("Applied Whisper Base subtitle POC with main Settings entry and visible playback shortcut.")
+    print("EXO/HLS quality defaults to stable 1080p, with adaptive and maximum options.")
+    print("MPV unsupported 4K formats can fall back to EXO.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
