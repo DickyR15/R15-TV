@@ -24,12 +24,11 @@ concurrency:
 env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
+  # Pin to the last TV revision before the public Media3/libass API mismatch.
+  SOURCE_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
-  LIBASS_REPOSITORY: FongMi/media
-  LIBASS_SHA: 9dae39e9689ee305c83f94bd11cf3bcecb9d6171
-  LIBASS_SUBMODULE: d3f00a43ca66e42a2c34de964b1a7dbbfa9dbc8b
   NDK_VERSION: 29.0.14206865
 
 jobs:
@@ -43,21 +42,23 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Resolve public source revision (no source token)
+      - name: Resolve pinned public source revision
         id: sources
+        env:
+          PINNED_SOURCE_SHA: ${{ env.SOURCE_SHA }}
         run: |
           set -euo pipefail
-          mkdir -p build
-          sha=$(git ls-remote "https://github.com/${SOURCE_REPOSITORY}.git" "refs/heads/${SOURCE_BRANCH}" | awk 'NR == 1 {print $1}')
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Unable to resolve public source ${SOURCE_REPOSITORY}:${SOURCE_BRANCH}" >&2
+          if [[ ! "$PINNED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pinned public source SHA: $PINNED_SOURCE_SHA" >&2
             exit 1
           fi
-          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$sha" \
+          mkdir -p build
+          echo "tv_sha=$PINNED_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$PINNED_SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
-          echo "tv_sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "Resolved public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${sha}"
-
+          echo "Pinned public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${PINNED_SOURCE_SHA}"
+          echo "Reason: the latest TV branch requires libass APIs not published in the matching public Media3 source."
+          
       - name: Fetch public FongMi/TV source without credentials
         env:
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
@@ -189,69 +190,6 @@ jobs:
           echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
-
-      - name: Add FongMi danmaku PlayerView bridge
-        run: |
-          set -euo pipefail
-          bridge="$GITHUB_WORKSPACE/sources/TV/app/src/main/java/androidx/media3/ui/danmaku/DanmakuPlayerViewController.java"
-          python3 - "$bridge" <<'PY'
-          from pathlib import Path
-          import urllib.request
-          url = "https://raw.githubusercontent.com/oinsilos/myfp/78268fa2ef9c120b884e67ffdc8707b9e87702e0/TV-fongmi/app/src/main/java/androidx/media3/ui/danmaku/DanmakuPlayerViewController.java"
-          # Use pinned public source for this small FongMi-specific bridge.
-          import subprocess
-          source = subprocess.check_output(["git", "show", "FETCH_HEAD:app/src/main/java/androidx/media3/ui/danmaku/DanmakuPlayerViewController.java"], stderr=subprocess.DEVNULL) if False else None
-          text = urllib.request.urlopen(url, timeout=30).read().decode("utf-8")
-          if "class DanmakuPlayerViewController" not in text:
-              raise SystemExit("Pinned danmaku bridge source did not contain the expected class")
-          Path(__import__("sys").argv[1]).write_text(text, encoding="utf-8")
-          PY
-          grep -q "class DanmakuPlayerViewController" "$bridge"
-
-      - name: Fetch matching FongMi libass source and pinned native submodule
-        run: |
-          set -euo pipefail
-          mkdir -p sources/media-ass
-          git -C sources/media-ass init
-          git -C sources/media-ass remote add origin https://github.com/${LIBASS_REPOSITORY}.git
-          git -C sources/media-ass fetch --depth=1 origin "$LIBASS_SHA"
-          git -C sources/media-ass checkout --detach FETCH_HEAD
-          actual_sha=$(git -C sources/media-ass rev-parse HEAD)
-          test "$actual_sha" = "$LIBASS_SHA"
-          git -C sources/media-ass submodule update --init --recursive libraries/exoplayer_libass/src/main/jni/libass-cmake
-          submodule_sha=$(git -C sources/media-ass ls-tree HEAD libraries/exoplayer_libass/src/main/jni/libass-cmake | awk '{print $3}')
-          test "$submodule_sha" = "$LIBASS_SUBMODULE"
-          chmod +x sources/media-ass/gradlew
-          echo "Pinned libass source: $actual_sha (submodule $submodule_sha)"
-
-      - name: Build native libass AAR and verify compatible Java API
-        working-directory: sources/media-ass
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
-        run: |
-          set -euo pipefail
-          bash libraries/exoplayer_libass/src/main/jni/prepare_libass.sh
-          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :lib-exoplayer-libass:assembleRelease
-          aar=$(find . -type f -path '*/outputs/aar/lib-exoplayer-libass-release.aar' -print -quit)
-          test -n "$aar"
-          mkdir -p "$GITHUB_WORKSPACE/libass-check"
-          unzip -q "$aar" -d "$GITHUB_WORKSPACE/libass-check"
-          jar tf "$GITHUB_WORKSPACE/libass-check/classes.jar" > "$GITHUB_WORKSPACE/libass-check/classes.txt"
-          grep -Fxq "androidx/media3/exoplayer/libass/LibassPlaybackSession.class" "$GITHUB_WORKSPACE/libass-check/classes.txt"
-          for abi in arm64-v8a armeabi-v7a; do
-            test -s "$GITHUB_WORKSPACE/libass-check/jni/$abi/libmedia3ass.so"
-          done
-          cp "$aar" "$GITHUB_WORKSPACE/sources/TV/app/libs/lib-exoplayer-libass-release.aar"
-          for class in \
-            androidx/media3/exoplayer/libass/LibassConfiguration.class \
-            androidx/media3/exoplayer/libass/LibassSubtitleController.class; do
-            if ! grep -Fxq "$class" "$GITHUB_WORKSPACE/libass-check/classes.txt"; then
-              echo "::error::Pinned public libass source does not provide required TV API: $class" >&2
-              echo "::error::Stop before compiling APKs; an exact API-compatible source revision is required." >&2
-              exit 1
-            fi
-          done
-          echo "Compatible libass classes verified."
 
       - name: Configure signing and local.properties
         id: signing
