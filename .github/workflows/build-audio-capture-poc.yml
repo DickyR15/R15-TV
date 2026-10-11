@@ -247,6 +247,10 @@ jobs:
           grep -Fq 'android:allowAudioPlaybackCapture="true"' sources/TV/app/src/main/AndroidManifest.xml
           grep -Fq 'android.permission.RECORD_AUDIO' sources/TV/app/src/main/AndroidManifest.xml
           grep -Fq 'addMatchingUid(Process.myUid())' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java
+          grep -Fq "com.google.mlkit:translate:17.0.3" sources/TV/app/build.gradle
+          grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
+          test -s sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
+          grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
           test -s sources/TV/app/libs/sherpa-onnx.jar
@@ -359,7 +363,7 @@ jobs:
             :app:assembleLeanbackDebug \
             :app:assembleMobileDebug
 
-      - name: Verify playback-capture ASR assets in experimental APKs
+      - name: Verify playback-capture ASR and translation assets in experimental APKs
         shell: bash
         run: |
           set -euo pipefail
@@ -372,6 +376,12 @@ jobs:
             grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
             grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
             grep -Fq "assets/ai-subtitle-model/tokens.txt" <<<"$entries"
+            grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
+            if ! grep -Fq "lib/arm64-v8a/libChineseConverter.so" <<<"$entries" \
+               && ! grep -Fq "lib/armeabi-v7a/libChineseConverter.so" <<<"$entries"; then
+              echo "Missing OpenCC native library in $apk" >&2
+              exit 1
+            fi
             if ! grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" \
                && ! grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"; then
               echo "Missing sherpa-onnx JNI library in $apk" >&2
@@ -379,7 +389,7 @@ jobs:
             fi
             echo "ASR model and native runtime verified in $apk"
           done
-          echo "Build-only validation complete; device audio capture, recognition quality and latency still require TV testing."
+          echo "ASR runtime, OpenCC dictionary and OpenCC native library verified. Device audio capture, translation model download, translation quality and latency still require TV testing."
 
       - name: Package APKs and verification metadata
         env:
@@ -462,7 +472,7 @@ jobs:
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- Experimental debug APK only; not a release and not ready for general use."
-            echo "- Scope: in-app playback audio capture + streaming ASR. English-to-Chinese translation is not included yet."
+            echo "- Scope: in-app playback audio capture + streaming ASR + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
             else
               echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
             fi
