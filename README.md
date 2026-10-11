@@ -10,6 +10,13 @@
 - 方向：優先驗證 Android TV 實體裝置、播放器內部音訊擷取、低延遲字幕與繁體中文翻譯。
 - 舊有 FongMi/TV 建置方向暫不作為新研究主線；舊分支與 Git 歷史保留供追溯。
 
+## 候選分析與決策
+
+- [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
+- [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
+
+**目前首選 Hearth 作為電視音訊擷取 POC；R15 TV 的正式播放器整合仍需保留 MPV，尚未開始移植。**
+
 ## 優先研究的開源專案
 
 - [Hearth](https://github.com/Sal7one/Hearth)：研究 Android 即時字幕／翻譯及 TV 介面。
