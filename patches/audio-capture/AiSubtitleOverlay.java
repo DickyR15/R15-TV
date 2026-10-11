@@ -24,6 +24,8 @@ import androidx.core.content.ContextCompat;
 import androidx.fragment.app.FragmentActivity;
 import androidx.media3.ui.PlayerView;
 
+import com.fongmi.android.tv.ui.activity.AiSubtitleSettingsActivity;
+
 import java.util.Collections;
 import java.util.Map;
 import java.util.WeakHashMap;
@@ -315,14 +317,8 @@ public final class AiSubtitleOverlay {
             status.setText("字幕測試：找不到播放器的疊加顯示區");
             return;
         }
-        panel.setVisibility(android.view.View.GONE);
-        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
-        panelParams.setMargins(dp(24), 0, dp(24), dp(66));
-        overlay.addView(panel, panelParams);
-
+        // Keep the playback overlay focused on captions only. Settings are accessible
+        // through the main Settings screen with the TV remote, not a corner button.
         FrameLayout.LayoutParams captionParams = new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
@@ -330,13 +326,12 @@ public final class AiSubtitleOverlay {
         captionParams.setMargins(dp(24), 0, dp(24), dp(28));
         overlay.addView(caption, captionParams);
 
-        FrameLayout.LayoutParams entryParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.END);
-        entryParams.setMargins(0, dp(24), dp(24), 0);
-        overlay.addView(entryButton, entryParams);
-        entryButton.bringToFront();
+        // If auto-start was enabled in Settings, request capture only after the
+        // playback view is attached. Android will show its permission prompts as needed.
+        playerView.post(() -> {
+            if (activity.isFinishing() || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
+            if (modelManager.isDownloaded() && !modelManager.isDownloading()) toggleCapture();
+        });
     }
 
     private void showSettingsPanel() {
@@ -467,8 +462,6 @@ public final class AiSubtitleOverlay {
                         }
                     });
             caption.setVisibility(android.view.View.VISIBLE);
-            entryButton.setText("AI 字幕：開啟");
-            hideSettingsPanel();
         } catch (Throwable error) {
             try {
                 if (projection != null) projection.stop();
@@ -484,8 +477,8 @@ public final class AiSubtitleOverlay {
         closeTranslationEngine();
         AiSubtitleEngine.stop();
         toggle.setText("啟動即時字幕測試");
-        entryButton.setText("AI 字幕／語音設定");
-        caption.setVisibility(android.view.View.GONE);
+        caption.setText(message);
+        caption.setVisibility(android.view.View.VISIBLE);
         status.setText(message);
         updateModelControls();
     }
@@ -499,7 +492,6 @@ public final class AiSubtitleOverlay {
         AiSubtitleEngine.stop();
         closeTranslationEngine();
         toggle.setText("啟動即時字幕測試");
-        entryButton.setText("AI 字幕／語音設定");
         status.setText(message);
         caption.setText("");
         caption.setVisibility(android.view.View.GONE);

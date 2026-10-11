@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Intent;
+import android.content.Context;
 import android.os.Bundle;
 import android.view.View;
 
@@ -16,8 +17,22 @@ import java.io.File;
 import java.util.Locale;
 
 public final class AiSubtitleSettingsActivity extends BaseActivity {
+    private static final String PREFS_NAME = "r15_ai_subtitle_settings";
+    private static final String KEY_AUTO_START = "auto_start";
     private ActivityAiSubtitleSettingsBinding mBinding;
     private WhisperModelManager modelManager;
+
+    public static boolean isAutoStartEnabled(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getBoolean(KEY_AUTO_START, false);
+    }
+
+    public static void setAutoStartEnabled(Context context, boolean enabled) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(KEY_AUTO_START, enabled)
+                .apply();
+    }
 
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, AiSubtitleSettingsActivity.class));
@@ -32,7 +47,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     protected void initView(Bundle savedInstanceState) {
         modelManager = WhisperModelManager.getInstance(this);
         refreshModelState(null);
-        if (modelManager.isDownloaded()) mBinding.deleteModelButton.requestFocus();
+        if (modelManager.isDownloaded()) mBinding.autoStartButton.requestFocus();
         else mBinding.modelButton.requestFocus();
     }
 
@@ -40,6 +55,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     protected void initEvent() {
         mBinding.modelButton.setOnClickListener(this::downloadModel);
         mBinding.deleteModelButton.setOnClickListener(this::confirmDeleteModel);
+        mBinding.autoStartButton.setOnClickListener(this::toggleAutoStart);
     }
 
     private void downloadModel(View view) {
@@ -83,6 +99,17 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         });
     }
 
+    private void toggleAutoStart(View view) {
+        if (!modelManager.isDownloaded() || modelManager.isDownloading()) {
+            mBinding.modelStatus.setText("請先下載 Whisper Base 多語模型，才能啟用播放時自動字幕。");
+            mBinding.modelButton.requestFocus();
+            return;
+        }
+        setAutoStartEnabled(this, !isAutoStartEnabled(this));
+        refreshAutoStartControl();
+        mBinding.autoStartButton.requestFocus();
+    }
+
     private void confirmDeleteModel(View view) {
         if (modelManager.isDownloading()) return;
         new AlertDialog.Builder(this)
@@ -97,6 +124,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                             public void onDownloaded(File file) { }
                             @Override
                             public void onDeleted() {
+                                setAutoStartEnabled(AiSubtitleSettingsActivity.this, false);
                                 refreshModelState("Whisper Base 模型已刪除。");
                             }
                             @Override
@@ -129,6 +157,27 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                     : "下載 Whisper Base 多語模型（約 148 MB）");
             mBinding.deleteModelButton.setVisibility(View.GONE);
             if (!downloading) mBinding.modelProgress.setVisibility(View.GONE);
+        }
+        refreshAutoStartControl();
+    }
+
+    private void refreshAutoStartControl() {
+        if (mBinding == null || isFinishing()) return;
+        boolean ready = modelManager != null && modelManager.isDownloaded();
+        boolean downloading = modelManager != null && modelManager.isDownloading();
+        boolean enabled = isAutoStartEnabled(this);
+        mBinding.autoStartButton.setEnabled(ready && !downloading);
+        if (!ready || downloading) {
+            mBinding.autoStartButton.setText("請先下載 Whisper Base，再設定自動字幕");
+            mBinding.autoStartStatus.setText("尚未準備好模型；尚未啟用播放時自動字幕。");
+        } else if (enabled) {
+            mBinding.autoStartButton.setText("播放時自動啟動即時字幕：已開啟（按此關閉）");
+            mBinding.autoStartStatus.setText(
+                    "已開啟。下次進入影片／直播播放頁時會自動啟動字幕，系統可能要求授權音訊擷取。");
+        } else {
+            mBinding.autoStartButton.setText("播放時自動啟動即時字幕：關閉（按此開啟）");
+            mBinding.autoStartStatus.setText(
+                    "關閉時不會自動擷取音訊。開啟後，進入影片／直播播放頁時才會啟動字幕。");
         }
     }
 }

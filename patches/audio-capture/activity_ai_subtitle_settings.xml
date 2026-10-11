@@ -25,7 +25,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="18dp"
-            android:text="先在這裡下載語音辨識模型。播放 M3U／M3U8 或影片時，再按播放畫面右上角的「AI 字幕／語音設定」並啟動即時字幕。"
+            android:text="在這裡下載 Whisper 模型並設定播放時自動啟動字幕。啟用後，進入影片／直播播放頁時會自動啟動；系統可能要求授權音訊擷取，不需要操作播放畫面角落按鈕。"
             android:textColor="@color/white"
             android:textSize="18sp" />
 
@@ -86,10 +86,30 @@
             android:visibility="gone" />
 
         <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/autoStartStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="10dp"
+            android:text="播放時自動啟動狀態"
+            android:textColor="@color/white"
+            android:textSize="16sp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/autoStartButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="18dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="播放時自動啟動即時字幕：關閉（按此開啟）"
+            android:textAllCaps="false" />
+
+        <com.google.android.material.textview.MaterialTextView
             android:id="@+id/helpText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="即時字幕只會在播放時啟動，不會在背景持續聽取。啟用時需允許音訊擷取；辨識、翻譯與繁體轉換在本機執行，不需要付費 API。"
+            android:text="自動啟動只在開啟影片／直播播放頁時生效，不會在背景持續聽取。啟用時需允許音訊擷取；辨識、翻譯與繁體轉換在本機執行，不需要付費 API。"
             android:textColor="@color/white"
             android:textSize="16sp"
             tools:ignore="HardcodedText" />
