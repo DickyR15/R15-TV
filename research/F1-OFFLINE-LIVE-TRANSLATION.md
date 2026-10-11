@@ -6,14 +6,14 @@
 
 ### 優先路線：先測 R15 TV 內部音訊擷取，再視結果決定 native tap
 
-為了減少使用者設定步驟，不要求先安裝 Hearth。已新增 App 內 AudioPlaybackCapture＋串流 ASR 原型，讓使用者在 R15 TV 播放畫面按一次測試，授權後量測是否取得 MPV 音訊並產生來源語言字幕。此方法只匹配 R15 TV 自己的 UID；若音訊為靜音或擷取器不相容，再評估 MPV/libmpv native PCM tap。
+為了減少使用者設定步驟，不要求先安裝 Hearth。已新增 App 內 AudioPlaybackCapture＋Whisper Base 多語 ASR 原型，讓使用者在 R15 TV 播放畫面按一次測試，授權後量測是否取得 MPV 音訊並產生來源語言字幕。此方法只匹配 R15 TV 自己的 UID；若音訊為靜音或擷取器不相容，再評估 MPV/libmpv native PCM tap。
 
-POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[本機翻譯引擎](../patches/audio-capture/AiSubtitleTranslationEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。原型程式已包含 ML Kit 本機英翻中和 OpenCC S2TWP；[GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 已成功建置 APK 並通過模型／OpenCC 資產檢查，尚待 TV 實機驗證音訊擷取與延遲。可下載 [R15 TV Audio Capture POC-20](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。Hearth 與 SUBRIMA 仍是可選參考工具。
+POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[Whisper ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[Whisper.cpp JNI](../patches/audio-capture/WhisperCpp.java)、[模型下載器](../patches/audio-capture/WhisperModelManager.java)、[本機翻譯引擎](../patches/audio-capture/AiSubtitleTranslationEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。新版工作流正在驗證 Whisper.cpp native 編譯與 APK 封裝；仍待 TV 實機驗證音訊擷取與延遲。Hearth 與 SUBRIMA 仍是可選參考工具。
 
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
 1. **先驗證 App 內 AudioPlaybackCapture。** 它可以限制只讀 R15 TV 自己 UID 的播放音訊，先避免 native 重編；需要 `RECORD_AUDIO` 與使用者同意的 MediaProjection 工作階段。若電視上的 MPV 聲音不可擷取，才改為研究 MPV native PCM tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 不是已證實的 PCM callback。
-2. **第一輪 ASR POC：使用 sherpa-onnx 中英串流 small 模型。** 官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB，較適合先驗證 Android TV 音訊擷取與裝置資源負擔。模型支援中英雙語，但不代表 F1 英文專有名詞一定準確；音訊擷取成功後，再依 [Whisper Base 多語模型下載與整合計畫](WHISPER-BASE-MULTILINGUAL-PLAN.md)加入可選下載的 `ggml-base.bin`，並保留快速串流模型作為比較／備援。準確率及效能均需實機測試。
+2. **第一版 ASR：Whisper Base 多語 `ggml-base.bin`。** 使用者在字幕面板自行下載模型；APK 不包含約 148 MB 模型權重。Whisper 先辨識英文 F1 解說，再由 ML Kit 本機英翻中，最後使用 OpenCC `s2twp`。Small 量化版（例如 `ggml-small-q5_1.bin`）只在 Base 的電視實測顯示效能或準確率不足後再比較，不提前加入第一版。
 3. **離線翻譯：第一版使用可在裝置端執行的 ML Kit Translation SDK。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
 4. **臺灣繁體中文輸出：使用 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `s2twp`／臺灣正體流程做字形與常用詞轉換。** OpenCC 是離線簡繁／地區詞轉換，不是英翻中的翻譯器；必須先有翻譯模型，再做字詞轉換。
 5. **F1 詞庫：** 為車手、車隊、賽道與常用戰術詞建立可維護的字典／譯名表，例如 Leclerc、Verstappen、Norris、Piastri、undercut、overcut、tyre degradation、DRS、Safety Car、Virtual Safety Car、track limits、box、pit wall。只能用於術語校正，不應盲目替換一般句子中的相似字串。
@@ -46,7 +46,7 @@ MPV decoded PCM
 ## TCL Google TV / Android TV 的效能風險
 
 - 電視 SoC 可能無法同時快速執行 ASR 和翻譯模型；不得只靠桌面 PC 的 benchmark 推估電視效能。
-- 先測 `base.en` 與最小可用翻譯模型，紀錄辨識即時因子、字幕延遲、CPU、RAM、掉字、重複句與長時間熱降頻。
+- 先測多語 Whisper Base 與 ML Kit 翻譯模型，紀錄辨識即時因子、字幕延遲、CPU、RAM、掉字、重複句與長時間熱降頻。若結果顯示值得升級，再測 Whisper Small Q5_1。
 - 若電視端無法持續趕上直播，第二選擇是同一區域網路內的本機 PC 執行免費模型，TV 只接收字幕。此方案仍可避免雲端費用，但需有一台觀看時持續運行的電腦。
 - 若 F1 是在另一個 App 播放，Android `AudioPlaybackCapture` 是否有效取決於系統版本、來源 App 的 manifest／capture policy 及音訊用途；不能保證每個播放器都能被擷取。自有 R15 TV 播放管線較適合作為整合點。
 
