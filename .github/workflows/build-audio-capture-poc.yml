@@ -213,6 +213,7 @@ jobs:
               -DANDROID_ABI="$abi" \
               -DANDROID_PLATFORM=android-24 \
               -DCMAKE_BUILD_TYPE=Release \
+              -DBUILD_SHARED_LIBS=OFF \
               -DGGML_OPENMP=OFF \
               -DGGML_NATIVE=OFF \
               -DGGML_CPU_KLEIDIAI=OFF \
@@ -222,6 +223,11 @@ jobs:
             cmake --build "$build_dir" --config Release --parallel 2
             install -m 755 "$build_dir/libr15whisper.so" \
               "sources/TV/app/src/main/jniLibs/$abi/libr15whisper.so"
+            if readelf -d "$build_dir/libr15whisper.so" | grep -Eq 'libggml(-base|-cpu)?\.so'; then
+              echo "Whisper JNI still has a dynamic GGML dependency for $abi." >&2
+              readelf -d "$build_dir/libr15whisper.so" >&2
+              exit 1
+            fi
           done
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
