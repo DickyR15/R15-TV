@@ -245,7 +245,6 @@ jobs:
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
-            app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java \
           grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
@@ -436,6 +435,7 @@ jobs:
             app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
             app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java \
             app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java \
+            app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java \
             app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
