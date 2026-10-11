@@ -29,12 +29,14 @@ If there is no usable playback sound, repeat once with a simple non-protected lo
 
 ## 3. Turn on local translation
 
-After original English captions work:
+After original English captions work, start with the lower-complexity option:
 
-1. Open **Settings → Models → Translation** and install a local English-to-Chinese model.
-2. Prefer the catalogued Hy-MT2 Q2_K model for a lower download/storage footprint (around 777 MB per Hearth documentation); it is still a 1.8B-class model and may be slow or memory-heavy on a TV. Model download size is not the same as RAM needed.
-3. In the caption translation settings, select the local translator, set target language to Chinese (`zh`), and enable the local translation bridge. Do not select a cloud engine.
-4. Retry the same clip, then turn off Wi-Fi temporarily after all models are installed and loaded. If captions and translation continue, this confirms the selected processing path is local for that session.
+1. Open **Settings → Models → Translation** and install the **on-device ML Kit English → Chinese language packs**. This is the simplest free local inference test in the Play flavor; it is not a fully open-source translator, but it does not require a paid cloud API or send each caption to a translation API.
+2. In the caption translation settings, choose **ML Kit** as the local translator, set target language to Chinese (`zh`), and enable the translation bridge. Do not select Cloud/BYOK or enter any API key.
+3. Retry the same clip, then turn off Wi-Fi temporarily after the language packs are installed and loaded. If captions and translation continue, the selected path is running on-device for that session.
+4. Only if ML Kit translation is too weak for F1 terms, additionally test **Hy-MT2 Q2_K** from the local model catalog (about 777 MB download, 1.8B-class model). This can use materially more RAM than the file size suggests, so do not make it the first test on the TV.
+
+The 75C755 product listing identifies 3 GB RAM, so use one lightweight recognizer and the ML Kit translator first; evaluate the larger local model only after the baseline works. The exact RAM available to apps varies with firmware and background activity.
 
 Hearth's documented UI normalizes Chinese script variants to `zh` and does not offer a dedicated Traditional Chinese output selector for these model families. Therefore, record whether the output is Simplified or Traditional. If it is Simplified, that is a known gap to fix in R15 TV's eventual pipeline with OpenCC's Taiwan conversion (`s2twp`); OpenCC performs script/wording conversion and is not the English translator.
 
@@ -51,7 +53,7 @@ A failure on protected audio or on an app that opts out of capture is an Android
 
 ## 5. Results to record
 
-Please record these fields in a test note. Do not infer success just because an overlay is visible.
+Please record these fields in a test note. Do not infer success just because an overlay is visible. The initial goal is to validate audio capture and local pipeline operation, not to benchmark the final R15 TV build.
 
 | Check | Result |
 |---|---|
