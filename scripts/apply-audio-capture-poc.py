@@ -105,6 +105,7 @@ def main() -> None:
         "AiSubtitleEngine.java",
         "AiSubtitleOverlay.java",
         "AiSubtitlePlaybackCapture.java",
+        "AiSubtitleTranslationEngine.java",
     ):
         source = patch_dir / name
         if not source.is_file():
@@ -118,12 +119,27 @@ def main() -> None:
         text = replace_once(text, old, new, gradle)
     elif new not in text:
         raise SystemExit(f"{gradle}: cannot locate local AAR dependency declaration")
+
+    dependency_anchor = 'implementation fileTree(dir: "libs", include: ["*.aar", "*.jar"])'
+    required_dependencies = [
+        "implementation 'com.google.mlkit:translate:17.0.3'",
+        "implementation 'com.github.qichuan:android-opencc:1.2.0'",
+    ]
+    missing_dependencies = [dep for dep in required_dependencies if dep not in text]
+    if missing_dependencies:
+        text = replace_once(
+            text,
+            dependency_anchor,
+            dependency_anchor + "\\n    " + "\\n    ".join(missing_dependencies),
+            gradle,
+        )
     gradle.write_text(text, encoding="utf-8")
 
     text = proguard.read_text(encoding="utf-8")
     keep = (
         "\n# Keep sherpa-onnx Java/JNI configuration used by the experimental ASR engine.\n"
         "-keep class com.k2fsa.sherpa.onnx.** { *; }\n"
+        "-keep class com.zqc.opencc.android.lib.** { *; }\n"
     )
     if "-keep class com.k2fsa.sherpa.onnx.**" not in text:
         proguard.write_text(text.rstrip() + keep, encoding="utf-8")
@@ -140,7 +156,8 @@ def main() -> None:
             raise SystemExit(f"{path}: detach call missing after patch")
 
     print("Applied MPV-compatible AudioPlaybackCapture POC.")
-    print("Scope: in-app audio capture + streaming speech recognition only; English-to-Chinese translation is not implemented yet.")
+    print("Scope: in-app playback audio capture + streaming ASR + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
+    print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
 
 
