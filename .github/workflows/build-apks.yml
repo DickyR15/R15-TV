@@ -27,8 +27,7 @@ env:
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
-  MEDIA3_VERSION: 1.11.0
-  NDK_VERSION: 28.2.13676358
+  NDK_VERSION: 29.0.14206865
 
 jobs:
   build:
@@ -98,83 +97,6 @@ jobs:
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
 
-      - name: Wire pinned Media3 modules and preserve MPV engine
-        working-directory: sources/TV
-        env:
-          MEDIA3_VERSION: ${{ env.MEDIA3_VERSION }}
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import os
-          from pathlib import Path
-
-          settings = Path("settings.gradle")
-          text = settings.read_text(encoding="utf-8")
-          marker = "pluginManagement {"
-          if "includeBuild('../media/build-logic-settings')" not in text:
-              text = text.replace(marker, marker + chr(10) + "    includeBuild('../media/build-logic-settings')", 1)
-
-          plugin_block = '''plugins {
-              id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
-          }'''
-          replacement = '''plugins {
-              id "org.gradle.toolchains.foojay-resolver-convention" version "1.0.0"
-              id "gradlebuild.media3-settings-logic"
-          }
-
-          includeMedia3.execute(file("../media"))'''
-          if 'id "gradlebuild.media3-settings-logic"' not in text:
-              if plugin_block not in text:
-                  raise SystemExit("Unable to locate settings.gradle plugins block")
-              text = text.replace(plugin_block, replacement, 1)
-          if 'includeMedia3.execute(file("../media"))' not in text:
-              raise SystemExit("Composite Media3 source was not included")
-          settings.write_text(text, encoding="utf-8")
-
-          gradle_file = Path("app/build.gradle")
-          build = gradle_file.read_text(encoding="utf-8")
-          if "androidx.media3:media3-mpvplayer:" not in build:
-              version = os.environ["MEDIA3_VERSION"]
-              modules = [
-                  "common",
-                  "container",
-                  "database",
-                  "datasource",
-                  "datasource-okhttp",
-                  "datasource-rtmp",
-                  "decoder",
-                  "decoder-av1",
-                  "decoder-ffmpeg",
-                  "decoder-mpegh",
-                  "effect",
-                  "exoplayer",
-                  "exoplayer-dash",
-                  "exoplayer-hls",
-                  "exoplayer-rtsp",
-                  "exoplayer-smoothstreaming",
-                  "extractor",
-                  "session",
-                  "ui",
-                  "ui-danmaku",
-                  "mpvplayer",
-              ]
-              dependency_block = (
-                  chr(10)
-                  + "    // R15 TV uses source-built, pinned FongMi Media3 + MPV modules."
-                  + chr(10)
-                  + chr(10).join(
-                      f'    implementation "androidx.media3:media3-{module}:{version}"'
-                      for module in modules
-                  )
-                  + chr(10)
-              )
-              anchor = "    implementation libs.media" + chr(10)
-              if anchor not in build:
-                  raise SystemExit("Unable to locate app/build.gradle media dependency anchor")
-              build = build.replace(anchor, anchor + dependency_block, 1)
-              gradle_file.write_text(build, encoding="utf-8")
-          print("Configured Media3 source composite build and kept the MPV player module enabled.")
-          PY
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
@@ -201,10 +123,68 @@ jobs:
           yes | sdkmanager --licenses >/dev/null
           sdkmanager \
             "platform-tools" \
+            "platforms;android-36" \
             "platforms;android-37.0" \
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
             "ndk;${NDK_VERSION}"
+
+      - name: Build official FongMi Media3 and MPV AAR dependencies
+        working-directory: sources/media
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+            :lib-common:assembleRelease \
+            :lib-container:assembleRelease \
+            :lib-database:assembleRelease \
+            :lib-datasource:assembleRelease \
+            :lib-datasource-okhttp:assembleRelease \
+            :lib-datasource-rtmp:assembleRelease \
+            :lib-decoder:assembleRelease \
+            :lib-decoder-ffmpeg:assembleRelease \
+            :lib-decoder-mpegh:assembleRelease \
+            :lib-effect:assembleRelease \
+            :lib-exoplayer:assembleRelease \
+            :lib-exoplayer-dash:assembleRelease \
+            :lib-exoplayer-hls:assembleRelease \
+            :lib-exoplayer-rtsp:assembleRelease \
+            :lib-exoplayer-smoothstreaming:assembleRelease \
+            :lib-extractor:assembleRelease \
+            :lib-mpvplayer:assembleRelease \
+            :lib-session:assembleRelease \
+            :lib-ui:assembleRelease \
+            :lib-ui-danmaku:assembleRelease
+
+          target="$GITHUB_WORKSPACE/sources/TV/app/libs"
+          mkdir -p "$target"
+          copied=0
+          while IFS= read -r aar_name; do
+            [[ -n "$aar_name" ]] || continue
+            module="${aar_name#lib-}"
+            module="${module%-release.aar}"
+            module_dir="${module//-/_}"
+            aar_path="libraries/$module_dir/build/outputs/aar/$aar_name"
+            if [[ ! -f "$aar_path" ]]; then
+              aar_path=$(find libraries -type f -path "*/build/outputs/aar/$aar_name" -print -quit)
+            fi
+            if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
+              echo "Missing expected AAR: $aar_name" >&2
+              exit 1
+            fi
+            cp "$aar_path" "$target/$aar_name"
+            copied=$((copied + 1))
+          done < move.txt
+
+          if [[ "$copied" -ne 20 ]]; then
+            echo "Expected 20 Media3/MPV AARs, copied $copied." >&2
+            exit 1
+          fi
+          echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
+          ls -lh "$target"/lib-*-release.aar
+          sha256sum "$target"/lib-*-release.aar
 
       - name: Configure signing and local.properties
         id: signing
