@@ -6,7 +6,11 @@ on:
     branches:
       - "research/realtime-subtitles-tv"
     paths:
-      - ".r15tv-build-trigger/**"
+      - ".github/workflows/build-audio-capture-poc.yml"
+      - "patches/audio-capture/**"
+      - "patches/whisper-native/**"
+      - "scripts/apply-audio-capture-poc.py"
+      - "third-party-licenses/**"
   workflow_dispatch:
 
 permissions:
