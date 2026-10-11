@@ -8,7 +8,7 @@
 
 為了減少使用者設定步驟，不要求先安裝 Hearth。已新增 App 內 AudioPlaybackCapture＋串流 ASR 原型，讓使用者在 R15 TV 播放畫面按一次測試，授權後量測是否取得 MPV 音訊並產生來源語言字幕。此方法只匹配 R15 TV 自己的 UID；若音訊為靜音或擷取器不相容，再評估 MPV/libmpv native PCM tap。
 
-POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。目前僅是字幕辨識測試版，**還沒加入英翻中**；Hearth 與 SUBRIMA 仍是可選參考工具。
+POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[本機翻譯引擎](../patches/audio-capture/AiSubtitleTranslationEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。原型程式已包含 ML Kit 本機英翻中和 OpenCC S2TWP；**最新程式尚待 CI 編譯與 TV 實機驗證**。Hearth 與 SUBRIMA 仍是可選參考工具。
 
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
