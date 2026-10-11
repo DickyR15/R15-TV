@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "research/mpv-source-build"
+      - "feature/autobuild-ai-codec-research"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -30,6 +31,8 @@ env:
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   NDK_VERSION: 29.0.14206865
+  NDK_VERSION_SHERPA: 28.2.13676358
+  SHERPA_ONNX_COMMIT: 9db1af1871ed78cee9357c23898e5a7d8702d21a
 
 jobs:
   build:
@@ -132,7 +135,8 @@ jobs:
             "platforms;android-37.0" \
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
-            "ndk;${NDK_VERSION}"
+            "ndk;${NDK_VERSION}" \
+            "ndk;${NDK_VERSION_SHERPA}"
 
       - name: Build official FongMi Media3 and MPV AAR dependencies
         working-directory: sources/media
@@ -190,6 +194,87 @@ jobs:
           echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
+
+      - name: Build public sherpa-onnx runtime and stage bilingual ASR model
+        shell: bash
+        env:
+          BUILD_SHARED_LIBS: "OFF"
+          SHERPA_ONNX_ENABLE_TTS: "OFF"
+          SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION: "OFF"
+          SHERPA_ONNX_ENABLE_BINARY: "OFF"
+          SHERPA_ONNX_ENABLE_C_API: "OFF"
+          SHERPA_ONNX_ENABLE_RKNN: "OFF"
+          SHERPA_ONNX_ENABLE_QNN: "OFF"
+        run: |
+          set -euo pipefail
+          mkdir -p sources/sherpa-onnx
+          git -C sources/sherpa-onnx init
+          git -C sources/sherpa-onnx remote add origin https://github.com/k2-fsa/sherpa-onnx.git
+          git -C sources/sherpa-onnx fetch --depth=1 origin "$SHERPA_ONNX_COMMIT"
+          git -C sources/sherpa-onnx checkout --detach FETCH_HEAD
+          test "$(git -C sources/sherpa-onnx rev-parse HEAD)" = "$SHERPA_ONNX_COMMIT"
+
+          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION_SHERPA}"
+          test -x "$ANDROID_NDK/ndk-build"
+          (
+            cd sources/sherpa-onnx
+            ./build-android-arm64-v8a.sh
+            ./build-android-armv7-eabi.sh
+            make -C sherpa-onnx/java-api clean all
+          )
+
+          mkdir -p sources/TV/app/libs
+          mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a
+          mkdir -p sources/TV/app/src/main/jniLibs/armeabi-v7a
+          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/build/sherpa-onnx.jar sources/TV/app/libs/sherpa-onnx.jar
+          install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
+          install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
+
+          model_archive="$RUNNER_TEMP/sherpa-onnx-zh-en.tar.bz2"
+          curl --fail --silent --show-error --location \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20.tar.bz2" \
+            --output "$model_archive"
+          tar -xjf "$model_archive" -C "$RUNNER_TEMP"
+          model_source="$RUNNER_TEMP/sherpa-onnx-streaming-zipformer-bilingual-zh-en-2023-02-20"
+          model_target="sources/TV/app/src/main/assets/ai-subtitle-model"
+          mkdir -p "$model_target"
+          install -m 644 "$model_source/encoder-epoch-99-avg-1.int8.onnx" "$model_target/"
+          install -m 644 "$model_source/decoder-epoch-99-avg-1.onnx" "$model_target/"
+          install -m 644 "$model_source/joiner-epoch-99-avg-1.int8.onnx" "$model_target/"
+          install -m 644 "$model_source/tokens.txt" "$model_target/"
+          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/SHERPA-ONNX-LICENSE.txt"
+          cp "$model_source/README.md" "$model_target/ASR-MODEL-README.txt" || true
+
+          python3 scripts/apply-ai-subtitles.py --tv-dir sources/TV --patch-dir patches/ai-subtitles
+          test -s sources/TV/app/libs/sherpa-onnx.jar
+          test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
+          test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
+          test -s "$model_target/encoder-epoch-99-avg-1.int8.onnx"
+          test -s "$model_target/decoder-epoch-99-avg-1.onnx"
+          test -s "$model_target/joiner-epoch-99-avg-1.int8.onnx"
+          echo "Public sherpa-onnx runtime and AI subtitle prototype staged for both ARM ABIs."
+
+      - name: Verify AI subtitle runtime and model are present in APKs
+        shell: bash
+        env:
+          BUILD_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$BUILD_MODE" == "release" ]]; then
+            apk_root="sources/TV/Release/apk"
+          else
+            apk_root="sources/TV/app/build/outputs/apk"
+          fi
+          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
+          test "${#apks[@]}" -eq 4
+          for apk in "${apks[@]}"; do
+            entries=$(unzip -Z1 "$apk")
+            grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" || grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            echo "AI subtitle files found: $apk"
+          done
 
       - name: Configure signing and local.properties
         id: signing
