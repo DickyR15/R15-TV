@@ -4,11 +4,11 @@
 
 ## 建議方案
 
-### 先做低成本可行性測試
+### 優先路線：直接研究 R15 TV 的 MPV 音訊路徑
 
-先用已成功建置的 Hearth 0.23.9 Cloud + Local QA 版，在 TCL Google TV 實測它內建的 Whisper 本機語音辨識與本機翻譯橋接。選擇本機模型、不設定任何雲端供應商或 API 金鑰。具體安裝、模型與驗收步驟見 [Hearth TV／F1 POC 測試手冊](Hearth-TV-F1-POC-TEST.md)。Hearth 的模型目錄已提供 Whisper tiny/base/small 等本機模型選擇，另有 Hy-MT2 等本機翻譯模型；這比先把兩套模型引擎自行塞進 R15 TV 更快驗證 SoC 效能和音訊擷取限制。
+為了減少使用者設定步驟，不要求先安裝 Hearth。先確認 R15 TV 建置時使用的 MPV wrapper／libmpv 版本，以及是否有可用的 PCM callback；若目前沒有，評估低侵入的 native 音訊分流 tap。完整的原始碼調查與分階段做法見 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md)。
 
-Hearth 這個獨立 App 只是實機可行性測試，不是 R15 TV 最終方案；如果跨 App 音訊擷取受限，R15 TV 仍應評估在自有 MPV 音訊輸出路徑擷取 PCM，再直接把 Whisper／本機翻譯接進播放器。
+Hearth 0.23.9 與 SUBRIMA 保留為可選的實機／程式碼參考。它們不取代 R15 TV，也不作為開發前置條件。跨 App 音訊擷取可能受來源播放器或系統政策限制，因此最終仍以 R15 TV 自己的 MPV 音訊路徑為目標。
 
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
