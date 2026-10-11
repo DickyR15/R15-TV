@@ -130,7 +130,7 @@ def main() -> None:
         text = replace_once(
             text,
             dependency_anchor,
-            dependency_anchor + "\\n    " + "\\n    ".join(missing_dependencies),
+            dependency_anchor + "\n    " + "\n    ".join(missing_dependencies),
             gradle,
         )
     gradle.write_text(text, encoding="utf-8")
