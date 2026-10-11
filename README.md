@@ -21,7 +21,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 目前修正項目包括：主設定的「AI 字幕／語音設定」入口、播放畫面右上角固定入口、可在 App 私有儲存空間下載 Whisper Base 多語模型，以及 EXO/HLS 的「自動適應（建議）／最高畫質」切換。預設不強制選最高碼率；如果清單提供多種畫質，播放器可依頻寬調整。MPV 對不支援的 4K 解碼格式會嘗試直接回退到 EXO，不改變使用者永久的 MPV 偏好。單一路徑 4K 或單純渲染掉幀不保證會因這些設定自動修復，仍需依 codec、碼率和電視硬體解碼能力實測。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功，並產生 [R15 TV Whisper Base Subtitle POC-58 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)。這是獨立套件的 debug 測試版，不會覆蓋正式 App；只完成 CI 建置與資產檢查，音訊擷取、字幕品質及 4K 播放仍需 TCL Google TV 實機驗證。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
+**已定案第一版：Whisper Base 多語 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 目前修正項目包括：把 AI 字幕／語音設定移到主設定頁最上方、播放畫面右上角高對比入口、可在 App 私有儲存空間下載 Whisper Base 多語模型，以及 EXO/HLS 預設「1080p 優先」並保留自動適應／最高畫質選項。這批最新 UI 與 1080p 策略修改正在第 61 輪建置，成功前不當成可下載版本。預設不強制選最高碼率；如果清單提供多種畫質，播放器可依頻寬調整。MPV 對不支援的 4K 解碼格式會嘗試直接回退到 EXO，不改變使用者永久的 MPV 偏好。單一路徑 4K 或單純渲染掉幀不保證會因這些設定自動修復，仍需依 codec、碼率和電視硬體解碼能力實測。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功，並產生 [R15 TV Whisper Base Subtitle POC-58 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)。這是獨立套件的 debug 測試版，不會覆蓋正式 App；只完成 CI 建置與資產檢查，音訊擷取、字幕品質及 4K 播放仍需 TCL Google TV 實機驗證。Whisper Small 量化版只會在 Base 的實機效能數據證明值得升級後再加入。
 
 ## 優先研究的開源專案
 
