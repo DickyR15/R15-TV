@@ -13,7 +13,7 @@ Hearth 是獨立 App，必須額外安裝、下載模型、授權音訊擷取，
 
 1. **找不到 AI 字幕／語音設定：已找到程式接線缺漏。** 原有套用腳本只修改點播用 `VideoActivity`，M3U/M3U8 頻道實際使用 `LiveActivity`。舊 POC 因此沒有在直播播放器畫面顯示設定面板。研究分支現在將相同面板接至 Leanback 與 Mobile 的 `LiveActivity`，並加上明確的「AI 字幕／語音設定」標題。
 2. **預設 4K 卡頓：已找到一個可修正的 HLS 策略。** 舊 ExoPlayer 程式使用 `setForceHighestSupportedBitrate(true)`，會忽略一般的頻寬自適應決策而偏向強制最高碼率。研究版已改為 `false`，讓多畫質 HLS/M3U8 依估計頻寬調整；這不會對固定單路 4K 串流降碼率，也不能替不支援的編碼格式補上硬體解碼。
-3. **MPV 單路 4K 無法播放：尚未證實根因。** 已核對的 MPV 包裝器預設使用 Android MediaCodec 硬體解碼（`mediacodec,mediacodec-copy`），並會在解碼錯誤時嘗試切換軟解；但 4K 軟解可能跟不上即時播放。未取得實際失敗的串流格式與播放器錯誤前，不應盲目改硬解順序或把所有影片強制改成軟解。此問題仍需以實機錯誤診斷確認。
+3. **MPV 單一來源解碼失敗：新增自動備援。** 已核對 MPV 預設先使用 Android MediaCodec 硬體解碼（`mediacodec,mediacodec-copy`），並會在解碼錯誤時嘗試軟解。最新 POC 再加一層保護：若 MPV 的硬解／軟解兩次嘗試都回報解碼錯誤，則對目前這個來源暫時切換 ExoPlayer，並顯示提示；使用者原本的 MPV 偏好不會永久更改。若 MPV 是「畫面掉幀但沒有解碼錯誤」，此保護不會觸發，渲染瓶頸仍需要實機診斷。
 
 ## 已核對的原始碼
 
