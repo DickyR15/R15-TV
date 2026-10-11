@@ -48,6 +48,7 @@ public final class AiSubtitleOverlay {
     private final ActivityResultLauncher<Intent> projectionPermissionLauncher;
 
     private boolean enabled;
+    private boolean hasTranslatedCaption;
     private AiSubtitlePlaybackCapture capture;
     private AiSubtitleTranslationEngine translationEngine;
 
@@ -210,8 +211,8 @@ public final class AiSubtitleOverlay {
             @Override
             public void onError(String message) {
                 if (activity.isFinishing()) return;
-                modelStatus.setText("模型下載失敗：" + message);
                 updateModelControls();
+                modelStatus.setText("模型下載失敗：" + message);
             }
         });
     }
@@ -239,8 +240,8 @@ public final class AiSubtitleOverlay {
 
                         @Override
                         public void onError(String message) {
-                            modelStatus.setText("刪除模型失敗：" + message);
                             updateModelControls();
+                            modelStatus.setText("刪除模型失敗：" + message);
                         }
                     });
                 })
@@ -302,6 +303,7 @@ public final class AiSubtitleOverlay {
             return;
         }
         enabled = true;
+        hasTranslatedCaption = false;
         updateModelControls();
         toggle.setText("停止即時字幕測試");
         status.setText("等待音訊擷取授權…");
@@ -345,6 +347,7 @@ public final class AiSubtitleOverlay {
                         @Override
                         public void onTranslatedSubtitle(String source, String translation) {
                             if (enabled && translation != null && !translation.isEmpty()) {
+                                hasTranslatedCaption = true;
                                 caption.setText(translation);
                             }
                         }
@@ -359,7 +362,7 @@ public final class AiSubtitleOverlay {
 
                 @Override
                 public void onSubtitle(String text) {
-                    if (enabled) caption.setText(text);
+                    if (enabled && !hasTranslatedCaption) caption.setText(text);
                 }
 
                 @Override
@@ -410,6 +413,7 @@ public final class AiSubtitleOverlay {
 
     private void stopCapture(String message) {
         enabled = false;
+        hasTranslatedCaption = false;
         AiSubtitlePlaybackCapture current = capture;
         capture = null;
         if (current != null) current.stop();
