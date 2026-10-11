@@ -54,3 +54,14 @@
 - 特別驗證繁體中文輸出：Hearth 與 SUBRIMA 的目前文件／語言路由都沒有證實能在所有翻譯模式明確強制輸出繁體中文。
 - 已新增候選建置工作流：`.github/workflows/research-candidate-validation.yml`。它固定上游 commit 並產生建置記錄；工作流失敗若發生在環境初始化步驟，不能當成候選源碼的編譯失敗。
 - 實機驗收要在 TCL Google TV Android 12 上進行，特別記錄音訊擷取權限、字幕延遲、語言準確度及資源使用量。
+
+
+## F1 直播專用需求（2026-10-11）
+
+新需求：即時辨識 F1 英文直播解說並翻譯為臺灣繁體中文字幕，優先免費、離線、無付費 API。
+
+- 詳細方案與驗收標準：[F1 直播免費離線字幕方案](F1-OFFLINE-LIVE-TRANSLATION.md)。
+- 第一個 ASR 基準：whisper.cpp 英文模型 `base.en`，之後視效能比較 `small.en`；需在目標電視實測。
+- 翻譯需使用本機 English→Chinese 模型；OpenCC `s2twp` 僅負責轉成臺灣正體與地區用詞，不取代翻譯模型。
+- MPV PCM tap 必須先查證：目前音訊效果 listener 是研究線索，不代表 PCM API 已可直接使用。
+- 若 TV SoC 無法維持可接受延遲，改評估本機區域網路 PC 執行模型；仍不以雲端 API 為必要條件。
