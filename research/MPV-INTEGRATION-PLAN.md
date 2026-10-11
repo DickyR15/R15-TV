@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。研究分支已新增 Whisper.cpp JNI、App 內下載 Base 模型、重疊音訊視窗推論與字幕面板；GitHub Actions [第 43 輪](https://github.com/DickyR15/R15-TV/actions/runs/38135426602) 已成功建置 APK，Whisper JNI 與 OpenCC 資產檢查通過；[POC-43 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822) 可下載。Whisper 模型不包進 APK，首次由使用者下載。尚未證明目標電視能擷取 MPV 音訊，也未完成翻譯品質／即時性測試。  
+**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。POC-43 已成功建置，但複核後確認字幕程式只接到 VOD 的 VideoActivity，未接到 M3U/M3U8 直播的 LiveActivity，故舊包不適合用來驗證直播字幕。研究分支已修正為同時接入 LiveActivity，並將 ExoPlayer 的 HLS 選擇改為自適應碼率，而非固定強制最高碼率；新包建置完成前不建議再測舊 POC-43。Whisper 模型不包進 APK，首次由使用者下載。MPV 4K 無法播放的原因仍未完全確認，尚待針對實際串流錯誤驗證。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
@@ -8,6 +8,12 @@
 Hearth 是獨立 App，必須額外安裝、下載模型、授權音訊擷取，再測試是否能覆蓋 IPTV 畫面。這對使用者來說步驟多，也不能保證每個直播 App 都允許系統擷取音訊。
 
 因此 Hearth 改為**可選參考工具**。第一個實作改採 Android `AudioPlaybackCapture`，只擷取 R15 TV 自己 UID 的播放音訊，並把副本送進語音辨識佇列；這樣暫時不必重編 MPV native library。它仍需要一次系統擷取授權及錄音權限，音訊是否真的可被捕捉須經 TV 實測。若失敗，再回到 MPV 原生 PCM tap。
+
+## 本次實機回報的兩個問題
+
+1. **找不到 AI 字幕／語音設定：已找到程式接線缺漏。** 原有套用腳本只修改點播用 `VideoActivity`，M3U/M3U8 頻道實際使用 `LiveActivity`。舊 POC 因此沒有在直播播放器畫面顯示設定面板。研究分支現在將相同面板接至 Leanback 與 Mobile 的 `LiveActivity`，並加上明確的「AI 字幕／語音設定」標題。
+2. **預設 4K 卡頓：已找到一個可修正的 HLS 策略。** 舊 ExoPlayer 程式使用 `setForceHighestSupportedBitrate(true)`，會忽略一般的頻寬自適應決策而偏向強制最高碼率。研究版已改為 `false`，讓多畫質 HLS/M3U8 依估計頻寬調整；這不會對固定單路 4K 串流降碼率，也不能替不支援的編碼格式補上硬體解碼。
+3. **MPV 單路 4K 無法播放：尚未證實根因。** 已核對的 MPV 包裝器預設使用 Android MediaCodec 硬體解碼（`mediacodec,mediacodec-copy`），並會在解碼錯誤時嘗試切換軟解；但 4K 軟解可能跟不上即時播放。未取得實際失敗的串流格式與播放器錯誤前，不應盲目改硬解順序或把所有影片強制改成軟解。此問題仍需以實機錯誤診斷確認。
 
 ## 已核對的原始碼
 
