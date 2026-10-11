@@ -1,0 +1,53 @@
+name: R15 TV integration research preflight
+
+on:
+  push:
+    branches: [feature/autobuild-ai-codec-research]
+    paths:
+      - "docs/TV-AUTOBUILD-INTEGRATION-PLAN.md"
+      - ".github/workflows/integration-preflight.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r15tv-integration-preflight
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    name: Verify integration plan and public source references
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout R15 TV research branch
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Validate integration guardrails and links
+        shell: bash
+        run: |
+          set -euo pipefail
+          plan="docs/TV-AUTOBUILD-INTEGRATION-PLAN.md"
+          test -s "$plan"
+          grep -Fq "Real-time AI subtitles" "$plan"
+          grep -Fq "Codec compatibility" "$plan"
+          grep -Fq "Dolby Vision" "$plan"
+          grep -Fq "MPV preservation" "$plan"
+          grep -Fq "PRIVATE_SOURCE_TOKEN" "$plan"
+          grep -Fq "does not claim" "$plan"
+          grep -Fq "github.com/iptvorganization/TV-AutoBuild" "$plan"
+          echo "Integration plan checks passed."
+          echo "This is a documentation/source-access preflight only; it does not build or test playback features."
+
+      - name: Print source verification instructions
+        shell: bash
+        run: |
+          {
+            echo "## Integration research preflight"
+            echo "- Checked that AI subtitles, codecs, Dolby Vision, and MPV preservation are covered."
+            echo "- Checked that private upstream inputs and actual playback validation are explicit."
+            echo "- This job does not claim runtime feature support."
+          } >> "$GITHUB_STEP_SUMMARY"
