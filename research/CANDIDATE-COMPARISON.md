@@ -64,4 +64,4 @@ GitHub Actions 第 4 輪成功完成三個候選的建置；各 Gradle 任務輸
 - [SUBRIMA debug APK、日誌與 SHA-256（約 65 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696653814)
 - [OpenTV debug APK、日誌與 SHA-256（約 29 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696980988)
 
-下一步優先依 [MPV-INTEGRATION-PLAN.md](MPV-INTEGRATION-PLAN.md) 確認原生 PCM 接入點，再建置獨立原型。Hearth／SUBRIMA APK 僅在需要實機對照時才使用；不得把這些候選 APK 直接重命名為 R15 TV 或當作 R15 TV 正式版發布。
+R15 TV 的 App 內音訊擷取＋ASR＋本機翻譯 POC 已在 [GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 成功建置；[測試包下載](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。下一步由 TCL Google TV 實機驗證 MPV 音訊是否可擷取，並量測字幕延遲與翻譯品質。Hearth／SUBRIMA APK 僅作可選對照工具；不得把它們重命名為 R15 TV 或當作正式版發布。若系統擷取回傳靜音，再回到 [MPV-INTEGRATION-PLAN.md](MPV-INTEGRATION-PLAN.md) 評估 native PCM tap。
