@@ -48,7 +48,7 @@
 
 ## 目前技術決策（2026-10-11）
 
-- 第一個原型改採 App 內 AudioPlaybackCapture（僅自己的 UID）＋串流 ASR，避免使用者另裝 Hearth；需一次 RECORD_AUDIO 與 MediaProjection 授權。
+- 第一版選定 App 內 AudioPlaybackCapture（僅自己的 UID）＋Whisper Base 多語＋ML Kit 本機英翻中＋OpenCC S2TWP；模型在 App 內下載，不包進 APK。需 RECORD_AUDIO 與 MediaProjection 授權。
 - 新增 [MPV 原生音訊接入與整合計畫](MPV-INTEGRATION-PLAN.md) 與 [Audio Capture POC 建置工作流](../.github/workflows/build-audio-capture-poc.yml)。若 TV 不提供非靜音擷取，再回退到 native PCM tap。
 - 使用 SUBRIMA 作為語音辨識與字幕流程的程式碼參考，不要求使用者安裝測試。
 - OpenTV 只參考 TV 操作與建置流程，不作為播放器底層，因其使用 Media3/ExoPlayer，而 R15 TV 保留 MPV 是既有要求。
@@ -64,7 +64,7 @@
 - 詳細方案與驗收標準：[F1 直播免費離線字幕方案](F1-OFFLINE-LIVE-TRANSLATION.md)。
 - 第一個 ASR 基準：whisper.cpp 英文模型 `base.en`，之後視效能比較 `small.en`；需在目標電視實測。
 - 翻譯需使用本機 English→Chinese 模型；OpenCC `s2twp` 僅負責轉成臺灣正體與地區用詞，不取代翻譯模型。
-- App 內音訊擷取＋ASR＋本機翻譯原型已在 [GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 建置成功，並通過模型與 OpenCC 資產檢查；[測試 APK 可下載](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。目前尚未完成電視實機音訊擷取、品質與延遲驗收。
+- 新版 Whisper Base workflow 正在編譯固定版本的 Whisper.cpp JNI，並檢查 OpenCC 資產與獨立套件 APK；待 CI 成功後再在 TV 實機驗證音訊擷取、翻譯品質與延遲。
 - `setAudioOutputListener(effect::applyAudioEffect)` 是音效通知，不可當作 PCM callback。若 Android 擷取在 TV 的 MPV 路徑下回傳靜音，native MPV PCM tap 必須先確認能安全分流。
-- Whisper Base 多語模型改採獨立下載選項的規劃見 [WHISPER-BASE-MULTILINGUAL-PLAN.md](WHISPER-BASE-MULTILINGUAL-PLAN.md)。
+- 已將 Whisper Base 多語模型的 App 內下載器與 JNI wrapper 加入原型；後續依實機效能再決定是否加入 Whisper Small Q5_1 量化版，詳見 [WHISPER-BASE-MULTILINGUAL-PLAN.md](WHISPER-BASE-MULTILINGUAL-PLAN.md)。
 - 若 TV SoC 無法維持可接受延遲，改評估本機區域網路 PC 執行模型；仍不以雲端 API 為必要條件。
