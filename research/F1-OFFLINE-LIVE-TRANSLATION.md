@@ -8,12 +8,12 @@
 
 為了減少使用者設定步驟，不要求先安裝 Hearth。已新增 App 內 AudioPlaybackCapture＋串流 ASR 原型，讓使用者在 R15 TV 播放畫面按一次測試，授權後量測是否取得 MPV 音訊並產生來源語言字幕。此方法只匹配 R15 TV 自己的 UID；若音訊為靜音或擷取器不相容，再評估 MPV/libmpv native PCM tap。
 
-POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[本機翻譯引擎](../patches/audio-capture/AiSubtitleTranslationEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。原型程式已包含 ML Kit 本機英翻中和 OpenCC S2TWP；**最新程式尚待 CI 編譯與 TV 實機驗證**。Hearth 與 SUBRIMA 仍是可選參考工具。
+POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlaybackCapture.java)、[ASR engine](../patches/audio-capture/AiSubtitleEngine.java)、[本機翻譯引擎](../patches/audio-capture/AiSubtitleTranslationEngine.java)、[播放器疊加 UI](../patches/audio-capture/AiSubtitleOverlay.java)、[建置 workflow](../.github/workflows/build-audio-capture-poc.yml)。原型程式已包含 ML Kit 本機英翻中和 OpenCC S2TWP；[GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 已成功建置 APK 並通過模型／OpenCC 資產檢查，尚待 TV 實機驗證音訊擷取與延遲。可下載 [R15 TV Audio Capture POC-20](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。Hearth 與 SUBRIMA 仍是可選參考工具。
 
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
 1. **先驗證 App 內 AudioPlaybackCapture。** 它可以限制只讀 R15 TV 自己 UID 的播放音訊，先避免 native 重編；需要 `RECORD_AUDIO` 與使用者同意的 MediaProjection 工作階段。若電視上的 MPV 聲音不可擷取，才改為研究 MPV native PCM tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 不是已證實的 PCM callback。
-2. **第一輪 ASR POC：使用 sherpa-onnx 中英串流 small 模型。** 官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB，較適合先驗證 Android TV 音訊擷取與裝置資源負擔。模型支援中英雙語，但不代表 F1 英文專有名詞一定準確；音訊擷取成功後，再比較 [whisper.cpp](https://github.com/ggml-org/whisper.cpp) `base.en` 或英文專用串流模型。最終 ASR 引擎未定案，準確率及效能均需實機測試。
+2. **第一輪 ASR POC：使用 sherpa-onnx 中英串流 small 模型。** 官方文件列出的量化 encoder 約 41 MB、decoder 約 14 MB、joiner 約 3.1 MB，較適合先驗證 Android TV 音訊擷取與裝置資源負擔。模型支援中英雙語，但不代表 F1 英文專有名詞一定準確；音訊擷取成功後，再依 [Whisper Base 多語模型下載與整合計畫](WHISPER-BASE-MULTILINGUAL-PLAN.md)加入可選下載的 `ggml-base.bin`，並保留快速串流模型作為比較／備援。準確率及效能均需實機測試。
 3. **離線翻譯：第一版使用可在裝置端執行的 ML Kit Translation SDK。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
 4. **臺灣繁體中文輸出：使用 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `s2twp`／臺灣正體流程做字形與常用詞轉換。** OpenCC 是離線簡繁／地區詞轉換，不是英翻中的翻譯器；必須先有翻譯模型，再做字詞轉換。
 5. **F1 詞庫：** 為車手、車隊、賽道與常用戰術詞建立可維護的字典／譯名表，例如 Leclerc、Verstappen、Norris、Piastri、undercut、overcut、tyre degradation、DRS、Safety Car、Virtual Safety Car、track limits、box、pit wall。只能用於術語校正，不應盲目替換一般句子中的相似字串。
