@@ -1,26 +1,17 @@
 package com.fongmi.android.tv.ai.subtitle;
 
 import android.content.Context;
-import android.content.res.AssetManager;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 
 import androidx.media3.common.C;
 
-import com.k2fsa.sherpa.onnx.OnlineModelConfig;
-import com.k2fsa.sherpa.onnx.OnlineRecognizer;
-import com.k2fsa.sherpa.onnx.OnlineRecognizerConfig;
-import com.k2fsa.sherpa.onnx.OnlineRecognizerResult;
-import com.k2fsa.sherpa.onnx.OnlineStream;
-import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig;
-
 import java.io.File;
-import java.io.FileOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
@@ -38,13 +29,15 @@ public final class AiSubtitleEngine {
         default void onFinalSubtitle(String text) { }
     }
 
-    private static final String ASSET_MODEL_DIR = "ai-subtitle-model";
     private static final int ASR_SAMPLE_RATE = 16000;
+    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 6;
+    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3;
+    private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 10;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final float[] POISON = new float[0];
 
-    private final Context context;
+    private final File modelFile;
     private final Listener listener;
     private final ArrayBlockingQueue<float[]> audioQueue = new ArrayBlockingQueue<>(30);
     private final Object resampleLock = new Object();
@@ -58,14 +51,14 @@ public final class AiSubtitleEngine {
     private float previousInputSample;
     private boolean hasPreviousInputSample;
 
-    private AiSubtitleEngine(Context context, Listener listener) {
-        this.context = context.getApplicationContext();
+    private AiSubtitleEngine(File modelFile, Listener listener) {
+        this.modelFile = modelFile;
         this.listener = listener;
     }
 
-    public static void start(Context context, Listener listener) {
+    public static void start(Context context, File modelFile, Listener listener) {
         stop();
-        AiSubtitleEngine engine = new AiSubtitleEngine(context, listener);
+        AiSubtitleEngine engine = new AiSubtitleEngine(modelFile, listener);
         ACTIVE.set(engine);
         engine.worker = new Thread(engine::runRecognizer, "r15-ai-subtitles");
         engine.worker.setDaemon(true);
@@ -152,38 +145,21 @@ public final class AiSubtitleEngine {
     }
 
     private void runRecognizer() {
-        OnlineRecognizer recognizer = null;
-        OnlineStream stream = null;
+        long whisperContext = 0L;
         try {
-            postStatus("AI 字幕模型初始化中…");
-            File modelDir = copyModelAssets();
-            String encoder = new File(modelDir, "encoder-epoch-99-avg-1.int8.onnx").getAbsolutePath();
-            String decoder = new File(modelDir, "decoder-epoch-99-avg-1.onnx").getAbsolutePath();
-            String joiner = new File(modelDir, "joiner-epoch-99-avg-1.int8.onnx").getAbsolutePath();
-            String tokens = new File(modelDir, "tokens.txt").getAbsolutePath();
+            if (modelFile == null || !modelFile.isFile()) {
+                throw new IllegalStateException("請先下載 Whisper Base 多語模型");
+            }
+            postStatus("正在載入 Whisper Base 多語模型…");
+            whisperContext = WhisperCpp.createContext(modelFile);
+            postStatus("Whisper Base 已啟動；英文語音辨識中");
 
-            OnlineTransducerModelConfig transducer = OnlineTransducerModelConfig.builder()
-                    .setEncoder(encoder)
-                    .setDecoder(decoder)
-                    .setJoiner(joiner)
-                    .build();
-            OnlineModelConfig model = OnlineModelConfig.builder()
-                    .setTransducer(transducer)
-                    .setTokens(tokens)
-                    .setNumThreads(Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors())))
-                    .setDebug(false)
-                    .setModelType("zipformer")
-                    .build();
-            OnlineRecognizerConfig config = OnlineRecognizerConfig.builder()
-                    .setOnlineModelConfig(model)
-                    .setDecodingMethod("greedy_search")
-                    .build();
+            float[] ring = new float[MAX_WINDOW_SAMPLES];
+            int writeIndex = 0;
+            int bufferedSamples = 0;
+            int samplesSinceInference = 0;
+            String previousTranscript = "";
 
-            recognizer = new OnlineRecognizer(config);
-            stream = recognizer.createStream();
-            postStatus("本機語音辨識已啟動；翻譯將在句段結束後執行");
-
-            String lastText = "";
             while (running || !audioQueue.isEmpty()) {
                 float[] samples;
                 try {
@@ -196,58 +172,113 @@ public final class AiSubtitleEngine {
                 if (samples == POISON) break;
                 if (samples.length == 0) continue;
 
-                stream.acceptWaveform(samples, ASR_SAMPLE_RATE);
-                while (recognizer.isReady(stream)) recognizer.decode(stream);
-                OnlineRecognizerResult result = recognizer.getResult(stream);
-                String text = result == null ? "" : result.getText();
-                if (text != null && !text.trim().isEmpty() && !text.trim().equals(lastText)) {
-                    lastText = text.trim();
-                    postSubtitle(lastText);
+                for (float sample : samples) {
+                    ring[writeIndex] = sample;
+                    writeIndex = (writeIndex + 1) % ring.length;
+                    if (bufferedSamples < ring.length) bufferedSamples++;
                 }
-                if (recognizer.isEndpoint(stream)) {
-                    if (!lastText.isEmpty()) postFinalSubtitle(lastText);
-                    recognizer.reset(stream);
-                    lastText = "";
+                samplesSinceInference += samples.length;
+
+                if (bufferedSamples < WINDOW_SAMPLES || samplesSinceInference < UPDATE_SAMPLES) {
+                    continue;
+                }
+                samplesSinceInference = 0;
+
+                float[] window = snapshotTail(ring, writeIndex, bufferedSamples);
+                long inferenceStarted = SystemClock.elapsedRealtime();
+                String transcript = WhisperCpp.transcribe(whisperContext, window, "en", 2);
+                long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
+                if (transcript == null) transcript = "";
+                transcript = transcript.trim();
+
+                if (!transcript.isEmpty()) {
+                    postSubtitle(transcript);
+                    String newText = extractNewText(previousTranscript, transcript);
+                    if (!newText.isEmpty()) postFinalSubtitle(newText);
+                    previousTranscript = transcript;
+                    postStatus("Whisper Base · " + (window.length / ASR_SAMPLE_RATE)
+                            + " 秒音訊 · 推論 " + inferenceMs + " ms");
                 }
             }
         } catch (Throwable error) {
-            postStatus("AI 字幕啟動失敗：" + readableMessage(error));
+            postStatus("Whisper Base 啟動失敗：" + readableMessage(error));
         } finally {
-            try { if (stream != null) stream.release(); } catch (Throwable ignored) {}
-            try { if (recognizer != null) recognizer.release(); } catch (Throwable ignored) {}
+            try {
+                WhisperCpp.freeContext(whisperContext);
+            } catch (Throwable ignored) {
+            }
             if (!running) postStatus("AI 字幕已關閉");
         }
     }
 
-    private File copyModelAssets() throws IOException {
-        File modelDir = new File(context.getFilesDir(), ASSET_MODEL_DIR);
-        if (!modelDir.exists() && !modelDir.mkdirs()) {
-            throw new IOException("無法建立模型目錄");
+    private static float[] snapshotTail(float[] ring, int writeIndex, int count) {
+        int length = Math.min(count, ring.length);
+        int start = writeIndex - length;
+        if (start < 0) start += ring.length;
+        float[] result = new float[length];
+        int firstLength = Math.min(length, ring.length - start);
+        System.arraycopy(ring, start, result, 0, firstLength);
+        if (firstLength < length) {
+            System.arraycopy(ring, 0, result, firstLength, length - firstLength);
         }
-        AssetManager assets = context.getAssets();
-        String[] names = assets.list(ASSET_MODEL_DIR);
-        if (names == null || names.length == 0) throw new IOException("APK 未包含 AI 字幕模型");
-        String[] required = {
-                "encoder-epoch-99-avg-1.int8.onnx",
-                "decoder-epoch-99-avg-1.onnx",
-                "joiner-epoch-99-avg-1.int8.onnx",
-                "tokens.txt"
-        };
-        for (String name : required) {
-            File target = new File(modelDir, name);
-            if (target.isFile() && target.length() > 0) continue;
-            try (InputStream in = assets.open(ASSET_MODEL_DIR + "/" + name);
-                 FileOutputStream out = new FileOutputStream(target)) {
-                byte[] buffer = new byte[64 * 1024];
-                int count;
-                while ((count = in.read(buffer)) != -1) out.write(buffer, 0, count);
+        return result;
+    }
+
+    /**
+     * Each Whisper pass sees an overlapping rolling window. Remove words already
+     * shown in the prior window before handing the stable tail to the translator.
+     */
+    private static String extractNewText(String previous, String current) {
+        if (current == null || current.trim().isEmpty()) return "";
+        if (previous == null || previous.trim().isEmpty()) return current.trim();
+
+        String prevNorm = normalizeText(previous);
+        String currentNorm = normalizeText(current);
+        if (prevNorm.isEmpty()) return current.trim();
+        if (prevNorm.equals(currentNorm) || prevNorm.contains(currentNorm)) return "";
+
+        String[] prevWords = previous.trim().split("\\s+");
+        String[] currentWords = current.trim().split("\\s+");
+        int maxOverlap = Math.min(12, Math.min(prevWords.length, currentWords.length));
+        for (int overlap = maxOverlap; overlap >= 2; overlap--) {
+            boolean matches = true;
+            for (int i = 0; i < overlap; i++) {
+                String left = normalizeToken(prevWords[prevWords.length - overlap + i]);
+                String right = normalizeToken(currentWords[i]);
+                if (left.isEmpty() || !left.equals(right)) {
+                    matches = false;
+                    break;
+                }
+            }
+            if (matches) {
+                StringBuilder tail = new StringBuilder();
+                for (int i = overlap; i < currentWords.length; i++) {
+                    if (tail.length() > 0) tail.append(' ');
+                    tail.append(currentWords[i]);
+                }
+                return tail.toString().trim();
             }
         }
-        for (String name : required) {
-            File file = new File(modelDir, name);
-            if (!file.isFile() || file.length() == 0) throw new IOException("AI 模型檔案不完整：" + name);
+
+        if (currentNorm.contains(prevNorm)) {
+            int rawPos = current.toLowerCase(Locale.ROOT).indexOf(previous.toLowerCase(Locale.ROOT));
+            if (rawPos >= 0) {
+                int end = rawPos + previous.length();
+                if (end < current.length()) return current.substring(end).trim();
+                return "";
+            }
         }
-        return modelDir;
+        return current.trim();
+    }
+
+    private static String normalizeText(String text) {
+        return text == null ? "" : text.toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9']+", " ").trim();
+    }
+
+    private static String normalizeToken(String token) {
+        return token == null ? "" : token.toLowerCase(Locale.ROOT)
+                .replaceAll("^[^a-z0-9']+|[^a-z0-9']+$", "");
     }
 
     private void postStatus(String message) {
