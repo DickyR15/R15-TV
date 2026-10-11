@@ -255,7 +255,7 @@ def patch_setting_activity_layout(path: Path) -> None:
         </androidx.appcompat.widget.LinearLayoutCompat>
 '''
     if 'android:id="@+id/aiSubtitle"' not in text:
-        text = replace_once(text, root_anchor, root_anchor + "\\n" + row, path)
+        text = replace_once(text, root_anchor, root_anchor + "\n" + row, path)
     path.write_text(text, encoding="utf-8")
 
 
