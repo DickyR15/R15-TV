@@ -13,6 +13,7 @@
 ## 候選分析與決策
 
 - [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
+- [TCL Google TV／F1 即時字幕實機測試步驟](research/Hearth-TV-F1-POC-TEST.md)
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
@@ -29,7 +30,7 @@
 
 ## 下一步
 
-先比較各候選的音訊來源、Android TV 相容性、辨識語言、翻譯方式、延遲、記憶體需求與授權，再選擇最適合的技術基底。詳細驗收清單見研究計畫。
+候選建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。下一步先依 [TCL Google TV／F1 實機測試步驟](research/Hearth-TV-F1-POC-TEST.md) 驗證音訊擷取與本機模型延遲，再決定 MPV 整合方式。
 
 ## 授權與上游來源
 
