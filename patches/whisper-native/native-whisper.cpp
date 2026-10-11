@@ -22,7 +22,9 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeCreateContext(
     const char *path = env->GetStringUTFChars(model_path, nullptr);
     if (path == nullptr) return 0;
 
-    whisper_context *context = whisper_init_from_file(path);
+    whisper_context_params context_params = whisper_context_default_params();
+    context_params.use_gpu = false;
+    whisper_context *context = whisper_init_from_file_with_params(path, context_params);
     env->ReleaseStringUTFChars(model_path, path);
 
     if (context == nullptr) {
