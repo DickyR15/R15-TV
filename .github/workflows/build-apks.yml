@@ -290,8 +290,6 @@ jobs:
           MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
           MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
           MEDIA_SHA: ${{ env.MEDIA_SHA }}
-          LIBASS_REPOSITORY: ${{ env.LIBASS_REPOSITORY }}
-          LIBASS_SHA: ${{ env.LIBASS_SHA }}
         run: |
           mkdir -p dist
           jq -n \
@@ -303,7 +301,7 @@ jobs:
             --arg mediaSha "$MEDIA_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha},Media3:{repository:$mediaRepository,branch:$mediaBranch,sha:$mediaSha}}}' \
             > dist/SOURCE_REFS.json
-          printf 'TV=%s\nMedia3=%s\nLibass=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" "$LIBASS_SHA" > dist/SOURCE_COMMIT.txt
+          printf 'TV=%s\\nMedia3=%s\\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
@@ -332,8 +330,6 @@ jobs:
           MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
           MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
           MEDIA_SHA: ${{ env.MEDIA_SHA }}
-          LIBASS_REPOSITORY: ${{ env.LIBASS_REPOSITORY }}
-          LIBASS_SHA: ${{ env.LIBASS_SHA }}
           VERSION_NAME: ${{ steps.version.outputs.version_name }}
           VERSION_CODE: ${{ steps.version.outputs.version_code }}
           BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
@@ -385,10 +381,8 @@ jobs:
             --arg mediaRepository "$MEDIA_REPOSITORY" \
             --arg mediaBranch "$MEDIA_BRANCH" \
             --arg mediaSha "$MEDIA_SHA" \
-            --arg libassRepository "$LIBASS_REPOSITORY" \
-            --arg libassSha "$LIBASS_SHA" \
             --arg runUrl "$RUN_URL" \
-            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},libass:{repository:$libassRepository,commit:$libassSha},workflowRun:$runUrl}' \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
 
           (
@@ -400,7 +394,6 @@ jobs:
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
-            echo "- libass source: [FongMi/media@$LIBASS_SHA](https://github.com/FongMi/media/commit/$LIBASS_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
@@ -429,7 +422,6 @@ jobs:
             - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
             - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
             - Media3/MPV source: https://github.com/FongMi/media/commit/${{ env.MEDIA_SHA }}
-            - libass source: https://github.com/FongMi/media/commit/${{ env.LIBASS_SHA }}
             - Build metadata and SHA-256 checksums are attached.
             - The app does not include IPTV/live-playlist sources.
           files: |
