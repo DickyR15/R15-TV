@@ -8,7 +8,7 @@
 - 已加入 App 內 Whisper Base 模型下載器，來源為官方轉換模型倉庫的 ggml-base.bin；模型權重不包進 APK。
 - 播放音訊仍由既有 R15 TV 播放流程擷取，MPV、M3U／M3U8 不更換；ASR 只在背景工作執行緒執行。
 - 翻譯維持 Google ML Kit 裝置端 English → Chinese，接著由 OpenCC s2twp 轉為臺灣繁體與地區詞。
-- 新版 GitHub Actions 正在驗證 native 編譯、APK 封裝及資產檢查。**目前沒有證據證明已在 TCL Google TV 上成功擷取 MPV 音訊或達到可接受延遲。**
+- GitHub Actions [第 43 輪](https://github.com/DickyR15/R15-TV/actions/runs/38135426602) 已成功完成 native 編譯、APK 封裝，並通過 Whisper JNI 與 OpenCC 資產檢查；[POC-43 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)。**目前沒有證據證明已在 TCL Google TV 上成功擷取 MPV 音訊或達到可接受延遲。**
 
 ## 官方來源與模型選擇
 
