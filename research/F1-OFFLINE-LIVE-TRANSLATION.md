@@ -4,7 +4,13 @@
 
 ## 建議方案
 
-### 第一階段：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
+### 先做低成本可行性測試
+
+先用已成功建置的 Hearth 0.23.9 Cloud + Local QA 版，在 TCL Google TV 實測它內建的 Whisper 本機語音辨識與本機翻譯橋接。選擇本機模型、不設定任何雲端供應商或 API 金鑰。具體安裝、模型與驗收步驟見 [Hearth TV／F1 POC 測試手冊](Hearth-TV-F1-POC-TEST.md)。Hearth 的模型目錄已提供 Whisper tiny/base/small 等本機模型選擇，另有 Hy-MT2 等本機翻譯模型；這比先把兩套模型引擎自行塞進 R15 TV 更快驗證 SoC 效能和音訊擷取限制。
+
+Hearth 這個獨立 App 只是實機可行性測試，不是 R15 TV 最終方案；如果跨 App 音訊擷取受限，R15 TV 仍應評估在自有 MPV 音訊輸出路徑擷取 PCM，再直接把 Whisper／本機翻譯接進播放器。
+
+### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
 1. **音訊來源：優先從 R15 TV 自己的 MPV 播放管線取得 PCM。** 這樣不必依賴別的 App 是否允許 Android `AudioPlaybackCapture`。先確認目前的 MPV wrapper 是否公開 PCM/audio tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 是一個調查線索，但還不能證明可以安全地分流 PCM 給 ASR。
 2. **英文語音辨識：先評估 [whisper.cpp](https://github.com/ggml-org/whisper.cpp)。** 它使用 MIT 授權，支援 Android，提供連續取樣的示範流程。由於 F1 國際轉播解說通常以英文為主，先測 `base.en` 量化模型；若速度與 RAM 允許，再比較 `small.en`。Android 上模型越大不代表能維持即時，必須以實際 SoC 跑測試。
