@@ -18,7 +18,7 @@
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**不要求先安裝 Hearth。** 優先直接研究 R15 TV 的 MPV 原生音訊接入，保留 M3U/M3U8 與 MPV；Hearth 只作為可選參考工具。尚未完成 PCM tap 或即時翻譯功能。
+**不要求先安裝 Hearth。** 已新增 R15 TV 內部的 AudioPlaybackCapture＋本機串流 ASR 實驗原型，先測試是否能辨識 MPV 正在播放的音訊；保留 M3U/M3U8 與 MPV。此版還沒有英翻中功能，且仍待 CI 建置及電視實機驗證。
 
 ## 優先研究的開源專案
 
@@ -31,7 +31,7 @@
 
 ## 下一步
 
-候選建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。下一步先依 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 釐清可接入 PCM 的原生介面，再做可重現建置；Hearth 實機測試改為可選，不是必要前置步驟。
+候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。新 POC 的 [建置工作流](.github/workflows/build-audio-capture-poc.yml) 正在驗證 App 內音訊擷取＋ASR APK；這是實驗測試版，尚未實機驗收，也不含翻譯。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
 
 ## 授權與上游來源
 
