@@ -64,5 +64,7 @@
 - 詳細方案與驗收標準：[F1 直播免費離線字幕方案](F1-OFFLINE-LIVE-TRANSLATION.md)。
 - 第一個 ASR 基準：whisper.cpp 英文模型 `base.en`，之後視效能比較 `small.en`；需在目標電視實測。
 - 翻譯需使用本機 English→Chinese 模型；OpenCC `s2twp` 僅負責轉成臺灣正體與地區用詞，不取代翻譯模型。
-- App 內音訊擷取＋ASR＋本機翻譯原型已在 [GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 建置成功，並通過模型與 OpenCC 資產檢查；[測試 APK 可下載](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。目前尚未完成電視實機音訊擷取、品質與延遲驗收。\n- `setAudioOutputListener(effect::applyAudioEffect)` 是音效通知，不可當作 PCM callback。若 Android 擷取在 TV 的 MPV 路徑下回傳靜音，native MPV PCM tap 必須先確認能安全分流。\n- Whisper Base 多語模型改採獨立下載選項的規劃見 [WHISPER-BASE-MULTILINGUAL-PLAN.md](WHISPER-BASE-MULTILINGUAL-PLAN.md)。
+- App 內音訊擷取＋ASR＋本機翻譯原型已在 [GitHub Actions 第 20 輪](https://github.com/DickyR15/R15-TV/actions/runs/38132010463) 建置成功，並通過模型與 OpenCC 資產檢查；[測試 APK 可下載](https://github.com/DickyR15/R15-TV/actions/runs/38132010463/artifacts/11699254020)。目前尚未完成電視實機音訊擷取、品質與延遲驗收。
+- `setAudioOutputListener(effect::applyAudioEffect)` 是音效通知，不可當作 PCM callback。若 Android 擷取在 TV 的 MPV 路徑下回傳靜音，native MPV PCM tap 必須先確認能安全分流。
+- Whisper Base 多語模型改採獨立下載選項的規劃見 [WHISPER-BASE-MULTILINGUAL-PLAN.md](WHISPER-BASE-MULTILINGUAL-PLAN.md)。
 - 若 TV SoC 無法維持可接受延遲，改評估本機區域網路 PC 執行模型；仍不以雲端 API 為必要條件。
