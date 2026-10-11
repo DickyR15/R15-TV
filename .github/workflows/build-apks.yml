@@ -254,28 +254,6 @@ jobs:
           test -s "$model_target/joiner-epoch-99-avg-1.int8.onnx"
           echo "Public sherpa-onnx runtime and AI subtitle prototype staged for both ARM ABIs."
 
-      - name: Verify AI subtitle runtime and model are present in APKs
-        shell: bash
-        env:
-          BUILD_MODE: ${{ steps.signing.outputs.mode }}
-        run: |
-          set -euo pipefail
-          if [[ "$BUILD_MODE" == "release" ]]; then
-            apk_root="sources/TV/Release/apk"
-          else
-            apk_root="sources/TV/app/build/outputs/apk"
-          fi
-          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
-          test "${#apks[@]}" -eq 4
-          for apk in "${apks[@]}"; do
-            entries=$(unzip -Z1 "$apk")
-            grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" || grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
-            echo "AI subtitle files found: $apk"
-          done
-
       - name: Configure signing and local.properties
         id: signing
         working-directory: sources/TV
@@ -407,6 +385,28 @@ jobs:
           ./gradlew --no-daemon --stacktrace \
             :app:assembleLeanbackDebug \
             :app:assembleMobileDebug
+
+      - name: Verify AI subtitle runtime and model are present in APKs
+        shell: bash
+        env:
+          BUILD_MODE: ${{ steps.signing.outputs.mode }}
+        run: |
+          set -euo pipefail
+          if [[ "$BUILD_MODE" == "release" ]]; then
+            apk_root="sources/TV/Release/apk"
+          else
+            apk_root="sources/TV/app/build/outputs/apk"
+          fi
+          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
+          test "${#apks[@]}" -eq 4
+          for apk in "${apks[@]}"; do
+            entries=$(unzip -Z1 "$apk")
+            grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" || grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            echo "AI subtitle files found: $apk"
+          done
 
       - name: Package APKs and verification metadata
         env:
