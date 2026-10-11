@@ -260,8 +260,8 @@ jobs:
           test -s "$model_target/encoder-epoch-99-avg-1.int8.onnx"
           test -s "$model_target/decoder-epoch-99-avg-1.onnx"
           test -s "$model_target/joiner-epoch-99-avg-1.int8.onnx"
-          echo "Public sherpa-onnx runtime and Android playback-capture ASR POC staged for both ARM ABIs."
-          echo "This prototype transcribes speech only; English-to-Chinese translation is not implemented in this build."
+          echo "Public sherpa-onnx runtime, model, Android playback-capture ASR, ML Kit local translation and OpenCC Taiwan conversion staged."
+          echo "English-to-Chinese translation runs on-device after its first-use model download; real-TV audio capture and latency still need testing."
 
       - name: Configure debug signing and local.properties
         working-directory: sources/TV
