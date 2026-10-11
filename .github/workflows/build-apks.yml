@@ -303,7 +303,7 @@ public final class DanmakuPlayerViewController {
     playerBound = false;
   }
 }
-JAVA
+          JAVA
           grep -q "class DanmakuPlayerViewController" "$bridge"
 
       - name: Fetch matching FongMi libass source and pinned native submodule
