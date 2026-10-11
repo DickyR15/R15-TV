@@ -1,10 +1,10 @@
 # R15 TV 即時繁體字幕 POC：最短測試步驟
 
-> 這是研究分支的實驗測試版，不是正式發行版。POC-43 雖然建置成功，但它有一個已確認的缺陷：字幕面板只接到點播用的 VideoActivity，沒有接到 M3U／M3U8 直播用的 LiveActivity。研究分支已修正這個接線，並將 ExoPlayer 的 HLS 品質選擇改為自適應；請只安裝這些修改後最新成功的 Artifact。
+> 這是研究分支的實驗測試版，不是正式發行版。最新 [第 58 輪建置](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功並上傳 [POC-58 ZIP]( https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666 )；已通過 Android TV APK 編譯、Whisper JNI 與 OpenCC 資產檢查。仍需在 TCL Google TV 實機確認音訊擷取、即時翻譯和 4K 播放效果。
 
 ## 安裝與第一次設定
 
-1. 請從 [Audio Capture POC 工作流](https://github.com/DickyR15/R15-TV/actions/workflows/build-audio-capture-poc.yml)下載套用 LiveActivity 修正後的最新成功 Artifact。不要再用 [POC-43 舊包](https://github.com/DickyR15/R15-TV/actions/runs/38135426602/artifacts/11701037822)測試 M3U／M3U8 直播字幕，因為舊包不會顯示直播字幕設定。
+1. 直接下載 [R15 TV Whisper Base Subtitle POC-58 ZIP（約 80 MB）](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666)。若連結過期，開啟[第 58 輪建置紀錄](https://github.com/DickyR15/R15-TV/actions/runs/38143827319)，在 Artifacts 下載 `R15 TV Whisper Base Subtitle POC-58`。舊版 POC-43 不含完整直播字幕入口，請勿用來驗證現在的 M3U／M3U8 功能。
 2. 解壓縮後安裝 R15 TV-POC-leanback-arm64-v8a.apk。測試版套件名稱應為 com.dicky.r15tv.poc、顯示名稱為「R15 TV 字幕測試」，不會覆蓋既有 R15 TV 正式 App。若最新工作流失敗，先不要安裝。
 3. 在測試版內重新載入 M3U／M3U8 播放清單；由於這是獨立測試 App，原 App 的清單與設定不會自動複製過來。播放器仍保留 MPV。
 4. 先到 **主畫面 → 設定 → AI 字幕／語音設定** 下載 Whisper Base 多語模型。模型權重不在 APK 裡，而是直接下載到 App 私有儲存空間；APK 內含 `libr15whisper.so`，不會把約 148 MB 的 Base 權重打包進去。
