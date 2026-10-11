@@ -301,7 +301,7 @@ jobs:
             --arg mediaSha "$MEDIA_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha},Media3:{repository:$mediaRepository,branch:$mediaBranch,sha:$mediaSha}}}' \
             > dist/SOURCE_REFS.json
-          printf 'TV=%s\\nMedia3=%s\\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
+          printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
 
       - name: Build signed release APKs
         if: steps.signing.outputs.mode == 'release'
