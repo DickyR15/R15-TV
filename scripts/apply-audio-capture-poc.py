@@ -80,6 +80,18 @@ def patch_manifest(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+
+
+def patch_exo_adaptive_bitrate(path: Path) -> None:
+    """Let ExoPlayer adapt HLS quality to measured throughput instead of forcing 4K."""
+    text = path.read_text(encoding="utf-8")
+    old = "builder.setForceHighestSupportedBitrate(true);"
+    new = "builder.setForceHighestSupportedBitrate(false);"
+    if new in text:
+        return
+    text = replace_once(text, old, new, path)
+    path.write_text(text, encoding="utf-8")
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
@@ -95,9 +107,10 @@ def main() -> None:
     manifest = tv / "app/src/main/AndroidManifest.xml"
     gradle = tv / "app/build.gradle"
     proguard = tv / "app/proguard-rules.pro"
+    exo_util = tv / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java"
 
     activities = [leanback_video, mobile_video, leanback_live, mobile_live]
-    required = activities + [manifest, gradle, proguard]
+    required = activities + [manifest, gradle, proguard, exo_util]
     for path in required:
         if not path.is_file():
             raise SystemExit(f"Missing required upstream source file: {path}")
@@ -156,6 +169,8 @@ def main() -> None:
     # Attach to both so the AI subtitle controls are available while watching live channels.
     for activity_path in activities:
         patch_player_activity(activity_path)
+    # On adaptive HLS streams, avoid forcing the highest bitrate when it causes rebuffering.
+    patch_exo_adaptive_bitrate(exo_util)
 
     for path in activities:
         patched = path.read_text(encoding="utf-8")
