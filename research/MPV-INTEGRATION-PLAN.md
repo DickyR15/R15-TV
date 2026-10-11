@@ -1,6 +1,6 @@
 # R15 TV：MPV 內建即時字幕整合調查
 
-**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。最新 [第 58 輪](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功編譯 Android TV debug APK，通過 Whisper JNI／OpenCC 資產檢查，並加入主設定 AI 字幕頁、播放畫面的固定入口、EXO/HLS 自動適應碼率及 MPV 回報不支援格式時的 EXO 回退。Whisper 模型不包進 APK，首次由使用者下載。[POC-58 測試包]( https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666 ) 已上傳；音訊擷取、翻譯延遲與 4K 效果仍須在實際 Google TV 驗證。  
+**狀態：** 第一版已定為 Whisper Base 多語 + ML Kit 本機英翻中 + OpenCC S2TWP。最新 [第 58 輪](https://github.com/DickyR15/R15-TV/actions/runs/38143827319) 已成功編譯 Android TV debug APK，通過 Whisper JNI／OpenCC 資產檢查，並加入主設定 AI 字幕頁、播放畫面的固定入口、EXO/HLS 自動適應碼率及 MPV 回報不支援格式時的 EXO 回退。Whisper 模型不包進 APK，首次由使用者下載。[POC-58 測試包](https://github.com/DickyR15/R15-TV/actions/runs/38143827319/artifacts/11703957666) 已上傳；音訊擷取、翻譯延遲與 4K 效果仍須在實際 Google TV 驗證。  
 **目標：** 使用者仍像平常一樣播放 M3U/M3U8；字幕在 R15 TV 播放畫面內顯示，不要求另開 Hearth，也不把 MPV 換掉。
 
 ## 為什麼不要求先測 Hearth
