@@ -1,0 +1,499 @@
+name: Build R15 TV Audio Capture POC
+run-name: R15 TV Audio Capture POC (manual or code update)
+
+on:
+  push:
+    branches:
+      - "research/realtime-subtitles-tv"
+    paths:
+      - ".github/workflows/build-audio-capture-poc.yml"
+      - "patches/audio-capture/**"
+      - "scripts/apply-audio-capture-poc.py"
+      - "third-party-licenses/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r15tv-audio-capture-poc-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  SOURCE_REPOSITORY: FongMi/TV
+  SOURCE_BRANCH: fongmi
+  # Pin to the last TV revision before the public Media3/libass API mismatch.
+  SOURCE_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
+  MEDIA_REPOSITORY: FongMi/media
+  MEDIA_BRANCH: release-1.11.0-fongmi
+  MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
+  NDK_VERSION: 29.0.14206865
+  NDK_VERSION_SHERPA: 28.2.13676358
+  SHERPA_ONNX_COMMIT: 9db1af1871ed78cee9357c23898e5a7d8702d21a
+
+jobs:
+  build:
+    name: Build R15 TV from public FongMi source
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout R15 TV build configuration
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Resolve pinned public source revision
+        id: sources
+        env:
+          PINNED_SOURCE_SHA: ${{ env.SOURCE_SHA }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$PINNED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pinned public source SHA: $PINNED_SOURCE_SHA" >&2
+            exit 1
+          fi
+          mkdir -p build
+          echo "tv_sha=$PINNED_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$PINNED_SOURCE_SHA" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
+          echo "Pinned public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${PINNED_SOURCE_SHA}"
+          echo "Reason: the latest TV branch requires libass APIs not published in the matching public Media3 source."
+          
+      - name: Fetch public FongMi/TV source without credentials
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+        run: |
+          mkdir -p sources/TV
+          git -C sources/TV init
+          git -C sources/TV remote add origin https://github.com/FongMi/TV.git
+          git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
+          git -C sources/TV checkout --detach FETCH_HEAD
+
+      - name: Fetch pinned FongMi Media3 and MPV source
+        env:
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
+        run: |
+          set -euo pipefail
+          mkdir -p sources/media
+          git -C sources/media init
+          git -C sources/media remote add origin https://github.com/FongMi/media.git
+          git -C sources/media fetch --depth=1 origin "$MEDIA_SHA"
+          git -C sources/media checkout --detach FETCH_HEAD
+          actual_sha=$(git -C sources/media rev-parse HEAD)
+          test "$actual_sha" = "$MEDIA_SHA"
+          test -f sources/media/build-logic-settings/src/main/kotlin/gradlebuild.media3-settings-logic.settings.gradle.kts
+          test -f sources/media/libraries/mpvplayer/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java
+          echo "Pinned FongMi Media3/MPV source: $actual_sha"
+
+      - name: Verify checkout and required public dependencies
+        env:
+          EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha=$(git -C sources/TV rev-parse HEAD)
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test -f sources/TV/gradlew
+          test -f sources/TV/app/build.gradle
+          test -f sources/TV/app/libs/forcetech-release.aar
+          test -f sources/TV/LICENSE.md
+          test -f sources/TV/chaquo/requirements.txt
+          mkdir -p sources/TV/app/src/main/java/androidx/media3/ui/danmaku
+          chmod +x sources/TV/gradlew
+          echo "Public source checked out: FongMi/TV@$actual_sha"
+          echo "This build does not include IPTV/live-playlist sources."
+
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: sources/TV/**/*.gradle*
+
+      - name: Set up Python for Chaquopy build
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: sources/TV/chaquo/requirements.txt
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android build packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;${NDK_VERSION}" \
+            "ndk;${NDK_VERSION_SHERPA}"
+
+      - name: Build official FongMi Media3 and MPV AAR dependencies
+        working-directory: sources/media
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+            :lib-common:assembleRelease \
+            :lib-container:assembleRelease \
+            :lib-database:assembleRelease \
+            :lib-datasource:assembleRelease \
+            :lib-datasource-okhttp:assembleRelease \
+            :lib-datasource-rtmp:assembleRelease \
+            :lib-decoder:assembleRelease \
+            :lib-decoder-ffmpeg:assembleRelease \
+            :lib-decoder-mpegh:assembleRelease \
+            :lib-effect:assembleRelease \
+            :lib-exoplayer:assembleRelease \
+            :lib-exoplayer-dash:assembleRelease \
+            :lib-exoplayer-hls:assembleRelease \
+            :lib-exoplayer-rtsp:assembleRelease \
+            :lib-exoplayer-smoothstreaming:assembleRelease \
+            :lib-extractor:assembleRelease \
+            :lib-mpvplayer:assembleRelease \
+            :lib-session:assembleRelease \
+            :lib-ui:assembleRelease \
+            :lib-ui-danmaku:assembleRelease
+
+          target="$GITHUB_WORKSPACE/sources/TV/app/libs"
+          mkdir -p "$target"
+          copied=0
+          while IFS= read -r aar_name; do
+            [[ -n "$aar_name" ]] || continue
+            module="${aar_name#lib-}"
+            module="${module%-release.aar}"
+            module_dir="${module//-/_}"
+            aar_path="libraries/$module_dir/buildout/outputs/aar/$aar_name"
+            if [[ ! -f "$aar_path" ]]; then
+              aar_path=$(find libraries -type f -name "$aar_name" -print -quit)
+            fi
+            if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
+              echo "Missing expected AAR: $aar_name" >&2
+              exit 1
+            fi
+            cp "$aar_path" "$target/$aar_name"
+            copied=$((copied + 1))
+          done < move.txt
+
+          if [[ "$copied" -ne 20 ]]; then
+            echo "Expected 20 Media3/MPV AARs, copied $copied." >&2
+            exit 1
+          fi
+          echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
+          ls -lh "$target"/lib-*-release.aar
+          sha256sum "$target"/lib-*-release.aar
+
+      - name: Build speech runtime/model and stage local translation POC
+        shell: bash
+        env:
+          BUILD_SHARED_LIBS: "OFF"
+          SHERPA_ONNX_ENABLE_TTS: "OFF"
+          SHERPA_ONNX_ENABLE_SPEAKER_DIARIZATION: "OFF"
+          SHERPA_ONNX_ENABLE_BINARY: "OFF"
+          SHERPA_ONNX_ENABLE_C_API: "OFF"
+          SHERPA_ONNX_ENABLE_RKNN: "OFF"
+          SHERPA_ONNX_ENABLE_QNN: "OFF"
+        run: |
+          set -euo pipefail
+          mkdir -p sources/sherpa-onnx
+          git -C sources/sherpa-onnx init
+          git -C sources/sherpa-onnx remote add origin https://github.com/k2-fsa/sherpa-onnx.git
+          git -C sources/sherpa-onnx fetch --depth=1 origin "$SHERPA_ONNX_COMMIT"
+          git -C sources/sherpa-onnx checkout --detach FETCH_HEAD
+          test "$(git -C sources/sherpa-onnx rev-parse HEAD)" = "$SHERPA_ONNX_COMMIT"
+
+          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/${NDK_VERSION_SHERPA}"
+          test -x "$ANDROID_NDK/ndk-build"
+          (
+            cd sources/sherpa-onnx
+            ./build-android-arm64-v8a.sh
+            ./build-android-armv7-eabi.sh
+            mvn -B -f sherpa-onnx/java-api/pom.xml clean package
+          )
+
+          mkdir -p sources/TV/app/libs
+          mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a
+          mkdir -p sources/TV/app/src/main/jniLibs/armeabi-v7a
+          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/target/sherpa-onnx-jvm-1.13.8.jar sources/TV/app/libs/sherpa-onnx.jar
+          install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
+          install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
+
+          model_archive="$RUNNER_TEMP/sherpa-onnx-small-zh-en.tar.bz2"
+          curl --fail --silent --show-error --location \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16.tar.bz2" \
+            --output "$model_archive"
+          tar -xjf "$model_archive" -C "$RUNNER_TEMP"
+          model_source="$RUNNER_TEMP/sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16"
+          model_target="sources/TV/app/src/main/assets/ai-subtitle-model"
+          mkdir -p "$model_target"
+          install -m 644 "$model_source/encoder-epoch-99-avg-1.int8.onnx" "$model_target/"
+          install -m 644 "$model_source/decoder-epoch-99-avg-1.onnx" "$model_target/"
+          install -m 644 "$model_source/joiner-epoch-99-avg-1.int8.onnx" "$model_target/"
+          install -m 644 "$model_source/tokens.txt" "$model_target/"
+          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/SHERPA-ONNX-LICENSE.txt"
+          install -m 644 sources/sherpa-onnx/LICENSE "$model_target/ASR-MODEL-APACHE-2.0-LICENSE.txt"
+          cat > "$model_target/ASR-MODEL-LICENSE-NOTICE.txt" <<'EOF_MODEL_LICENSE'
+          Model: sherpa-onnx-streaming-zipformer-small-bilingual-zh-en-2023-02-16
+          Official sherpa-onnx model documentation says this small model was converted from:
+          https://huggingface.co/csukuangfj/k2fsa-zipformer-bilingual-zh-en-t
+          The Hugging Face model card identifies the model as Apache-2.0 licensed.
+          Model files in this APK are the small streaming conversion published by sherpa-onnx.
+          Retain this notice and the accompanying Apache-2.0 license with redistributed copies.
+          EOF_MODEL_LICENSE
+          cp "$model_source/README.md" "$model_target/ASR-MODEL-README.txt" || true
+
+          python3 -m py_compile scripts/apply-audio-capture-poc.py
+          python3 scripts/apply-audio-capture-poc.py --tv-dir sources/TV --patch-dir patches/audio-capture
+          grep -Fq 'android:allowAudioPlaybackCapture="true"' sources/TV/app/src/main/AndroidManifest.xml
+          grep -Fq 'android.permission.RECORD_AUDIO' sources/TV/app/src/main/AndroidManifest.xml
+          grep -Fq 'addMatchingUid(Process.myUid())' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java
+          grep -Fq "com.google.mlkit:translate:17.0.3" sources/TV/app/build.gradle
+          grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
+          test -s sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
+          grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
+          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
+          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java
+          test -s sources/TV/app/libs/sherpa-onnx.jar
+          test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
+          test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
+          test -s "$model_target/encoder-epoch-99-avg-1.int8.onnx"
+          test -s "$model_target/decoder-epoch-99-avg-1.onnx"
+          test -s "$model_target/joiner-epoch-99-avg-1.int8.onnx"
+          echo "Public sherpa-onnx runtime, model, Android playback-capture ASR, ML Kit local translation and OpenCC Taiwan conversion staged."
+          echo "English-to-Chinese translation runs on-device after its first-use model download; real-TV audio capture and latency still need testing."
+
+      - name: Configure debug signing and local.properties
+        working-directory: sources/TV
+        run: |
+          set -euo pipefail
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_PATH"
+          cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$SDK_PATH
+          storeFile=../r15tv-debug-placeholder.jks
+          keyAlias=r15tv-debug-placeholder
+          storePassword=not-used-for-debug
+          keyPassword=not-used-for-debug
+          EOF_PROPERTIES
+          echo "Debug-only APK build. This workflow does not publish a release or require signing secrets."
+
+      - name: Set R15 TV package metadata and app label
+        id: version
+        working-directory: sources/TV
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          code_match = re.search(r"(?m)^\s*versionCode\s+(\d+)\s*$", text)
+          name_match = re.search(r'(?m)^\s*versionName\s+"([^"]+)"\s*$', text)
+          if not code_match or not name_match:
+              raise SystemExit("Unable to read upstream versionCode/versionName from app/build.gradle")
+
+          base_code = int(code_match.group(1))
+          base_name = name_match.group(1)
+          run_number = int(os.environ["RUN_NUMBER"])
+          source_sha = os.environ["SOURCE_SHA"]
+          version_code = base_code * 1_000_000 + run_number
+          if version_code > 2_100_000_000:
+              raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
+          version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
+
+          text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
+          text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
+          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv.poc"', text, count=1)
+          gradle_file.write_text(text, encoding="utf-8")
+
+          for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
+              xml = strings_file.read_text(encoding="utf-8")
+              changed = re.sub(
+                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+                  r"\g<1>R15 TV 字幕測試\g<2>",
+                  xml,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if changed != xml:
+                  strings_file.write_text(changed, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"base_version_name={base_name}\n")
+              output.write(f"base_version_code={base_code}\n")
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+          print(f"R15 TV subtitle POC version: {version_name} (code {version_code})")
+          print("Application ID changed to com.dicky.r15tv.poc so it can coexist with any installed R15 TV build.")
+          PY
+
+      - name: Record exact upstream source revisions
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          SOURCE_REPOSITORY: ${{ env.SOURCE_REPOSITORY }}
+          SOURCE_BRANCH: ${{ env.SOURCE_BRANCH }}
+          MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
+          MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
+        run: |
+          mkdir -p dist
+          jq -n \
+            --arg repository "$SOURCE_REPOSITORY" \
+            --arg branch "$SOURCE_BRANCH" \
+            --arg sha "$SOURCE_SHA" \
+            --arg mediaRepository "$MEDIA_REPOSITORY" \
+            --arg mediaBranch "$MEDIA_BRANCH" \
+            --arg mediaSha "$MEDIA_SHA" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha},Media3:{repository:$mediaRepository,branch:$mediaBranch,sha:$mediaSha}}}' \
+            > dist/SOURCE_REFS.json
+          printf 'TV=%s\nMedia3=%s\n' "$SOURCE_SHA" "$MEDIA_SHA" > dist/SOURCE_COMMIT.txt
+
+      - name: Build experimental Android TV debug APK (arm64 only)
+        working-directory: sources/TV
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+            :app:assembleLeanbackDebug
+
+      - name: Verify playback-capture ASR and translation assets in experimental APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk_root="sources/TV/app/build/outputs/apk"
+          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
+          test "${#apks[@]}" -eq 2
+          for apk in "${apks[@]}"; do
+            entries=$(unzip -Z1 "$apk")
+            grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/decoder-epoch-99-avg-1.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/joiner-epoch-99-avg-1.int8.onnx" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-model/tokens.txt" <<<"$entries"
+            grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
+            if ! grep -Fq "lib/arm64-v8a/libChineseConverter.so" <<<"$entries" \
+               && ! grep -Fq "lib/armeabi-v7a/libChineseConverter.so" <<<"$entries"; then
+              echo "Missing OpenCC native library in $apk" >&2
+              exit 1
+            fi
+            if ! grep -Fq "lib/arm64-v8a/libsherpa-onnx-jni.so" <<<"$entries" \
+               && ! grep -Fq "lib/armeabi-v7a/libsherpa-onnx-jni.so" <<<"$entries"; then
+              echo "Missing sherpa-onnx JNI library in $apk" >&2
+              exit 1
+            fi
+            echo "ASR model and native runtime verified in $apk"
+          done
+          echo "ASR runtime, OpenCC dictionary and OpenCC native library verified. Device audio capture, translation model download, translation quality and latency still require TV testing."
+
+      - name: Package APKs and verification metadata
+        env:
+          BUILD_MODE: debug
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          MEDIA_REPOSITORY: ${{ env.MEDIA_REPOSITORY }}
+          MEDIA_BRANCH: ${{ env.MEDIA_BRANCH }}
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+          BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TV_DIR="$GITHUB_WORKSPACE/sources/TV"
+          mkdir -p dist
+          if [[ "$BUILD_MODE" == "release" ]]; then
+            APK_ROOT="$TV_DIR/Release/apk"
+          else
+            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+          fi
+          found=0
+          while IFS= read -r -d '' apk; do
+            lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
+            case "$lower" in
+              *leanback*arm64*v8a*) name="R15 TV-POC-leanback-arm64-v8a.apk" ;;
+              *) continue ;;
+            esac
+            if [[ -e "dist/$name" ]]; then
+              continue
+            fi
+            cp "$apk" "dist/$name"
+            found=$((found + 1))
+          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
+          if [[ "$found" -ne 1 ]]; then
+            echo "Expected the single Android TV arm64 APK under $APK_ROOT but packaged $found." >&2
+            find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
+            exit 1
+          fi
+
+          git -C "$TV_DIR" add -N \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleOverlay.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java \
+            app/src/leanback/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
+            app/src/mobile/java/com/fongmi/android/tv/ui/activity/VideoActivity.java \
+            app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
+          git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
+          git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
+          cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          cp "$GITHUB_WORKSPACE/third-party-licenses/ANDROID-OPENCC-MIT.txt" dist/
+          cp "$GITHUB_WORKSPACE/third-party-licenses/OPENCC-APACHE-2.0.txt" dist/
+          cp "$GITHUB_WORKSPACE/third-party-licenses/ML-KIT-AND-SUBTITLE-NOTICES.md" dist/
+          jq -n \
+            --arg mode "$BUILD_MODE" \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg baseVersionName "$BASE_VERSION_NAME" \
+            --argjson baseVersionCode "$BASE_VERSION_CODE" \
+            --arg repository "FongMi/TV" \
+            --arg branch "fongmi" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg mediaRepository "$MEDIA_REPOSITORY" \
+            --arg mediaBranch "$MEDIA_BRANCH" \
+            --arg mediaSha "$MEDIA_SHA" \
+            --arg runUrl "$RUN_URL" \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},workflowRun:$runUrl}' \
+            > dist/BUILD_INFO.json
+
+          (
+            cd dist
+            sha256sum "R15 TV-POC-"*.apk > SHA256SUMS.txt
+          )
+          {
+            echo "## R15 TV Audio Playback Capture POC build result"
+            echo "- For easier installation, this artifact contains only the Android TV arm64 APK."
+            echo "- Mode: $BUILD_MODE"
+            echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
+            echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
+            echo "- Version: $VERSION_NAME ($VERSION_CODE)"
+            if [[ "$BUILD_MODE" == "debug" ]]; then
+              echo "- Experimental debug APK only; not a release and not ready for general use."
+            echo "- Scope: in-app playback audio capture + streaming ASR + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
+            echo "- Initial translation model download requires network; translation is intended to run locally after model download."
+            else
+              echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APKs and source metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15 TV Audio Capture POC-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
