@@ -14,11 +14,12 @@
 
 - [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md)
 - [F1 直播免費離線字幕方案](research/F1-OFFLINE-LIVE-TRANSLATION.md)
+- [免費本機翻譯與臺灣繁體轉換方案](research/LOCAL-TRANSLATION-ENGINE.md)
 - [TCL Google TV／F1 即時字幕實機測試步驟](research/Hearth-TV-F1-POC-TEST.md)
 - [候選專案技術比對與決策紀錄](research/CANDIDATE-COMPARISON.md)
 - [候選 APK 建置工作流](.github/workflows/research-candidate-validation.yml)：固定上游 commit、嘗試建置 APK，並保存日誌與 SHA-256。
 
-**不要求先安裝 Hearth。** 已新增 R15 TV 內部的 AudioPlaybackCapture＋本機串流 ASR 實驗原型，先測試是否能辨識 MPV 正在播放的音訊；保留 M3U/M3U8 與 MPV。此版還沒有英翻中功能，且仍待 CI 建置及電視實機驗證。
+**不要求先安裝 Hearth。** 原型程式已加入 App 內音訊擷取、串流 ASR、ML Kit 本機英文→中文翻譯及 OpenCC 臺灣繁體轉換；保留 M3U/M3U8 與 MPV。最新程式碼仍待 GitHub Actions 建置驗證及電視實機測試，暫時不能稱為可用正式版。首次使用會下載翻譯模型，之後翻譯在本機執行，無須付費 API。
 
 ## 優先研究的開源專案
 
@@ -31,7 +32,7 @@
 
 ## 下一步
 
-候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。新 POC 的 [建置工作流](.github/workflows/build-audio-capture-poc.yml) 正在驗證 App 內音訊擷取＋ASR APK；這是實驗測試版，尚未實機驗收，也不含翻譯。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
+候選專案建置已在 [GitHub Actions 第 4 輪](https://github.com/DickyR15/R15-TV/actions/runs/38124838006) 成功。新 POC 的 [建置工作流](.github/workflows/build-audio-capture-poc.yml) 正在／排隊驗證 APK；建置成功仍不代表電視實機的 MPV 音訊擷取、翻譯品質或即時延遲已通過。若系統擷取在 MPV 情境下不可用，才退回 [MPV 原生音訊接入與整合計畫](research/MPV-INTEGRATION-PLAN.md) 所列的 native tap 路線。
 
 ## 授權與上游來源
 
