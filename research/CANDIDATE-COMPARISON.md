@@ -53,3 +53,15 @@ FongMi/TV 公開 README 確認它同時支援 Media3/ExoPlayer 與 MPV。檢查 
 - FongMi/TV README：<https://github.com/FongMi/TV>
 
 所有上述項目都是根據公開文件與部分原始碼做的桌面研究結論，並非在 TCL 電視上完成的測試結果。後續建置工作流會固定候選 commit 並記錄建置日誌、APK 與 SHA-256；只有實際 CI 成功才標記為「建置成功」。
+
+
+## CI 驗證結果（2026-10-11）
+
+GitHub Actions 第 4 輪成功完成三個候選的建置；各 Gradle 任務輸出 `BUILD SUCCESSFUL`。這是上游程式碼在 GitHub runner 上的建置證據，**不是** TV 實機或 F1 直播辨識／翻譯的驗收證據。
+
+- [完整工作流與日誌](https://github.com/DickyR15/R15-TV/actions/runs/38124838006)
+- [Hearth QA APK、日誌與 SHA-256（約 502 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11697605150)
+- [SUBRIMA debug APK、日誌與 SHA-256（約 65 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696653814)
+- [OpenTV debug APK、日誌與 SHA-256（約 29 MB，artifact 暫存 14 天）](https://github.com/DickyR15/R15-TV/actions/runs/38124838006/artifacts/11696980988)
+
+下一步優先使用 Hearth 的離線／FOSS QA APK，在目標 TV 測試可用性與音訊擷取；同時保留 SUBRIMA 以供對照。不應把這些候選 APK 直接重命名為 R15 TV 或當作 R15 TV 正式版發布。
