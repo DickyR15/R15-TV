@@ -218,13 +218,13 @@ jobs:
             cd sources/sherpa-onnx
             ./build-android-arm64-v8a.sh
             ./build-android-armv7-eabi.sh
-            make -C sherpa-onnx/java-api clean all
+            mvn -B -f sherpa-onnx/java-api/pom.xml clean package
           )
 
           mkdir -p sources/TV/app/libs
           mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a
           mkdir -p sources/TV/app/src/main/jniLibs/armeabi-v7a
-          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/build/sherpa-onnx.jar sources/TV/app/libs/sherpa-onnx.jar
+          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/target/sherpa-onnx-jvm-1.13.8.jar sources/TV/app/libs/sherpa-onnx.jar
           install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
           install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
 
