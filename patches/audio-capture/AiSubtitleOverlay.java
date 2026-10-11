@@ -35,6 +35,7 @@ public final class AiSubtitleOverlay {
 
     private final FragmentActivity activity;
     private final PlayerView playerView;
+    private final TextView title;
     private final TextView status;
     private final TextView modelStatus;
     private final TextView translationStatus;
@@ -55,6 +56,7 @@ public final class AiSubtitleOverlay {
     private AiSubtitleOverlay(FragmentActivity activity, PlayerView playerView) {
         this.activity = activity;
         this.playerView = playerView;
+        title = new TextView(activity);
         status = new TextView(activity);
         modelStatus = new TextView(activity);
         translationStatus = new TextView(activity);
@@ -115,7 +117,15 @@ public final class AiSubtitleOverlay {
         background.setCornerRadius(dp(12));
         panel.setBackground(background);
 
-        status.setText("即時字幕實驗版（保留 MPV／M3U／M3U8）");
+        title.setText("AI 字幕／語音設定");
+        title.setTextColor(Color.WHITE);
+        title.setTextSize(TypedValue.COMPLEX_UNIT_SP, 18);
+        title.setGravity(Gravity.CENTER);
+        title.setPadding(dp(8), dp(4), dp(8), dp(4));
+        panel.addView(title, new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        status.setText("Whisper Base 多語辨識 · Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
         status.setTextColor(0xFFBFD7FF);
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         status.setGravity(Gravity.CENTER);
