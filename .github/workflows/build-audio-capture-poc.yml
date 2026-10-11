@@ -8,6 +8,7 @@ on:
     paths:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
+      - "patches/whisper-native/**"
       - "scripts/apply-audio-capture-poc.py"
       - "third-party-licenses/**"
   workflow_dispatch:
