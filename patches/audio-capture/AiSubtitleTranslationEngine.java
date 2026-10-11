@@ -15,6 +15,7 @@ import com.zqc.opencc.android.lib.ConversionType;
 import java.util.ArrayDeque;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * Free on-device English-to-Chinese translation followed by OpenCC Taiwan conversion.
@@ -45,6 +46,7 @@ public final class AiSubtitleTranslationEngine {
     private boolean modelReady;
     private boolean translating;
     private String lastQueuedPhrase = "";
+    private String processingPhrase = "";
 
     public AiSubtitleTranslationEngine(Context context, Listener listener) {
         this.context = context.getApplicationContext();
@@ -102,32 +104,43 @@ public final class AiSubtitleTranslationEngine {
             if (closed || !modelReady || translating || pending.isEmpty()) return;
             translating = true;
             source = pending.removeFirst();
+            processingPhrase = source;
         }
 
         translator.translate(source)
-                .addOnSuccessListener(translated -> conversionExecutor.execute(() -> {
+                .addOnSuccessListener(translated -> {
                     if (closed) {
                         finishOne();
                         return;
                     }
-                    String taiwanTraditional;
                     try {
-                        taiwanTraditional = ChineseConverter.convert(
-                                translated, ConversionType.S2TWP, context);
-                    } catch (Throwable error) {
-                        postStatus("繁體轉換失敗，顯示原始翻譯：" + readableMessage(error));
-                        taiwanTraditional = translated;
+                        conversionExecutor.execute(() -> {
+                            if (closed) {
+                                finishOne();
+                                return;
+                            }
+                            String taiwanTraditional;
+                            try {
+                                taiwanTraditional = ChineseConverter.convert(
+                                        translated, ConversionType.S2TWP, context);
+                            } catch (Throwable error) {
+                                postStatus("繁體轉換失敗，顯示原始翻譯：" + readableMessage(error));
+                                taiwanTraditional = translated;
+                            }
+                            final String result = taiwanTraditional == null || taiwanTraditional.trim().isEmpty()
+                                    ? translated
+                                    : taiwanTraditional.trim();
+                            mainHandler.post(() -> {
+                                if (!closed && listener != null) {
+                                    listener.onTranslatedSubtitle(source, result);
+                                }
+                            });
+                            finishOne();
+                        });
+                    } catch (RejectedExecutionException ignored) {
+                        finishOne();
                     }
-                    final String result = taiwanTraditional == null || taiwanTraditional.trim().isEmpty()
-                            ? translated
-                            : taiwanTraditional.trim();
-                    mainHandler.post(() -> {
-                        if (!closed && listener != null) {
-                            listener.onTranslatedSubtitle(source, result);
-                        }
-                    });
-                    finishOne();
-                }))
+                })
                 .addOnFailureListener(error -> {
                     postStatus("本機翻譯失敗，保留原文字幕：" + readableMessage(error));
                     finishOne();
@@ -136,6 +149,8 @@ public final class AiSubtitleTranslationEngine {
 
     private void finishOne() {
         synchronized (lock) {
+            if (lastQueuedPhrase.equals(processingPhrase)) lastQueuedPhrase = "";
+            processingPhrase = "";
             translating = false;
         }
         drainQueue();
