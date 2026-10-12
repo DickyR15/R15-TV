@@ -200,7 +200,7 @@ public final class AiSubtitleEngine {
 
                 String detectedLanguage = "und";
                 String transcript = result == null ? "" : result.trim();
-                int separator = transcript.indexOf('\\n');
+                int separator = transcript.indexOf('\n');
                 if (separator > 0 && separator <= 8) {
                     String language = transcript.substring(0, separator).trim();
                     if (language.matches("[a-z]{2,3}|und")) {

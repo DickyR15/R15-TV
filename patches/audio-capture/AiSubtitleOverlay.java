@@ -11,6 +11,8 @@ import android.graphics.drawable.GradientDrawable;
 import android.media.projection.MediaProjection;
 import android.media.projection.MediaProjectionManager;
 import android.os.Build;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.Button;
@@ -54,6 +56,15 @@ public final class AiSubtitleOverlay {
 
     private boolean enabled;
     private boolean hasTranslatedCaption;
+    private boolean hasRecognizedCaption;
+    private boolean whisperReady;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final Runnable modelLoadWarning = () -> {
+        if (enabled && !whisperReady && !hasRecognizedCaption) {
+            caption.setText("Whisper Base 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
+            caption.setVisibility(android.view.View.VISIBLE);
+        }
+    };
     private AiSubtitlePlaybackCapture capture;
     private AiSubtitleTranslationEngine translationEngine;
 
@@ -328,10 +339,12 @@ public final class AiSubtitleOverlay {
 
         // If auto-start was enabled in Settings, request capture only after the
         // playback view is attached. Android will show its permission prompts as needed.
-        playerView.post(() -> {
-            if (activity.isFinishing() || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
+        // Let the player render its first frames before starting the CPU-heavy ASR worker.
+        playerView.post(() -> playerView.postDelayed(() -> {
+            if (activity.isFinishing() || !playerView.isAttachedToWindow()
+                    || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
             if (modelManager.isDownloaded() && !modelManager.isDownloading()) toggleCapture();
-        });
+        }, 1500L));
     }
 
     private void showSettingsPanel() {
@@ -372,10 +385,13 @@ public final class AiSubtitleOverlay {
         }
         enabled = true;
         hasTranslatedCaption = false;
+        hasRecognizedCaption = false;
+        whisperReady = false;
+        mainHandler.removeCallbacks(modelLoadWarning);
         updateModelControls();
         toggle.setText("停止即時字幕測試");
         status.setText("等待音訊擷取授權…");
-        caption.setText("正在準備本機語音辨識");
+        caption.setText("正在等待音訊擷取授權…");
         caption.setVisibility(android.view.View.VISIBLE);
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
@@ -452,7 +468,8 @@ public final class AiSubtitleOverlay {
                                 if (!enabled || translation == null || translation.isEmpty()) return;
                                 hasTranslatedCaption = true;
                                 if (AiSubtitleSettingsActivity.getSubtitleDisplayMode(activity)
-                                        == AiSubtitleSettingsActivity.DISPLAY_SOURCE_AND_TRANSLATION) {
+                                        == AiSubtitleSettingsActivity.DISPLAY_SOURCE_AND_TRANSLATION
+                                        && !source.equals(translation)) {
                                     caption.setText(source + "\n" + translation);
                                 } else {
                                     caption.setText(translation);
@@ -468,18 +485,52 @@ public final class AiSubtitleOverlay {
             AiSubtitleEngine.start(activity, modelManager.getModelFile(), new AiSubtitleEngine.Listener() {
                 @Override
                 public void onStatus(String message) {
-                    if (enabled) status.setText(message);
+                    if (!enabled) return;
+                    status.setText(message);
+                    if (message.startsWith("正在載入 Whisper Base")) {
+                        whisperReady = false;
+                        mainHandler.removeCallbacks(modelLoadWarning);
+                        mainHandler.postDelayed(modelLoadWarning, 15000L);
+                        caption.setText("正在載入 Whisper Base 模型（首次載入可能需要數秒）…");
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("Whisper Base 已啟動")) {
+                        whisperReady = true;
+                        mainHandler.removeCallbacks(modelLoadWarning);
+                        if (!hasRecognizedCaption && !hasTranslatedCaption) {
+                            caption.setText("模型已載入，等待直播語音…");
+                            caption.setVisibility(android.view.View.VISIBLE);
+                        }
+                    } else if (message.startsWith("Whisper Base 啟動失敗")) {
+                        mainHandler.removeCallbacks(modelLoadWarning);
+                        stopCapture(message);
+                        caption.setText(message);
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("已收到音訊，但尚未辨識到清楚語音")) {
+                        if (!hasRecognizedCaption && !hasTranslatedCaption) {
+                            caption.setText(message);
+                            caption.setVisibility(android.view.View.VISIBLE);
+                        }
+                    }
                 }
 
                 @Override
                 public void onSubtitle(String text) {
-                    if (enabled && !hasTranslatedCaption) caption.setText(text);
+                    if (enabled && !hasTranslatedCaption) {
+                        hasRecognizedCaption = true;
+                        caption.setText(text);
+                    }
                 }
 
                 @Override
                 public void onFinalSubtitle(String text) {
                     AiSubtitleTranslationEngine translator = translationEngine;
                     if (enabled && translator != null) translator.translateFinalPhrase(text);
+                }
+
+                @Override
+                public void onFinalSubtitle(String text, String language) {
+                    AiSubtitleTranslationEngine translator = translationEngine;
+                    if (enabled && translator != null) translator.translateFinalPhrase(text, language);
                 }
             });
 
@@ -498,9 +549,16 @@ public final class AiSubtitleOverlay {
 
                         @Override
                         public void onLevel(float dbfs) {
-                            if (enabled) status.setText(String.format(
+                            if (!enabled) return;
+                            status.setText(String.format(
                                     java.util.Locale.ROOT,
                                     "MPV 音訊擷取中 · 音量 %.0f dBFS", dbfs));
+                            if (whisperReady && !hasRecognizedCaption && !hasTranslatedCaption) {
+                                caption.setText(dbfs > -55.0f
+                                        ? "已收到播放音訊，正在辨識…"
+                                        : "模型已載入，但目前擷取音量很低；等待直播語音…");
+                                caption.setVisibility(android.view.View.VISIBLE);
+                            }
                         }
                     });
             caption.setVisibility(android.view.View.VISIBLE);
@@ -522,8 +580,11 @@ public final class AiSubtitleOverlay {
     }
 
     private void resetAfterDenial(String message) {
+        mainHandler.removeCallbacks(modelLoadWarning);
         stopProjectionService();
         enabled = false;
+        whisperReady = false;
+        hasRecognizedCaption = false;
         closeTranslationEngine();
         AiSubtitleEngine.stop();
         toggle.setText("啟動即時字幕測試");
@@ -534,8 +595,11 @@ public final class AiSubtitleOverlay {
     }
 
     private void stopCapture(String message) {
+        mainHandler.removeCallbacks(modelLoadWarning);
         stopProjectionService();
         enabled = false;
+        whisperReady = false;
+        hasRecognizedCaption = false;
         hasTranslatedCaption = false;
         AiSubtitlePlaybackCapture current = capture;
         capture = null;
@@ -544,8 +608,9 @@ public final class AiSubtitleOverlay {
         closeTranslationEngine();
         toggle.setText("啟動即時字幕測試");
         status.setText(message);
-        caption.setText("");
-        caption.setVisibility(android.view.View.GONE);
+        boolean showFailure = message.contains("失敗") || message.contains("錯誤");
+        caption.setText(showFailure ? message : "");
+        caption.setVisibility(showFailure ? android.view.View.VISIBLE : android.view.View.GONE);
         updateModelControls();
     }
 
