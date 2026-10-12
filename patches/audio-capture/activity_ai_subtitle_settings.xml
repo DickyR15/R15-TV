@@ -293,7 +293,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="注意：目前翻譯功能是英文→繁體中文；Whisper 可辨識多語，但日文等非英文語音的翻譯尚未接好。首次下載模型需要網路，之後的辨識與翻譯在本機執行。"
+            android:text="注意：Whisper Tiny Q5_1 會自動辨識多種語言；Google ML Kit 會將其支援的來源語言翻成中文，再轉為臺灣繁體。首次下載語音與翻譯模型需要網路，下載完成後可在本機辨識與翻譯。"
             android:textColor="#FFD0D0D0"
             android:textSize="15sp"
             tools:ignore="HardcodedText" />
