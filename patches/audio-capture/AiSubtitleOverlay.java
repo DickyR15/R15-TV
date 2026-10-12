@@ -202,7 +202,7 @@ public final class AiSubtitleOverlay {
         caption.setBackground(captionBackground);
         caption.setVisibility(android.view.View.GONE);
 
-        toggle.setText("啟動即時字幕測試");
+        toggle.setText("啟動即時字幕");
         toggle.setAllCaps(false);
         toggle.setFocusable(true);
         toggle.setOnClickListener(view -> toggleCapture());
@@ -346,7 +346,9 @@ public final class AiSubtitleOverlay {
         playerView.post(() -> playerView.postDelayed(() -> {
             if (activity.isFinishing() || !playerView.isAttachedToWindow()
                     || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
-            if (modelManager.isDownloaded() && !modelManager.isDownloading()) toggleCapture();
+            if (modelManager.isDownloaded() && !modelManager.isDownloading()) {
+                ensureAutoStartCapture();
+            }
         }, 1500L));
     }
 
@@ -368,11 +370,20 @@ public final class AiSubtitleOverlay {
         entryButton.requestFocus();
     }
 
+    private void ensureAutoStartCapture() {
+        if (enabled || activity.isFinishing() || !playerView.isAttachedToWindow()) return;
+        startCaptureInternal(false);
+    }
+
     private void toggleCapture() {
         if (enabled) {
             stopCapture("即時字幕已關閉");
             return;
         }
+        startCaptureInternal(true);
+    }
+
+    private void startCaptureInternal(boolean userInitiated) {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             status.setText("此功能需要 Android 10 以上");
             return;
@@ -394,15 +405,17 @@ public final class AiSubtitleOverlay {
         hasInferenceStatus = false;
         mainHandler.removeCallbacks(modelLoadWarning);
         updateModelControls();
-        toggle.setText("停止即時字幕測試");
-        status.setText("等待音訊擷取授權…");
-        caption.setText("正在等待音訊擷取授權…");
+        toggle.setText("停止即時字幕");
+        status.setText(userInitiated ? "等待音訊擷取授權…" : "自動啟動即時字幕…");
+        caption.setText(userInitiated ? "正在等待音訊擷取授權…" : "準備啟動即時字幕…");
         caption.setVisibility(android.view.View.VISIBLE);
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
             requestPlaybackCaptureConsent();
-        } else {
+        } else if (userInitiated) {
             audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
+        } else {
+            resetAfterDenial("首次使用需先授予音訊權限；請開啟 AI 字幕設定並啟動一次");
         }
     }
 
@@ -614,7 +627,7 @@ public final class AiSubtitleOverlay {
         hasInferenceStatus = false;
         closeTranslationEngine();
         AiSubtitleEngine.stop();
-        toggle.setText("啟動即時字幕測試");
+        toggle.setText("啟動即時字幕");
         caption.setText(message);
         caption.setVisibility(android.view.View.VISIBLE);
         status.setText(message);
@@ -635,7 +648,7 @@ public final class AiSubtitleOverlay {
         if (current != null) current.stop();
         AiSubtitleEngine.stop();
         closeTranslationEngine();
-        toggle.setText("啟動即時字幕測試");
+        toggle.setText("啟動即時字幕");
         status.setText(message);
         boolean showFailure = message.contains("失敗") || message.contains("錯誤");
         caption.setText(showFailure ? message : "");
