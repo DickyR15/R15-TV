@@ -38,7 +38,7 @@ public final class AiSubtitleTranslationEngine {
         Phrase(String text, String language) {
             this.text = text;
             this.language = language;
-            this.key = language + "\u0000" + text;
+            this.key = language + "||" + text;
         }
     }
 
