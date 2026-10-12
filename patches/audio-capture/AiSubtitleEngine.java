@@ -40,12 +40,22 @@ public final class AiSubtitleEngine {
     private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2;
     private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 2;
     private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
+    // Cloud requests use a longer window with a slower hop to limit API calls and
+    // preserve enough context for punctuation and sentence boundaries.
+    private static final int CLOUD_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 8;
+    private static final int CLOUD_UPDATE_SAMPLES = ASR_SAMPLE_RATE * 5;
+    private static final int CLOUD_RING_SAMPLES = ASR_SAMPLE_RATE * 10;
+    private static final String SETTINGS_PREFS = "r15_ai_subtitle_settings";
+    private static final String KEY_ASR_SERVICE = "asr_service";
+    private static final int ASR_SERVICE_GROQ_CLOUD = 1;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final float[] POISON = new float[0];
 
+    private final Context appContext;
     private final File modelFile;
     private final Listener listener;
+    private final boolean cloudMode;
     private final ArrayBlockingQueue<float[]> audioQueue = new ArrayBlockingQueue<>(30);
     private final Object resampleLock = new Object();
     private volatile boolean running = true;
@@ -58,14 +68,17 @@ public final class AiSubtitleEngine {
     private float previousInputSample;
     private boolean hasPreviousInputSample;
 
-    private AiSubtitleEngine(File modelFile, Listener listener) {
+    private AiSubtitleEngine(Context context, File modelFile, Listener listener) {
+        this.appContext = context.getApplicationContext();
         this.modelFile = modelFile;
         this.listener = listener;
+        this.cloudMode = appContext.getSharedPreferences(SETTINGS_PREFS, Context.MODE_PRIVATE)
+                .getInt(KEY_ASR_SERVICE, 0) == ASR_SERVICE_GROQ_CLOUD;
     }
 
     public static void start(Context context, File modelFile, Listener listener) {
         stop();
-        AiSubtitleEngine engine = new AiSubtitleEngine(modelFile, listener);
+        AiSubtitleEngine engine = new AiSubtitleEngine(context, modelFile, listener);
         ACTIVE.set(engine);
         engine.worker = new Thread(engine::runRecognizer, "r15-ai-subtitles");
         engine.worker.setDaemon(true);
@@ -156,14 +169,21 @@ public final class AiSubtitleEngine {
         try {
             // Let video rendering and audio playback take priority on low-core TV boxes.
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
-            if (modelFile == null || !modelFile.isFile()) {
-                throw new IllegalStateException("請先下載 Whisper Base 多語模型");
+            if (cloudMode) {
+                if (!GroqSpeechToText.hasApiKey(appContext)) {
+                    throw new IllegalStateException("尚未設定 Groq API Key；請先到 AI 字幕設定儲存金鑰");
+                }
+                postStatus("Groq 雲端辨識已啟動；每段音訊會上傳至 Groq 進行辨識");
+            } else {
+                if (modelFile == null || !modelFile.isFile()) {
+                    throw new IllegalStateException("請先下載 Whisper Base 多語模型");
+                }
+                postStatus("正在載入 Whisper Base 多語模型…");
+                whisperContext = WhisperCpp.createContext(modelFile);
+                postStatus("Whisper Base 已啟動；多語自動辨識中");
             }
-            postStatus("正在載入 Whisper Base 多語模型…");
-            whisperContext = WhisperCpp.createContext(modelFile);
-            postStatus("Whisper Base 已啟動；多語自動辨識中");
 
-            float[] ring = new float[MAX_WINDOW_SAMPLES];
+            float[] ring = new float[cloudMode ? CLOUD_RING_SAMPLES : MAX_WINDOW_SAMPLES];
             int writeIndex = 0;
             int bufferedSamples = 0;
             int samplesSinceInference = 0;
@@ -189,44 +209,56 @@ public final class AiSubtitleEngine {
                 }
                 samplesSinceInference += samples.length;
 
+                int windowSize = cloudMode ? CLOUD_WINDOW_SAMPLES : WINDOW_SAMPLES;
+                int updateSize = cloudMode ? CLOUD_UPDATE_SAMPLES : UPDATE_SAMPLES;
                 int minimumWindow = previousTranscript.isEmpty()
-                        ? INITIAL_WINDOW_SAMPLES : WINDOW_SAMPLES;
-                if (bufferedSamples < minimumWindow || samplesSinceInference < UPDATE_SAMPLES) {
+                        ? (cloudMode ? CLOUD_WINDOW_SAMPLES : INITIAL_WINDOW_SAMPLES) : windowSize;
+                if (bufferedSamples < minimumWindow || samplesSinceInference < updateSize) {
                     continue;
                 }
                 samplesSinceInference = 0;
 
-                float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
+                float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, windowSize));
                 long inferenceStarted = SystemClock.elapsedRealtime();
                 // Reserve CPU capacity for decoding and rendering on lower-power TV devices.
                 int inferenceThreads = 1;
-                postStatus("正在辨識直播語音…");
+                postStatus(cloudMode ? "正在送出直播語音辨識…" : "正在辨識直播語音…");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
                 heartbeat[0] = () -> {
                     if (!running || !inferenceActive.get()) return;
                     long seconds = (SystemClock.elapsedRealtime() - inferenceStarted) / 1000L;
-                    postStatus("Whisper 本機辨識仍在運算 · 已等待 " + seconds + " 秒");
+                    postStatus((cloudMode ? "Groq 雲端辨識仍在處理" : "Whisper 本機辨識仍在運算")
+                            + " · 已等待 " + seconds + " 秒");
                     MAIN.postDelayed(heartbeat[0], 5000L);
                 };
                 MAIN.postDelayed(heartbeat[0], 5000L);
                 String result;
+                String detectedLanguage = "und";
                 try {
-                    result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                    if (cloudMode) {
+                        GroqSpeechToText.TranscriptionResult cloudResult =
+                                GroqSpeechToText.transcribeDetailed(appContext, window, "auto");
+                        result = cloudResult.text;
+                        detectedLanguage = cloudResult.language;
+                    } else {
+                        result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                    }
                 } finally {
                     inferenceActive.set(false);
                     MAIN.removeCallbacks(heartbeat[0]);
                 }
                 long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
 
-                String detectedLanguage = "und";
                 String transcript = result == null ? "" : result.trim();
-                int separator = transcript.indexOf('\n');
-                if (separator > 0 && separator <= 8) {
-                    String language = transcript.substring(0, separator).trim();
-                    if (language.matches("[a-z]{2,3}|und")) {
-                        detectedLanguage = language;
-                        transcript = transcript.substring(separator + 1).trim();
+                if (!cloudMode) {
+                    int separator = transcript.indexOf('\n');
+                    if (separator > 0 && separator <= 8) {
+                        String language = transcript.substring(0, separator).trim();
+                        if (language.matches("[a-z]{2,3}|und")) {
+                            detectedLanguage = language;
+                            transcript = transcript.substring(separator + 1).trim();
+                        }
                     }
                 }
 
@@ -237,19 +269,20 @@ public final class AiSubtitleEngine {
                     if (!newText.isEmpty()) postFinalSubtitle(newText, detectedLanguage);
                     previousTranscript = transcript;
                     previousLanguage = detectedLanguage;
-                    postStatus("Whisper Base · 偵測 " + detectedLanguage + " · "
-                            + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
-                            + inferenceMs + " ms");
+                    postStatus((cloudMode ? "Groq 雲端辨識" : "Whisper Base") + " · 偵測 "
+                            + detectedLanguage + " · " + (window.length / ASR_SAMPLE_RATE)
+                            + " 秒音訊 · 推論 " + inferenceMs + " ms");
                 } else {
                     postStatus("已收到音訊，但尚未辨識到清楚語音；持續聆聽…");
                 }
             }
         } catch (Throwable error) {
             running = false;
-            postStatus("Whisper Base 啟動失敗：" + readableMessage(error));
+            postStatus((cloudMode ? "Groq 雲端辨識失敗：" : "Whisper Base 啟動失敗：")
+                    + readableMessage(error));
         } finally {
             try {
-                WhisperCpp.freeContext(whisperContext);
+                if (whisperContext != 0L) WhisperCpp.freeContext(whisperContext);
             } catch (Throwable ignored) {
             }
             if (!running) postStatus("AI 字幕已關閉");
