@@ -12,6 +12,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.file.Files;
 import java.nio.file.StandardCopyOption;
+import java.security.MessageDigest;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -23,6 +24,8 @@ public final class WhisperModelManager {
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin";
     private static volatile WhisperModelManager INSTANCE;
     private static final long MIN_MODEL_BYTES = 20L * 1024L * 1024L;
+    private static final String MODEL_SHA256 =
+            "818710568da3ca15689e31a743197b520007872ff9576237bda97bd1b469c3d7";
     private static final int BUFFER_SIZE = 128 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
@@ -117,6 +120,7 @@ public final class WhisperModelManager {
 
             long totalBytes = connection.getContentLengthLong();
             long downloadedBytes = 0;
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
             byte[] buffer = new byte[BUFFER_SIZE];
             long lastProgress = 0;
 
@@ -125,6 +129,7 @@ public final class WhisperModelManager {
                 int count;
                 while ((count = input.read(buffer)) != -1) {
                     output.write(buffer, 0, count);
+                    digest.update(buffer, 0, count);
                     downloadedBytes += count;
                     if (downloadedBytes - lastProgress >= 512 * 1024L) {
                         postProgress(listener, downloadedBytes, totalBytes);
@@ -140,6 +145,10 @@ public final class WhisperModelManager {
             }
             if (totalBytes > 0 && downloadedBytes != totalBytes) {
                 throw new IOException("模型下載大小不符，請重新下載");
+            }
+            String actualSha256 = toHex(digest.digest());
+            if (!MODEL_SHA256.equals(actualSha256)) {
+                throw new IOException("模型 SHA-256 驗證失敗，已拒絕安裝；請重新下載");
             }
 
             try {
@@ -166,6 +175,12 @@ public final class WhisperModelManager {
             if (connection != null) connection.disconnect();
             downloading = false;
         }
+    }
+
+    private static String toHex(byte[] bytes) {
+        StringBuilder result = new StringBuilder(bytes.length * 2);
+        for (byte value : bytes) result.append(String.format(java.util.Locale.ROOT, "%02x", value & 0xff));
+        return result.toString();
     }
 
     private static void postProgress(Listener listener, long downloaded, long total) {
