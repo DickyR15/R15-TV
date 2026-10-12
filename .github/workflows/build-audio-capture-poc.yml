@@ -301,7 +301,7 @@ jobs:
           version_code = base_code * 1_000_000 + run_number
           if version_code > 2_100_000_000:
               raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
-          version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
+          version_name = f"{base_name}"
 
           text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
           text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)

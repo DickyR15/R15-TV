@@ -56,6 +56,7 @@ public final class AiSubtitleOverlay {
 
     private boolean enabled;
     private boolean hasTranslatedCaption;
+    private boolean captureConsentGrantedThisInstall;
     private boolean hasRecognizedCaption;
     private boolean whisperReady;
     private boolean inferenceInProgress;
@@ -340,13 +341,23 @@ public final class AiSubtitleOverlay {
         captionParams.setMargins(dp(24), 0, dp(24), dp(28));
         overlay.addView(caption, captionParams);
 
-        // If auto-start was enabled in Settings, request capture only after the
-        // playback view is attached. Android will show its permission prompts as needed.
-        // Let the player render its first frames before starting the CPU-heavy ASR worker.
+        // Reuse the overlay across media-item changes: the player view stays attached
+        // while the channel changes. Start once per attached PlayerView, not per stream.
+        playerView.addOnAttachStateChangeListener(new android.view.View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(android.view.View view) {
+                scheduleAutoStart();
+            }
+            @Override public void onViewDetachedFromWindow(android.view.View view) { }
+        });
+        scheduleAutoStart();
+    }
+
+    private void scheduleAutoStart() {
+        if (!AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
         playerView.post(() -> playerView.postDelayed(() -> {
             if (activity.isFinishing() || !playerView.isAttachedToWindow()
                     || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
-            if (modelManager.isDownloaded() && !modelManager.isDownloading()) {
+            if (!enabled && modelManager.isDownloaded() && !modelManager.isDownloading()) {
                 ensureAutoStartCapture();
             }
         }, 1500L));
@@ -411,6 +422,9 @@ public final class AiSubtitleOverlay {
         caption.setVisibility(android.view.View.VISIBLE);
         if (ContextCompat.checkSelfPermission(activity, Manifest.permission.RECORD_AUDIO)
                 == android.content.pm.PackageManager.PERMISSION_GRANTED) {
+            // MediaProjection authorization itself is one-shot on Android 14+.
+            // Ask only when we don't hold an active capture session; after channel
+            // changes, the active overlay session is reused instead of rebuilding it.
             requestPlaybackCaptureConsent();
         } else if (userInitiated) {
             audioPermissionLauncher.launch(Manifest.permission.RECORD_AUDIO);
