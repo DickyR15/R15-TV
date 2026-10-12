@@ -453,7 +453,7 @@ public final class AiSubtitleOverlay {
                                 hasTranslatedCaption = true;
                                 if (AiSubtitleSettingsActivity.getSubtitleDisplayMode(activity)
                                         == AiSubtitleSettingsActivity.DISPLAY_SOURCE_AND_TRANSLATION) {
-                                    caption.setText(source + "\\n" + translation);
+                                    caption.setText(source + "\n" + translation);
                                 } else {
                                     caption.setText(translation);
                                 }
