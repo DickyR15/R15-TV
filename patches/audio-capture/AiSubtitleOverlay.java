@@ -76,7 +76,7 @@ public final class AiSubtitleOverlay {
         caption = new TextView(activity);
         modelLoadWarning = () -> {
             if (enabled && !whisperReady && !hasRecognizedCaption) {
-                caption.setText("Whisper Base 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
+                caption.setText("Whisper Tiny Q5_1 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
                 caption.setVisibility(android.view.View.VISIBLE);
             }
         };
@@ -153,7 +153,7 @@ public final class AiSubtitleOverlay {
         panel.addView(closePanelButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        status.setText("Whisper Base 多語辨識 · Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
+        status.setText("Whisper Tiny Q5_1 多語辨識 · Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
         status.setTextColor(0xFFBFD7FF);
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         status.setGravity(Gravity.CENTER);
@@ -161,7 +161,7 @@ public final class AiSubtitleOverlay {
         panel.addView(status, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        modelStatus.setText("語音辨識模型：Whisper Base 多語版");
+        modelStatus.setText("語音辨識模型：Whisper Tiny Q5_1 多語版");
         modelStatus.setTextColor(0xFFFFFFFF);
         modelStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         modelStatus.setGravity(Gravity.CENTER);
@@ -169,7 +169,7 @@ public final class AiSubtitleOverlay {
         panel.addView(modelStatus, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        modelButton.setText("下載 Whisper Base 多語模型（約 148 MB）");
+        modelButton.setText("下載 Whisper Tiny Q5_1 多語模型（約 32 MB）");
         modelButton.setAllCaps(false);
         modelButton.setFocusable(true);
         modelButton.setOnClickListener(view -> downloadModel());
@@ -235,7 +235,7 @@ public final class AiSubtitleOverlay {
         }
         if (modelManager.isDownloading()) return;
         modelButton.setEnabled(false);
-        modelButton.setText("正在準備 Whisper Base 下載…");
+        modelButton.setText("正在準備 Whisper Tiny Q5_1 下載…");
         modelStatus.setText("第一次下載需要網路；模型下載完成後可在本機辨識");
         modelManager.download(new WhisperModelManager.Listener() {
             @Override
@@ -244,10 +244,10 @@ public final class AiSubtitleOverlay {
                 String downloaded = formatMiB(downloadedBytes);
                 if (totalBytes > 0) {
                     int percent = (int) Math.min(100L, downloadedBytes * 100L / totalBytes);
-                    modelButton.setText("下載 Whisper Base：" + percent + "%");
+                    modelButton.setText("下載 Whisper Tiny Q5_1：" + percent + "%");
                     modelStatus.setText("模型下載中 " + downloaded + " / " + formatMiB(totalBytes));
                 } else {
-                    modelButton.setText("下載 Whisper Base：" + downloaded);
+                    modelButton.setText("下載 Whisper Tiny Q5_1：" + downloaded);
                     modelStatus.setText("模型下載中 " + downloaded);
                 }
             }
@@ -255,13 +255,13 @@ public final class AiSubtitleOverlay {
             @Override
             public void onDownloaded(java.io.File file) {
                 if (activity.isFinishing()) return;
-                modelStatus.setText("Whisper Base 已下載；開始字幕時才會載入模型");
+                modelStatus.setText("Whisper Tiny Q5_1 已下載；開始字幕時才會載入模型");
                 updateModelControls();
             }
 
             @Override
             public void onDeleted() {
-                modelStatus.setText("Whisper Base 模型已刪除");
+                modelStatus.setText("Whisper Tiny Q5_1 模型已刪除");
                 updateModelControls();
             }
 
@@ -277,8 +277,8 @@ public final class AiSubtitleOverlay {
     private void confirmDeleteModel() {
         if (enabled || modelManager.isDownloading()) return;
         new AlertDialog.Builder(activity)
-                .setTitle("刪除 Whisper Base 模型？")
-                .setMessage("會移除約 148 MB 的本機模型；日後可重新下載。")
+                .setTitle("刪除 Whisper Tiny Q5_1 模型？")
+                .setMessage("會移除約 32 MB 的本機模型；日後可重新下載。")
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .setPositiveButton("刪除", (dialog, which) -> {
                     modelStatus.setText("正在刪除模型…");
@@ -291,7 +291,7 @@ public final class AiSubtitleOverlay {
 
                         @Override
                         public void onDeleted() {
-                            modelStatus.setText("Whisper Base 模型已刪除");
+                            modelStatus.setText("Whisper Tiny Q5_1 模型已刪除");
                             updateModelControls();
                         }
 
@@ -309,16 +309,16 @@ public final class AiSubtitleOverlay {
         boolean ready = modelManager.isDownloaded();
         boolean downloading = modelManager.isDownloading();
         if (ready) {
-            modelStatus.setText("語音辨識模型：Whisper Base 多語版（已下載）");
+            modelStatus.setText("語音辨識模型：Whisper Tiny Q5_1 多語版（已下載）");
             modelButton.setVisibility(android.view.View.GONE);
             deleteModelButton.setVisibility(enabled ? android.view.View.GONE : android.view.View.VISIBLE);
         } else {
             modelButton.setVisibility(android.view.View.VISIBLE);
             deleteModelButton.setVisibility(android.view.View.GONE);
-            if (!downloading) modelButton.setText("下載 Whisper Base 多語模型（約 148 MB）");
+            if (!downloading) modelButton.setText("下載 Whisper Tiny Q5_1 多語模型（約 32 MB）");
             modelButton.setEnabled(!downloading && !enabled);
             deleteModelButton.setEnabled(false);
-            if (!downloading) modelStatus.setText("語音辨識模型：Whisper Base 多語版（尚未下載）");
+            if (!downloading) modelStatus.setText("語音辨識模型：Whisper Tiny Q5_1 多語版（尚未下載）");
         }
     }
 
@@ -400,11 +400,11 @@ public final class AiSubtitleOverlay {
             return;
         }
         if (modelManager.isDownloading()) {
-            modelStatus.setText("請等 Whisper Base 模型下載完成");
+            modelStatus.setText("請等 Whisper Tiny Q5_1 模型下載完成");
             return;
         }
         if (!modelManager.isDownloaded()) {
-            modelStatus.setText("請先下載 Whisper Base 多語模型（約 148 MB）");
+            modelStatus.setText("請先下載 Whisper Tiny Q5_1 多語模型（約 32 MB）");
             modelButton.requestFocus();
             return;
         }
@@ -529,25 +529,25 @@ public final class AiSubtitleOverlay {
                         hasInferenceStatus = true;
                         caption.setText(message);
                         caption.setVisibility(android.view.View.VISIBLE);
-                    } else if (message.startsWith("正在載入 Whisper Base")) {
+                    } else if (message.startsWith("正在載入 Whisper Tiny Q5_1")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = false;
                         whisperReady = false;
                         mainHandler.removeCallbacks(modelLoadWarning);
                         mainHandler.postDelayed(modelLoadWarning, 15000L);
-                        caption.setText("正在載入 Whisper Base 模型（首次載入可能需要數秒）…");
+                        caption.setText("正在載入 Whisper Tiny Q5_1 模型（首次載入可能需要數秒）…");
                         caption.setVisibility(android.view.View.VISIBLE);
-                    } else if (message.startsWith("Whisper Base 已啟動")) {
+                    } else if (message.startsWith("Whisper Tiny Q5_1 已啟動")) {
                         whisperReady = true;
                         mainHandler.removeCallbacks(modelLoadWarning);
                         if (!hasRecognizedCaption && !hasTranslatedCaption) {
                             caption.setText("模型已載入，等待直播語音…");
                             caption.setVisibility(android.view.View.VISIBLE);
                         }
-                    } else if (message.startsWith("Whisper Base · 偵測 ")) {
+                    } else if (message.startsWith("Whisper Tiny Q5_1 · 偵測 ")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = true;
-                    } else if (message.startsWith("Whisper Base 啟動失敗")) {
+                    } else if (message.startsWith("Whisper Tiny Q5_1 啟動失敗")) {
                         mainHandler.removeCallbacks(modelLoadWarning);
                         stopCapture(message);
                         caption.setText(message);
