@@ -373,7 +373,7 @@ public final class AiSubtitleEngine {
 
     private static String normalizeUnicodeText(String text) {
         return text == null ? "" : text.toLowerCase(Locale.ROOT)
-                .replaceAll("[^\\\\p{L}\\\\p{N}']+", "");
+                .replaceAll("[^\\p{L}\\p{N}]+", "");
     }
 
     private static String suffixAfterNormalizedCharacters(String current, int count) {
@@ -383,11 +383,11 @@ public final class AiSubtitleEngine {
         while (index < current.length() && seen < count) {
             int codePoint = current.codePointAt(index);
             index += Character.charCount(codePoint);
-            if (Character.isLetterOrDigit(codePoint) || codePoint == '\\'') seen++;
+            if (Character.isLetterOrDigit(codePoint)) seen++;
         }
         while (index < current.length()) {
             int codePoint = current.codePointAt(index);
-            if (Character.isLetterOrDigit(codePoint) || codePoint == '\\'') break;
+            if (Character.isLetterOrDigit(codePoint)) break;
             index += Character.charCount(codePoint);
         }
         return index < current.length() ? current.substring(index).trim() : "";
