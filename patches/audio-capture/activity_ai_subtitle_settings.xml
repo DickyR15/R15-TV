@@ -3,47 +3,89 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fillViewport="true">
+    android:fillViewport="true"
+    android:descendantFocusability="afterDescendants">
 
     <androidx.appcompat.widget.LinearLayoutCompat
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="28dp">
+        android:paddingStart="28dp"
+        android:paddingTop="22dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="28dp">
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/title"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:text="AI 字幕／語音設定"
+            android:layout_marginBottom="6dp"
+            android:text="AI 即時字幕"
             android:textColor="@color/white"
-            android:textSize="26sp" />
+            android:textSize="30sp"
+            android:textStyle="bold" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/description"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="18dp"
-            android:text="在這裡下載 Whisper 模型並設定播放時自動啟動字幕。啟用後，進入影片／直播播放頁時會自動啟動；系統可能要求授權音訊擷取，不需要操作播放畫面角落按鈕。"
+            android:layout_marginBottom="24dp"
+            android:text="模型、翻譯與字幕顯示集中設定；可用遙控器方向鍵選取，最後按「儲存並套用」。"
+            android:textColor="#FFD0D0D0"
+            android:textSize="17sp" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="22dp"
+            android:background="@drawable/selector_item"
+            android:orientation="vertical"
+            android:padding="18dp">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="即時語音字幕"
+                android:textColor="@color/white"
+                android:textSize="22sp"
+                android:textStyle="bold" />
+
+            <androidx.appcompat.widget.SwitchCompat
+                android:id="@+id/autoStartSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:minHeight="58dp"
+                android:text="進入影片／直播時自動啟動字幕"
+                android:textColor="@color/white"
+                android:textSize="19sp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/autoStartHint"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="啟用後，播放時可能會要求授權音訊擷取；不會在未播放時持續聆聽。"
+                android:textColor="#FFD0D0D0"
+                android:textSize="16sp" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="01  語音辨識模型"
             android:textColor="@color/white"
-            android:textSize="18sp" />
+            android:textSize="22sp"
+            android:textStyle="bold" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/asrMode"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="10dp"
-            android:text="語音辨識：Whisper Base 多語模型（英文解說優先）"
-            android:textColor="@color/white"
-            android:textSize="18sp" />
-
-        <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/translationMode"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
-            android:text="翻譯：Google ML Kit 本機英翻中，再由 OpenCC 轉臺灣繁體；首次下載翻譯語言包需要網路。"
+            android:layout_marginBottom="8dp"
+            android:text="Whisper Base 多語模型｜自動辨識語音"
             android:textColor="@color/white"
             android:textSize="18sp" />
 
@@ -51,17 +93,17 @@
             android:id="@+id/modelStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_marginBottom="10dp"
             android:text="正在檢查模型…"
-            android:textColor="@color/white"
-            android:textSize="18sp" />
+            android:textColor="#FFD0D0D0"
+            android:textSize="16sp" />
 
         <ProgressBar
             android:id="@+id/modelProgress"
             style="?android:attr/progressBarStyleHorizontal"
             android:layout_width="match_parent"
             android:layout_height="10dp"
-            android:layout_marginBottom="16dp"
+            android:layout_marginBottom="12dp"
             android:max="100"
             android:progress="0"
             android:visibility="gone" />
@@ -69,49 +111,141 @@
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/modelButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="12dp"
+            android:layout_height="58dp"
+            android:layout_marginBottom="10dp"
             android:focusable="true"
+            android:focusableInTouchMode="true"
             android:text="下載 Whisper Base 多語模型（約 148 MB）"
-            android:textAllCaps="false" />
+            android:textAllCaps="false"
+            android:textSize="18sp" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/deleteModelButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="20dp"
+            android:layout_height="58dp"
+            android:layout_marginBottom="24dp"
             android:focusable="true"
             android:text="刪除已下載模型"
             android:textAllCaps="false"
+            android:textSize="18sp"
             android:visibility="gone" />
 
         <com.google.android.material.textview.MaterialTextView
-            android:id="@+id/autoStartStatus"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
             android:layout_marginBottom="10dp"
-            android:text="播放時自動啟動狀態"
+            android:text="02  繁體中文字幕翻譯"
             android:textColor="@color/white"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="8dp"
+            android:text="翻譯服務"
+            android:textColor="@color/white"
+            android:textSize="17sp" />
+
+        <Spinner
+            android:id="@+id/translationServiceSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:spinnerMode="dropdown" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/translationSummary"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="14dp"
+            android:text="Google ML Kit 英翻中＋OpenCC 臺灣繁體"
+            android:textColor="#FFD0D0D0"
             android:textSize="16sp" />
 
         <androidx.appcompat.widget.AppCompatButton
-            android:id="@+id/autoStartButton"
+            android:id="@+id/testTranslationButton"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginBottom="18dp"
+            android:layout_height="58dp"
+            android:layout_marginBottom="8dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:text="播放時自動啟動即時字幕：關閉（按此開啟）"
-            android:textAllCaps="false" />
+            android:text="一鍵檢查翻譯模型與延遲"
+            android:textAllCaps="false"
+            android:textSize="18sp" />
+
+        <ProgressBar
+            android:id="@+id/translationTestProgress"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="match_parent"
+            android:layout_height="8dp"
+            android:layout_marginBottom="8dp"
+            android:visibility="gone" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/translationTestStatus"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="22dp"
+            android:text="尚未執行翻譯測試"
+            android:textColor="#FFD0D0D0"
+            android:textSize="16sp" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
+            android:text="03  字幕顯示"
+            android:textColor="@color/white"
+            android:textSize="22sp"
+            android:textStyle="bold" />
+
+        <Spinner
+            android:id="@+id/subtitleDisplaySpinner"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginBottom="8dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:spinnerMode="dropdown" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/subtitleDisplayHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="24dp"
+            android:text="選擇字幕顯示模式。"
+            android:textColor="#FFD0D0D0"
+            android:textSize="16sp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/saveApplyButton"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:layout_marginTop="8dp"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:text="儲存並套用"
+            android:textAllCaps="false"
+            android:textSize="20sp"
+            android:textStyle="bold" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/helpText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="自動啟動只在開啟影片／直播播放頁時生效，不會在背景持續聽取。啟用時需允許音訊擷取；辨識、翻譯與繁體轉換在本機執行，不需要付費 API。"
-            android:textColor="@color/white"
-            android:textSize="16sp"
+            android:layout_marginTop="10dp"
+            android:text="注意：目前翻譯功能是英文→繁體中文；Whisper 可辨識多語，但日文等非英文語音的翻譯尚未接好。首次下載模型需要網路，之後的辨識與翻譯在本機執行。"
+            android:textColor="#FFD0D0D0"
+            android:textSize="15sp"
             tools:ignore="HardcodedText" />
 
     </androidx.appcompat.widget.LinearLayoutCompat>

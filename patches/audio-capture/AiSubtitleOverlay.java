@@ -398,6 +398,38 @@ public final class AiSubtitleOverlay {
     }
 
     private void startCapture(int resultCode, Intent data) {
+        try {
+            android.os.ResultReceiver receiver = new android.os.ResultReceiver(
+                    new android.os.Handler(android.os.Looper.getMainLooper())) {
+                @Override
+                protected void onReceiveResult(int result, android.os.Bundle resultData) {
+                    if (!enabled) {
+                        stopProjectionService();
+                        return;
+                    }
+                    if (result != AiSubtitleProjectionService.RESULT_READY) {
+                        String message = resultData == null ? null : resultData.getString("error");
+                        resetAfterDenial("螢幕擷取前景服務啟動失敗"
+                                + (message == null || message.isEmpty() ? "" : "：" + message));
+                        return;
+                    }
+                    startCaptureWithForeground(resultCode, data);
+                }
+            };
+            Intent serviceIntent = new Intent(activity, AiSubtitleProjectionService.class);
+            serviceIntent.putExtra(AiSubtitleProjectionService.EXTRA_RESULT_RECEIVER, receiver);
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                ContextCompat.startForegroundService(activity, serviceIntent);
+            } else {
+                activity.startService(serviceIntent);
+            }
+        } catch (Throwable error) {
+            stopProjectionService();
+            resetAfterDenial("無法啟動螢幕擷取前景服務：" + readableMessage(error));
+        }
+    }
+
+    private void startCaptureWithForeground(int resultCode, Intent data) {
         MediaProjection projection = null;
         try {
             MediaProjectionManager manager =
@@ -406,22 +438,32 @@ public final class AiSubtitleOverlay {
             projection = manager.getMediaProjection(resultCode, data);
             if (projection == null) throw new IllegalStateException("系統未建立音訊擷取工作階段");
 
-            translationEngine = new AiSubtitleTranslationEngine(activity,
-                    new AiSubtitleTranslationEngine.Listener() {
-                        @Override
-                        public void onStatus(String message) {
-                            if (enabled) translationStatus.setText(message);
-                        }
-
-                        @Override
-                        public void onTranslatedSubtitle(String source, String translation) {
-                            if (enabled && translation != null && !translation.isEmpty()) {
-                                hasTranslatedCaption = true;
-                                caption.setText(translation);
+            if (AiSubtitleSettingsActivity.getTranslationService(activity)
+                    == AiSubtitleSettingsActivity.TRANSLATION_GOOGLE_MLKIT) {
+                translationEngine = new AiSubtitleTranslationEngine(activity,
+                        new AiSubtitleTranslationEngine.Listener() {
+                            @Override
+                            public void onStatus(String message) {
+                                if (enabled) translationStatus.setText(message);
                             }
-                        }
-                    });
-            translationEngine.start();
+
+                            @Override
+                            public void onTranslatedSubtitle(String source, String translation) {
+                                if (!enabled || translation == null || translation.isEmpty()) return;
+                                hasTranslatedCaption = true;
+                                if (AiSubtitleSettingsActivity.getSubtitleDisplayMode(activity)
+                                        == AiSubtitleSettingsActivity.DISPLAY_SOURCE_AND_TRANSLATION) {
+                                    caption.setText(source + "\\n" + translation);
+                                } else {
+                                    caption.setText(translation);
+                                }
+                            }
+                        });
+                translationEngine.start();
+            } else {
+                translationEngine = null;
+                translationStatus.setText("已停用翻譯；目前只顯示語音辨識原文");
+            }
 
             AiSubtitleEngine.start(activity, modelManager.getModelFile(), new AiSubtitleEngine.Listener() {
                 @Override
@@ -472,7 +514,15 @@ public final class AiSubtitleOverlay {
         }
     }
 
+    private void stopProjectionService() {
+        try {
+            activity.stopService(new Intent(activity, AiSubtitleProjectionService.class));
+        } catch (Throwable ignored) {
+        }
+    }
+
     private void resetAfterDenial(String message) {
+        stopProjectionService();
         enabled = false;
         closeTranslationEngine();
         AiSubtitleEngine.stop();
@@ -484,6 +534,7 @@ public final class AiSubtitleOverlay {
     }
 
     private void stopCapture(String message) {
+        stopProjectionService();
         enabled = false;
         hasTranslatedCaption = false;
         AiSubtitlePlaybackCapture current = capture;
