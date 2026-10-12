@@ -59,12 +59,7 @@ public final class AiSubtitleOverlay {
     private boolean hasRecognizedCaption;
     private boolean whisperReady;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
-    private final Runnable modelLoadWarning = () -> {
-        if (enabled && !whisperReady && !hasRecognizedCaption) {
-            caption.setText("Whisper Base 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
-            caption.setVisibility(android.view.View.VISIBLE);
-        }
-    };
+    private final Runnable modelLoadWarning;
     private AiSubtitlePlaybackCapture capture;
     private AiSubtitleTranslationEngine translationEngine;
 
@@ -76,6 +71,12 @@ public final class AiSubtitleOverlay {
         modelStatus = new TextView(activity);
         translationStatus = new TextView(activity);
         caption = new TextView(activity);
+        modelLoadWarning = () -> {
+            if (enabled && !whisperReady && !hasRecognizedCaption) {
+                caption.setText("Whisper Base 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
+                caption.setVisibility(android.view.View.VISIBLE);
+            }
+        };
         modelButton = new Button(activity);
         deleteModelButton = new Button(activity);
         toggle = new Button(activity);
