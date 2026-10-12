@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "research/realtime-subtitles-tv"
+      - "feature/groq-cloud-asr-poc84"
     paths:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
@@ -246,6 +247,10 @@ jobs:
           verify grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
           verify grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           verify grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          verify grep -Fq 'GroqSpeechToText.transcribeDetailed' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          verify grep -Fq 'whisper-large-v3-turbo' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/GroqSpeechToText.java
+          verify grep -Fq 'asrServiceSpinner' sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
+          verify grep -Fq 'saveGroqApiKeyButton' sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
           verify grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
@@ -475,6 +480,7 @@ jobs:
 
           git -C "$TV_DIR" add -N \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java \
+            app/src/main/java/com/fongmi/android/tv/ai/subtitle/GroqSpeechToText.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleOverlay.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java \
             app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java \
