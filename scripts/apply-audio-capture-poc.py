@@ -347,7 +347,7 @@ def patch_manifest(path: Path) -> None:
             text = replace_once(
                 text,
                 '<uses-permission android:name="android.permission.INTERNET" />',
-                '<uses-permission android:name="android.permission.INTERNET" />\\n    ' + permission,
+                '<uses-permission android:name="android.permission.INTERNET" />\n    ' + permission,
                 path,
             )
     attr = 'android:allowAudioPlaybackCapture="true"'
@@ -365,7 +365,7 @@ def patch_manifest(path: Path) -> None:
     service = ('        <service android:name=".ai.subtitle.AiSubtitleProjectionService" '
                'android:exported="false" android:foregroundServiceType="mediaProjection" />')
     if service not in text:
-        text = replace_once(text, crash_anchor, service + '\\n\\n' + crash_anchor, path)
+        text = replace_once(text, crash_anchor, service + '\n\n' + crash_anchor, path)
     path.write_text(text, encoding="utf-8")
 
 
