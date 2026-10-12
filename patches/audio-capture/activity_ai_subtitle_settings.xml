@@ -133,7 +133,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:text="Whisper Base 多語模型｜自動辨識語音"
+            android:text="Whisper Tiny Q5_1 多語模型｜自動辨識語音"
             android:textColor="@color/white"
             android:textSize="18sp" />
 
@@ -163,7 +163,7 @@
             android:layout_marginBottom="10dp"
             android:focusable="true"
             android:focusableInTouchMode="true"
-            android:text="下載 Whisper Base 多語模型（約 148 MB）"
+            android:text="下載 Whisper Tiny Q5_1 多語模型（約 32 MB）"
             android:textAllCaps="false"
             android:textSize="18sp" />
 
