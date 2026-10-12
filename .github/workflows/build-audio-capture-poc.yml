@@ -246,7 +246,7 @@ jobs:
           verify grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
           verify grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           verify grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
-          verify grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
+          verify grep -Fq 'ggml-tiny-q5_1.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           verify grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
@@ -261,7 +261,7 @@ jobs:
           verify test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
           verify test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
           echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
-          echo "The multilingual Whisper Base model is downloaded inside the app after the user taps the model button; model weights are not bundled in the APK."
+          echo "The multilingual Whisper Tiny Q5_1 model is downloaded inside the app after the user taps the model button; model weights are not bundled in the APK."
           echo "ML Kit English-to-Chinese translation and OpenCC S2TWP remain on-device after first-use translation model download."
           echo "Real-TV audio capture, translation quality, RAM use and latency still require device testing."
 
@@ -429,7 +429,7 @@ jobs:
             fi
             echo "Whisper JNI and OpenCC assets verified in $apk"
           done < <(find "$apk_root" -type f -name "*.apk" | sort)
-          echo "Whisper JNI and OpenCC assets verified. The Whisper Base model is downloaded by the user in the app; device playback capture, model loading, translation and latency still require TV testing."
+          echo "Whisper JNI and OpenCC assets verified. The Whisper Tiny Q5_1 model is downloaded by the user in the app; device playback capture, model loading, translation and latency still require TV testing."
 
       - name: Package APKs and verification metadata
         env:
@@ -519,7 +519,7 @@ jobs:
             --arg mediaSha "$MEDIA_SHA" \
             --arg runUrl "$RUN_URL" \
             --arg whisperCommit "$WHISPER_CPP_COMMIT" \
-            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},whisperCpp:{repository:"ggml-org/whisper.cpp",commit:$whisperCommit,model:"ggml-base.bin",downloadUrl:"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"},workflowRun:$runUrl}' \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},media3:{repository:$mediaRepository,branch:$mediaBranch,commit:$mediaSha},whisperCpp:{repository:"ggml-org/whisper.cpp",commit:$whisperCommit,model:"ggml-tiny-q5_1.bin",downloadUrl:"https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
 
           (
@@ -527,7 +527,7 @@ jobs:
             sha256sum "R15 TV-POC-"*.apk > SHA256SUMS.txt
           )
           {
-            echo "## R15 TV Whisper Base Subtitle POC build result"
+            echo "## R15 TV Whisper Tiny Q5_1 Subtitle POC build result"
             echo "- This artifact contains separate Android TV APKs for arm64-v8a and armeabi-v7a. Install the armeabi-v7a APK on devices whose Android userspace supports only 32-bit ARM."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
@@ -535,8 +535,8 @@ jobs:
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- Experimental debug APK only; not a release and not ready for general use."
-            echo "- Scope: in-app playback audio capture + downloadable multilingual Whisper Base + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
-            echo "- First use downloads Whisper Base and the ML Kit translation model; inference and translation are intended to run locally afterward."
+            echo "- Scope: in-app playback audio capture + downloadable multilingual Whisper Tiny Q5_1 + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
+            echo "- First use downloads Whisper Tiny Q5_1 and the ML Kit translation model; inference and translation are intended to run locally afterward."
             else
               echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
             fi
@@ -545,7 +545,7 @@ jobs:
       - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v4
         with:
-          name: R15 TV Whisper Base Subtitle POC-${{ github.run_number }}
+          name: R15 TV Whisper Tiny Q5_1 Subtitle POC-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
