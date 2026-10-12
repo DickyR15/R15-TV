@@ -63,6 +63,11 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeTranscribe(
     whisper_full_params params =
             whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
     params.n_threads = std::max(1, std::min(4, static_cast<int>(num_threads)));
+    params.greedy.best_of = 1; // Do not score multiple candidates on this low-core TV box.
+    params.max_tokens = 64;    // Bound decode work for each short live-caption window.
+    params.single_segment = true;
+    params.temperature = 0.0f;
+    params.temperature_inc = 0.0f;
     params.translate = false; // ML Kit performs English-to-Chinese translation.
     params.no_context = true;
     params.no_timestamps = true;

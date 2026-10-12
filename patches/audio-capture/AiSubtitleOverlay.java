@@ -58,6 +58,8 @@ public final class AiSubtitleOverlay {
     private boolean hasTranslatedCaption;
     private boolean hasRecognizedCaption;
     private boolean whisperReady;
+    private boolean inferenceInProgress;
+    private boolean hasInferenceStatus;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final Runnable modelLoadWarning;
     private AiSubtitlePlaybackCapture capture;
@@ -388,6 +390,8 @@ public final class AiSubtitleOverlay {
         hasTranslatedCaption = false;
         hasRecognizedCaption = false;
         whisperReady = false;
+        inferenceInProgress = false;
+        hasInferenceStatus = false;
         mainHandler.removeCallbacks(modelLoadWarning);
         updateModelControls();
         toggle.setText("停止即時字幕測試");
@@ -488,7 +492,19 @@ public final class AiSubtitleOverlay {
                 public void onStatus(String message) {
                     if (!enabled) return;
                     status.setText(message);
-                    if (message.startsWith("正在載入 Whisper Base")) {
+                    if (message.startsWith("正在辨識直播語音…")) {
+                        inferenceInProgress = true;
+                        hasInferenceStatus = true;
+                        caption.setText("正在辨識直播語音…");
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("Whisper 本機辨識仍在運算")) {
+                        inferenceInProgress = true;
+                        hasInferenceStatus = true;
+                        caption.setText(message);
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("正在載入 Whisper Base")) {
+                        inferenceInProgress = false;
+                        hasInferenceStatus = false;
                         whisperReady = false;
                         mainHandler.removeCallbacks(modelLoadWarning);
                         mainHandler.postDelayed(modelLoadWarning, 15000L);
@@ -501,12 +517,17 @@ public final class AiSubtitleOverlay {
                             caption.setText("模型已載入，等待直播語音…");
                             caption.setVisibility(android.view.View.VISIBLE);
                         }
+                    } else if (message.startsWith("Whisper Base · 偵測 ")) {
+                        inferenceInProgress = false;
+                        hasInferenceStatus = true;
                     } else if (message.startsWith("Whisper Base 啟動失敗")) {
                         mainHandler.removeCallbacks(modelLoadWarning);
                         stopCapture(message);
                         caption.setText(message);
                         caption.setVisibility(android.view.View.VISIBLE);
                     } else if (message.startsWith("已收到音訊，但尚未辨識到清楚語音")) {
+                        inferenceInProgress = false;
+                        hasInferenceStatus = true;
                         if (!hasRecognizedCaption && !hasTranslatedCaption) {
                             caption.setText(message);
                             caption.setVisibility(android.view.View.VISIBLE);
@@ -518,6 +539,8 @@ public final class AiSubtitleOverlay {
                 public void onSubtitle(String text) {
                     if (enabled && !hasTranslatedCaption) {
                         hasRecognizedCaption = true;
+                        inferenceInProgress = false;
+                        hasInferenceStatus = true;
                         caption.setText(text);
                     }
                 }
@@ -554,9 +577,10 @@ public final class AiSubtitleOverlay {
                             status.setText(String.format(
                                     java.util.Locale.ROOT,
                                     "MPV 音訊擷取中 · 音量 %.0f dBFS", dbfs));
-                            if (whisperReady && !hasRecognizedCaption && !hasTranslatedCaption) {
+                            if (whisperReady && !hasRecognizedCaption && !hasTranslatedCaption
+                                    && !hasInferenceStatus && !inferenceInProgress) {
                                 caption.setText(dbfs > -55.0f
-                                        ? "已收到播放音訊，正在辨識…"
+                                        ? "已收到播放音訊，等待首次辨識…"
                                         : "模型已載入，但目前擷取音量很低；等待直播語音…");
                                 caption.setVisibility(android.view.View.VISIBLE);
                             }
@@ -586,6 +610,8 @@ public final class AiSubtitleOverlay {
         enabled = false;
         whisperReady = false;
         hasRecognizedCaption = false;
+        inferenceInProgress = false;
+        hasInferenceStatus = false;
         closeTranslationEngine();
         AiSubtitleEngine.stop();
         toggle.setText("啟動即時字幕測試");
@@ -601,6 +627,8 @@ public final class AiSubtitleOverlay {
         enabled = false;
         whisperReady = false;
         hasRecognizedCaption = false;
+        inferenceInProgress = false;
+        hasInferenceStatus = false;
         hasTranslatedCaption = false;
         AiSubtitlePlaybackCapture current = capture;
         capture = null;

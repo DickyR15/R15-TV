@@ -31,7 +31,8 @@ import java.util.Locale;
 
 public final class AiSubtitleSettingsActivity extends BaseActivity {
     private static final String PREFS_NAME = "r15_ai_subtitle_settings";
-    private static final String KEY_AUTO_START = "auto_start";
+    // New key migrates existing installs to auto-start once the model is downloaded.
+    private static final String KEY_AUTO_START = "auto_start_v2";
     private static final String KEY_TRANSLATION_SERVICE = "translation_service";
     private static final String KEY_SUBTITLE_DISPLAY = "subtitle_display";
 
@@ -51,7 +52,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     public static boolean isAutoStartEnabled(Context context) {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KEY_AUTO_START, false);
+                .getBoolean(KEY_AUTO_START, true);
     }
 
     public static int getTranslationService(Context context) {

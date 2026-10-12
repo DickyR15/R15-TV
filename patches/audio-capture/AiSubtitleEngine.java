@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ai.subtitle;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Process;
 import android.os.SystemClock;
 
 import androidx.media3.common.C;
@@ -14,6 +15,7 @@ import java.util.Arrays;
 import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -33,10 +35,11 @@ public final class AiSubtitleEngine {
     }
 
     private static final int ASR_SAMPLE_RATE = 16000;
-    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 6;
-    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
-    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3;
-    private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 10;
+    // Shorter windows and hop intervals cap CPU time for live captioning on TV boxes.
+    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
+    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3;
+    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 2;
+    private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 6;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
     private static final float[] POISON = new float[0];
@@ -151,6 +154,8 @@ public final class AiSubtitleEngine {
     private void runRecognizer() {
         long whisperContext = 0L;
         try {
+            // Let video rendering and audio playback take priority on low-core TV boxes.
+            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             if (modelFile == null || !modelFile.isFile()) {
                 throw new IllegalStateException("請先下載 Whisper Base 多語模型");
             }
@@ -195,7 +200,23 @@ public final class AiSubtitleEngine {
                 long inferenceStarted = SystemClock.elapsedRealtime();
                 int inferenceThreads = Math.max(1, Math.min(2,
                         Runtime.getRuntime().availableProcessors() / 2));
-                String result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                postStatus("正在辨識直播語音…");
+                AtomicBoolean inferenceActive = new AtomicBoolean(true);
+                Runnable[] heartbeat = new Runnable[1];
+                heartbeat[0] = () -> {
+                    if (!running || !inferenceActive.get()) return;
+                    long seconds = (SystemClock.elapsedRealtime() - inferenceStarted) / 1000L;
+                    postStatus("Whisper 本機辨識仍在運算 · 已等待 " + seconds + " 秒");
+                    MAIN.postDelayed(heartbeat[0], 5000L);
+                };
+                MAIN.postDelayed(heartbeat[0], 5000L);
+                String result;
+                try {
+                    result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                } finally {
+                    inferenceActive.set(false);
+                    MAIN.removeCallbacks(heartbeat[0]);
+                }
                 long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
 
                 String detectedLanguage = "und";
