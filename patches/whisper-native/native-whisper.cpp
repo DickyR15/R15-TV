@@ -93,8 +93,9 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeTranscribe(
         text.append(segment);
     }
 
-    const char *language = whisper_lang_str(whisper_full_lang_id(context));
-    std::string payload = (language == nullptr || language[0] == '\0') ? "und" : language;
+    const char *detected_language = whisper_lang_str(whisper_full_lang_id(context));
+    std::string payload = (detected_language == nullptr || detected_language[0] == '\0')
+            ? "und" : detected_language;
     payload.push_back('\n');
     payload.append(text);
     return env->NewStringUTF(payload.c_str());
