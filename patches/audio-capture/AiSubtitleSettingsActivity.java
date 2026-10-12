@@ -185,7 +185,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         mBinding.modelButton.setEnabled(false);
         mBinding.modelProgress.setVisibility(View.VISIBLE);
         mBinding.modelProgress.setProgress(0);
-        mBinding.modelStatus.setText("正在連線下載 Whisper Base 多語模型…");
+        mBinding.modelStatus.setText("正在連線下載 Whisper Tiny Q5_1 多語模型…");
         modelManager.download(new WhisperModelManager.Listener() {
             @Override
             public void onProgress(long downloadedBytes, long totalBytes) {
@@ -202,10 +202,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 }
             }
             @Override public void onDownloaded(File file) {
-                if (!isFinishing()) refreshModelState("Whisper Base 已下載完成。");
+                if (!isFinishing()) refreshModelState("Whisper Tiny Q5_1 已下載完成。");
             }
             @Override public void onDeleted() {
-                if (!isFinishing()) refreshModelState("Whisper Base 模型已刪除。");
+                if (!isFinishing()) refreshModelState("Whisper Tiny Q5_1 模型已刪除。");
             }
             @Override public void onError(String message) {
                 if (!isFinishing()) refreshModelState("模型下載失敗：" + message);
@@ -216,15 +216,15 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private void confirmDeleteModel(View view) {
         if (modelManager.isDownloading()) return;
         new AlertDialog.Builder(this)
-                .setTitle("刪除 Whisper Base 模型？")
-                .setMessage("會刪除約 148 MB 的本機語音辨識模型；日後可重新下載。")
+                .setTitle("刪除 Whisper Tiny Q5_1 模型？")
+                .setMessage("會刪除約 32 MB 的本機語音辨識模型；日後可重新下載。")
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .setPositiveButton("刪除", (dialog, which) ->
                         modelManager.delete(new WhisperModelManager.Listener() {
                             @Override public void onProgress(long downloadedBytes, long totalBytes) { }
                             @Override public void onDownloaded(File file) { }
                             @Override public void onDeleted() {
-                                if (!isFinishing()) refreshModelState("Whisper Base 模型已刪除。");
+                                if (!isFinishing()) refreshModelState("Whisper Tiny Q5_1 模型已刪除。");
                             }
                             @Override public void onError(String message) {
                                 if (!isFinishing()) refreshModelState("刪除失敗：" + message);
@@ -238,13 +238,13 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         boolean ready = modelManager != null && modelManager.isDownloaded();
         boolean downloading = modelManager != null && modelManager.isDownloading();
         mBinding.modelStatus.setText(notice != null ? notice : ready
-                ? "模型狀態：Whisper Base 多語模型已下載"
+                ? "模型狀態：Whisper Tiny Q5_1 多語模型已下載"
                 : downloading ? "模型下載中，請稍候…" : "模型狀態：尚未下載");
         mBinding.modelButton.setVisibility(ready ? View.GONE : View.VISIBLE);
         mBinding.modelButton.setEnabled(!downloading);
         mBinding.modelButton.setText(downloading
-                ? "正在下載 Whisper Base…"
-                : "下載 Whisper Base 多語模型（約 148 MB）");
+                ? "正在下載 Whisper Tiny Q5_1…"
+                : "下載 Whisper Tiny Q5_1 多語模型（約 32 MB）");
         mBinding.deleteModelButton.setVisibility(ready ? View.VISIBLE : View.GONE);
         mBinding.modelProgress.setVisibility(downloading ? View.VISIBLE : View.GONE);
     }
