@@ -28,7 +28,7 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeCreateContext(
     env->ReleaseStringUTFChars(model_path, path);
 
     if (context == nullptr) {
-        throwIllegalState(env, "Whisper 無法載入模型；請重新下載 Whisper Base");
+        throwIllegalState(env, "Whisper 無法載入模型；請重新下載 Whisper Tiny Q5_1");
         return 0;
     }
     return reinterpret_cast<jlong>(context);
