@@ -277,6 +277,32 @@ public final class AiSubtitleEngine {
         if (current == null || current.trim().isEmpty()) return "";
         if (previous == null || previous.trim().isEmpty()) return current.trim();
 
+        // For Chinese/Japanese/Korean captions, compare Unicode letters/digits rather
+        // than whitespace-delimited words, because CJK text usually has no spaces.
+        if (containsCjk(previous) || containsCjk(current)) {
+            String prevUnicode = normalizeUnicodeText(previous);
+            String currentUnicode = normalizeUnicodeText(current);
+            if (currentUnicode.isEmpty()) return "";
+            if (prevUnicode.isEmpty()) return current.trim();
+            if (prevUnicode.equals(currentUnicode) || prevUnicode.contains(currentUnicode)) return "";
+            if (currentUnicode.startsWith(prevUnicode)) {
+                return suffixAfterNormalizedCharacters(current, prevUnicode.codePointCount(0, prevUnicode.length()));
+            }
+            int maxOverlap = Math.min(80, Math.min(
+                    prevUnicode.codePointCount(0, prevUnicode.length()),
+                    currentUnicode.codePointCount(0, currentUnicode.length())));
+            for (int overlap = maxOverlap; overlap >= 5; overlap--) {
+                int prevCount = prevUnicode.codePointCount(0, prevUnicode.length());
+                int start = prevUnicode.offsetByCodePoints(0, prevCount - overlap);
+                String left = prevUnicode.substring(start);
+                int currentEnd = currentUnicode.offsetByCodePoints(0, overlap);
+                if (left.equals(currentUnicode.substring(0, currentEnd))) {
+                    return suffixAfterNormalizedCharacters(current, overlap);
+                }
+            }
+            return current.trim();
+        }
+
         String prevNorm = normalizeText(previous);
         String currentNorm = normalizeText(current);
         if (prevNorm.isEmpty()) return current.trim();
@@ -314,6 +340,36 @@ public final class AiSubtitleEngine {
             }
         }
         return current.trim();
+    }
+
+    private static boolean containsCjk(String text) {
+        return text != null && text.codePoints().anyMatch(codePoint ->
+                (codePoint >= 0x4E00 && codePoint <= 0x9FFF)
+                || (codePoint >= 0x3400 && codePoint <= 0x4DBF)
+                || (codePoint >= 0x3040 && codePoint <= 0x30FF)
+                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF));
+    }
+
+    private static String normalizeUnicodeText(String text) {
+        return text == null ? "" : text.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\p{L}\\p{N}]+", "");
+    }
+
+    private static String suffixAfterNormalizedCharacters(String current, int count) {
+        if (current == null || count <= 0) return current == null ? "" : current.trim();
+        int index = 0;
+        int seen = 0;
+        while (index < current.length() && seen < count) {
+            int codePoint = current.codePointAt(index);
+            index += Character.charCount(codePoint);
+            if (Character.isLetterOrDigit(codePoint)) seen++;
+        }
+        while (index < current.length()) {
+            int codePoint = current.codePointAt(index);
+            if (Character.isLetterOrDigit(codePoint)) break;
+            index += Character.charCount(codePoint);
+        }
+        return index < current.length() ? current.substring(index).trim() : "";
     }
 
     private static String normalizeText(String text) {
