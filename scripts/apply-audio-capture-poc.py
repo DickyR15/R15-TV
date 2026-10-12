@@ -436,6 +436,7 @@ def main() -> None:
     shutil.copy2(patch_dir / "activity_ai_subtitle_settings.xml", settings_layout_target)
     for name in (
         "AiSubtitleEngine.java",
+        "GroqSpeechToText.java",
         "AiSubtitleOverlay.java",
         "AiSubtitlePlaybackCapture.java",
         "AiSubtitleProjectionService.java",
