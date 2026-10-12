@@ -310,6 +310,28 @@ public final class AiSubtitleEngine {
         if (current == null || current.trim().isEmpty()) return "";
         if (previous == null || previous.trim().isEmpty()) return current.trim();
 
+        // CJK transcripts usually contain no spaces. Compare Unicode letters/digits
+        // and trim the overlap by code point so rolling cloud windows do not replay
+        // the same Chinese/Japanese/Korean caption every update.
+        if (containsCjk(previous) || containsCjk(current)) {
+            String prevUnicode = normalizeUnicodeText(previous);
+            String currentUnicode = normalizeUnicodeText(current);
+            if (currentUnicode.isEmpty()) return "";
+            if (prevUnicode.isEmpty()) return current.trim();
+            if (prevUnicode.equals(currentUnicode) || prevUnicode.contains(currentUnicode)) return "";
+            if (currentUnicode.startsWith(prevUnicode)) {
+                return suffixAfterNormalizedCharacters(current, prevUnicode.length());
+            }
+            int maxOverlap = Math.min(80, Math.min(prevUnicode.length(), currentUnicode.length()));
+            for (int overlap = maxOverlap; overlap >= 6; overlap--) {
+                if (prevUnicode.regionMatches(prevUnicode.length() - overlap,
+                        currentUnicode, 0, overlap)) {
+                    return suffixAfterNormalizedCharacters(current, overlap);
+                }
+            }
+            return current.trim();
+        }
+
         String prevNorm = normalizeText(previous);
         String currentNorm = normalizeText(current);
         if (prevNorm.isEmpty()) return current.trim();
@@ -347,6 +369,28 @@ public final class AiSubtitleEngine {
             }
         }
         return current.trim();
+    }
+
+    private static String normalizeUnicodeText(String text) {
+        return text == null ? "" : text.toLowerCase(Locale.ROOT)
+                .replaceAll("[^\\\\p{L}\\\\p{N}']+", "");
+    }
+
+    private static String suffixAfterNormalizedCharacters(String current, int count) {
+        if (current == null || count <= 0) return current == null ? "" : current.trim();
+        int index = 0;
+        int seen = 0;
+        while (index < current.length() && seen < count) {
+            int codePoint = current.codePointAt(index);
+            index += Character.charCount(codePoint);
+            if (Character.isLetterOrDigit(codePoint) || codePoint == '\\'') seen++;
+        }
+        while (index < current.length()) {
+            int codePoint = current.codePointAt(index);
+            if (Character.isLetterOrDigit(codePoint) || codePoint == '\\'') break;
+            index += Character.charCount(codePoint);
+        }
+        return index < current.length() ? current.substring(index).trim() : "";
     }
 
     private static String normalizeText(String text) {
