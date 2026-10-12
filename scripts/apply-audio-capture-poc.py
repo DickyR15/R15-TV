@@ -518,7 +518,7 @@ def main() -> None:
     print("Applied Whisper Tiny Q5_1 subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
     print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
-    print("Scope: in-app playback audio capture + downloadable Whisper Tiny Q5_1 multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
+    print("Scope: in-app playback audio capture + downloadable Whisper Tiny Q5_1 multilingual model + ML Kit on-device multilingual translation to Traditional Chinese + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
 
