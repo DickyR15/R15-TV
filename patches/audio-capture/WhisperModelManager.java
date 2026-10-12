@@ -15,14 +15,14 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Downloads the official multilingual Whisper Base weights into app-private storage. */
+/** Downloads the official multilingual Whisper Tiny Q5_1 weights into app-private storage. */
 public final class WhisperModelManager {
-    public static final String MODEL_NAME = "Whisper Base 多語模型";
-    public static final String MODEL_FILENAME = "ggml-base.bin";
+    public static final String MODEL_NAME = "Whisper Tiny Q5_1 多語模型";
+    public static final String MODEL_FILENAME = "ggml-tiny-q5_1.bin";
     public static final String MODEL_URL =
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin";
     private static volatile WhisperModelManager INSTANCE;
-    private static final long MIN_MODEL_BYTES = 100L * 1024L * 1024L;
+    private static final long MIN_MODEL_BYTES = 20L * 1024L * 1024L;
     private static final int BUFFER_SIZE = 128 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
@@ -85,7 +85,7 @@ public final class WhisperModelManager {
                     throw new IOException("無法清除未完成的模型檔");
                 }
                 if (modelFile.exists() && !modelFile.delete()) {
-                    throw new IOException("無法刪除 Whisper Base 模型");
+                    throw new IOException("無法刪除 Whisper Tiny 模型");
                 }
                 MAIN.post(() -> {
                     if (listener != null) listener.onDeleted();
@@ -136,7 +136,7 @@ public final class WhisperModelManager {
             }
 
             if (downloadedBytes < MIN_MODEL_BYTES) {
-                throw new IOException("下載的檔案太小，可能不是完整的 Whisper Base 模型");
+                throw new IOException("下載的檔案太小，可能不是完整的 Whisper Tiny Q5_1 模型");
             }
             if (totalBytes > 0 && downloadedBytes != totalBytes) {
                 throw new IOException("模型下載大小不符，請重新下載");
