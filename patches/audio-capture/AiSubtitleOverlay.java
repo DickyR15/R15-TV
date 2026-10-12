@@ -306,6 +306,14 @@ public final class AiSubtitleOverlay {
     }
 
     private void updateModelControls() {
+        if (AiSubtitleSettingsActivity.isCloudAsrEnabled(activity)) {
+            modelStatus.setText(GroqSpeechToText.hasApiKey(activity)
+                    ? "語音辨識：Groq 雲端模式（API Key 已儲存）"
+                    : "語音辨識：Groq 雲端模式（尚未設定 API Key）");
+            modelButton.setVisibility(android.view.View.GONE);
+            deleteModelButton.setVisibility(android.view.View.GONE);
+            return;
+        }
         boolean ready = modelManager.isDownloaded();
         boolean downloading = modelManager.isDownloading();
         if (ready) {
@@ -357,7 +365,9 @@ public final class AiSubtitleOverlay {
         playerView.post(() -> playerView.postDelayed(() -> {
             if (activity.isFinishing() || !playerView.isAttachedToWindow()
                     || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
-            if (!enabled && modelManager.isDownloaded() && !modelManager.isDownloading()) {
+            boolean cloud = AiSubtitleSettingsActivity.isCloudAsrEnabled(activity);
+            boolean ready = cloud ? GroqSpeechToText.hasApiKey(activity) : modelManager.isDownloaded();
+            if (!enabled && ready && (cloud || !modelManager.isDownloading())) {
                 ensureAutoStartCapture();
             }
         }, 1500L));
@@ -368,7 +378,7 @@ public final class AiSubtitleOverlay {
         entryButton.setVisibility(android.view.View.GONE);
         if (enabled) caption.setVisibility(android.view.View.GONE);
         panel.bringToFront();
-        if (!modelManager.isDownloaded()) modelButton.requestFocus();
+        if (!AiSubtitleSettingsActivity.isCloudAsrEnabled(activity) && !modelManager.isDownloaded()) modelButton.requestFocus();
         else toggle.requestFocus();
     }
 
@@ -399,11 +409,17 @@ public final class AiSubtitleOverlay {
             status.setText("此功能需要 Android 10 以上");
             return;
         }
-        if (modelManager.isDownloading()) {
+        boolean cloudAsr = AiSubtitleSettingsActivity.isCloudAsrEnabled(activity);
+        if (!cloudAsr && modelManager.isDownloading()) {
             modelStatus.setText("請等 Whisper Base 模型下載完成");
             return;
         }
-        if (!modelManager.isDownloaded()) {
+        if (cloudAsr && !GroqSpeechToText.hasApiKey(activity)) {
+            modelStatus.setText("請先到「AI 即時字幕設定」輸入並儲存 Groq API Key");
+            status.setText("尚未設定 Groq API Key");
+            return;
+        }
+        if (!cloudAsr && !modelManager.isDownloaded()) {
             modelStatus.setText("請先下載 Whisper Base 多語模型（約 148 MB）");
             modelButton.requestFocus();
             return;
@@ -524,11 +540,23 @@ public final class AiSubtitleOverlay {
                         hasInferenceStatus = true;
                         caption.setText("正在辨識直播語音…");
                         caption.setVisibility(android.view.View.VISIBLE);
-                    } else if (message.startsWith("Whisper 本機辨識仍在運算")) {
+                    } else if (message.startsWith("Whisper 本機辨識仍在運算")
+                            || message.startsWith("Groq 雲端辨識仍在處理")) {
                         inferenceInProgress = true;
                         hasInferenceStatus = true;
                         caption.setText(message);
                         caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("正在送出直播語音辨識…")) {
+                        inferenceInProgress = true;
+                        hasInferenceStatus = true;
+                        caption.setText("正在將音訊片段送往 Groq 辨識…");
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (message.startsWith("Groq 雲端辨識已啟動")) {
+                        whisperReady = true;
+                        if (!hasRecognizedCaption && !hasTranslatedCaption) {
+                            caption.setText("雲端辨識已就緒，等待直播語音…");
+                            caption.setVisibility(android.view.View.VISIBLE);
+                        }
                     } else if (message.startsWith("正在載入 Whisper Base")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = false;
@@ -544,10 +572,12 @@ public final class AiSubtitleOverlay {
                             caption.setText("模型已載入，等待直播語音…");
                             caption.setVisibility(android.view.View.VISIBLE);
                         }
-                    } else if (message.startsWith("Whisper Base · 偵測 ")) {
+                    } else if (message.startsWith("Whisper Base · 偵測 ")
+                            || message.startsWith("Groq 雲端辨識 · 偵測 ")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = true;
-                    } else if (message.startsWith("Whisper Base 啟動失敗")) {
+                    } else if (message.startsWith("Whisper Base 啟動失敗")
+                            || message.startsWith("Groq 雲端辨識失敗")) {
                         mainHandler.removeCallbacks(modelLoadWarning);
                         stopCapture(message);
                         caption.setText(message);
