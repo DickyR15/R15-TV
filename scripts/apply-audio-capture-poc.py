@@ -248,7 +248,7 @@ def patch_setting_activity_layout(path: Path) -> None:
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="4dp"
-                android:text="Whisper Base · Google ML Kit · OpenCC 臺灣繁體"
+                android:text="Whisper Tiny Q5_1 · Google ML Kit · OpenCC 臺灣繁體"
                 android:textColor="#FFBFD7FF"
                 android:textSize="14sp" />
 
@@ -515,10 +515,10 @@ def main() -> None:
     if "PLAYBACK_QUALITY_STABLE_1080P" not in player_setting.read_text(encoding="utf-8"):
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
-    print("Applied Whisper Base subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
+    print("Applied Whisper Tiny Q5_1 subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
     print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
-    print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
+    print("Scope: in-app playback audio capture + downloadable Whisper Tiny Q5_1 multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
     print("ML Kit downloads its translation model on first use; translation does not require a paid API key.")
     print("Audio capture filters to the R15 TV process UID and requires Android 10+, RECORD_AUDIO and MediaProjection consent.")
 
