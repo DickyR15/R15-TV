@@ -81,7 +81,7 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeTranscribe(
     }
 
     if (result != 0) {
-        return env->NewStringUTF("");
+        return env->NewStringUTF("und\\n");
     }
 
     std::string text;
@@ -92,7 +92,12 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeTranscribe(
         if (!text.empty()) text.push_back(' ');
         text.append(segment);
     }
-    return env->NewStringUTF(text.c_str());
+
+    const char *language = whisper_lang_str(whisper_full_lang_id(context));
+    std::string payload = (language == nullptr || language[0] == '\\0') ? "und" : language;
+    payload.push_back('\\n');
+    payload.append(text);
+    return env->NewStringUTF(payload.c_str());
 }
 
 extern "C" JNIEXPORT void JNICALL

@@ -27,10 +27,14 @@ public final class AiSubtitleEngine {
         void onStatus(String status);
         void onSubtitle(String text);
         default void onFinalSubtitle(String text) { }
+        default void onFinalSubtitle(String text, String language) {
+            onFinalSubtitle(text);
+        }
     }
 
     private static final int ASR_SAMPLE_RATE = 16000;
     private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 6;
+    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
     private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3;
     private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 10;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
@@ -152,13 +156,14 @@ public final class AiSubtitleEngine {
             }
             postStatus("正在載入 Whisper Base 多語模型…");
             whisperContext = WhisperCpp.createContext(modelFile);
-            postStatus("Whisper Base 已啟動；英文語音辨識中");
+            postStatus("Whisper Base 已啟動；多語自動辨識中");
 
             float[] ring = new float[MAX_WINDOW_SAMPLES];
             int writeIndex = 0;
             int bufferedSamples = 0;
             int samplesSinceInference = 0;
             String previousTranscript = "";
+            String previousLanguage = "";
 
             while (running || !audioQueue.isEmpty()) {
                 float[] samples;
@@ -179,28 +184,47 @@ public final class AiSubtitleEngine {
                 }
                 samplesSinceInference += samples.length;
 
-                if (bufferedSamples < WINDOW_SAMPLES || samplesSinceInference < UPDATE_SAMPLES) {
+                int minimumWindow = previousTranscript.isEmpty()
+                        ? INITIAL_WINDOW_SAMPLES : WINDOW_SAMPLES;
+                if (bufferedSamples < minimumWindow || samplesSinceInference < UPDATE_SAMPLES) {
                     continue;
                 }
                 samplesSinceInference = 0;
 
                 float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
                 long inferenceStarted = SystemClock.elapsedRealtime();
-                String transcript = WhisperCpp.transcribe(whisperContext, window, "en", 2);
+                int inferenceThreads = Math.max(1, Math.min(2,
+                        Runtime.getRuntime().availableProcessors() / 2));
+                String result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
                 long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
-                if (transcript == null) transcript = "";
-                transcript = transcript.trim();
+
+                String detectedLanguage = "und";
+                String transcript = result == null ? "" : result.trim();
+                int separator = transcript.indexOf('\\n');
+                if (separator > 0 && separator <= 8) {
+                    String language = transcript.substring(0, separator).trim();
+                    if (language.matches("[a-z]{2,3}|und")) {
+                        detectedLanguage = language;
+                        transcript = transcript.substring(separator + 1).trim();
+                    }
+                }
 
                 if (!transcript.isEmpty()) {
                     postSubtitle(transcript);
-                    String newText = extractNewText(previousTranscript, transcript);
-                    if (!newText.isEmpty()) postFinalSubtitle(newText);
+                    String newText = detectedLanguage.equals(previousLanguage)
+                            ? extractNewText(previousTranscript, transcript) : transcript;
+                    if (!newText.isEmpty()) postFinalSubtitle(newText, detectedLanguage);
                     previousTranscript = transcript;
-                    postStatus("Whisper Base · " + (window.length / ASR_SAMPLE_RATE)
-                            + " 秒音訊 · 推論 " + inferenceMs + " ms");
+                    previousLanguage = detectedLanguage;
+                    postStatus("Whisper Base · 偵測 " + detectedLanguage + " · "
+                            + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
+                            + inferenceMs + " ms");
+                } else {
+                    postStatus("已收到音訊，但尚未辨識到清楚語音；持續聆聽…");
                 }
             }
         } catch (Throwable error) {
+            running = false;
             postStatus("Whisper Base 啟動失敗：" + readableMessage(error));
         } finally {
             try {
@@ -293,9 +317,11 @@ public final class AiSubtitleEngine {
         });
     }
 
-    private void postFinalSubtitle(String message) {
+    private void postFinalSubtitle(String message, String language) {
         MAIN.post(() -> {
-            if (ACTIVE.get() == this && listener != null) listener.onFinalSubtitle(message);
+            if (ACTIVE.get() == this && listener != null) {
+                listener.onFinalSubtitle(message, language);
+            }
         });
     }
 

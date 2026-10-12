@@ -13,6 +13,8 @@ import com.zqc.opencc.android.lib.ChineseConverter;
 import com.zqc.opencc.android.lib.ConversionType;
 
 import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.Locale;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
@@ -44,6 +46,7 @@ public final class AiSubtitleTranslationEngine {
 
     private volatile boolean closed;
     private boolean modelReady;
+    private boolean modelLoading;
     private boolean translating;
     private String lastQueuedPhrase = "";
     private String processingPhrase = "";
@@ -58,33 +61,33 @@ public final class AiSubtitleTranslationEngine {
         translator = Translation.getClient(options);
     }
 
-    /** Begins the one-time on-device model download. No API key or paid cloud service is used. */
+    /**
+     * Defer ML Kit initialization until an English phrase actually needs translation.
+     * This avoids loading an English-to-Chinese model for Mandarin/Japanese channels.
+     */
     public void start() {
-        postStatus("準備本機翻譯模型（首次使用需要網路）");
-        translator.downloadModelIfNeeded(new DownloadConditions.Builder().build())
-                .addOnSuccessListener(unused -> {
-                    synchronized (lock) {
-                        if (closed) return;
-                        modelReady = true;
-                    }
-                    postStatus("本機翻譯已就緒；繁體中文轉換已啟用");
-                    drainQueue();
-                })
-                .addOnFailureListener(error -> {
-                    synchronized (lock) {
-                        if (closed) return;
-                        modelReady = false;
-                        pending.clear();
-                    }
-                    postStatus("翻譯模型下載失敗；仍可顯示英文辨識字幕：" + readableMessage(error));
-                });
+        postStatus("已啟用語言偵測；只有辨識到英文時才準備英翻中模型");
     }
 
-    /** Enqueue a finalized ASR phrase; duplicate phrases are ignored. */
     public void translateFinalPhrase(String text) {
+        translateFinalPhrase(text, "en");
+    }
+
+    public void translateFinalPhrase(String text, String sourceLanguage) {
         if (closed || text == null) return;
         String phrase = text.trim();
         if (phrase.isEmpty()) return;
+        String language = sourceLanguage == null ? "und" : sourceLanguage.trim().toLowerCase(Locale.ROOT);
+
+        if ("zh".equals(language) || ("und".equals(language) && containsCjk(phrase))) {
+            deliverOriginal(phrase, true, "已辨識中文；直接轉為臺灣繁體，不啟動英翻中模型");
+            return;
+        }
+        if (!"en".equals(language)) {
+            deliverOriginal(phrase, false, "已辨識 " + language
+                    + "；目前僅支援英文→繁體中文翻譯，先顯示辨識原文");
+            return;
+        }
 
         synchronized (lock) {
             if (closed || phrase.equals(lastQueuedPhrase) || pending.contains(phrase)) return;
@@ -95,7 +98,73 @@ public final class AiSubtitleTranslationEngine {
             }
             pending.addLast(phrase);
         }
+        ensureEnglishModelLoaded();
         drainQueue();
+    }
+
+    private void deliverOriginal(String source, boolean convertTraditional, String statusMessage) {
+        postStatus(statusMessage);
+        try {
+            conversionExecutor.execute(() -> {
+                String result = source;
+                if (convertTraditional) {
+                    try {
+                        String converted = ChineseConverter.convert(source, ConversionType.S2TWP, context);
+                        if (converted != null && !converted.trim().isEmpty()) result = converted.trim();
+                    } catch (Throwable error) {
+                        postStatus("繁體轉換失敗，保留原文：" + readableMessage(error));
+                    }
+                }
+                final String finalResult = result;
+                mainHandler.post(() -> {
+                    if (!closed && listener != null) listener.onTranslatedSubtitle(source, finalResult);
+                });
+            });
+        } catch (RejectedExecutionException ignored) {
+            if (!closed && listener != null) listener.onTranslatedSubtitle(source, source);
+        }
+    }
+
+    private static boolean containsCjk(String text) {
+        return text.codePoints().anyMatch(codePoint ->
+                (codePoint >= 0x4E00 && codePoint <= 0x9FFF)
+                || (codePoint >= 0x3400 && codePoint <= 0x4DBF)
+                || (codePoint >= 0x3040 && codePoint <= 0x30FF)
+                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF));
+    }
+
+    private void ensureEnglishModelLoaded() {
+        synchronized (lock) {
+            if (closed || modelReady || modelLoading) return;
+            modelLoading = true;
+        }
+        postStatus("偵測到英文，正在準備本機英翻中模型…");
+        translator.downloadModelIfNeeded(new DownloadConditions.Builder().build())
+                .addOnSuccessListener(unused -> {
+                    synchronized (lock) {
+                        if (closed) return;
+                        modelReady = true;
+                        modelLoading = false;
+                    }
+                    postStatus("英文→繁中本機翻譯已就緒");
+                    drainQueue();
+                })
+                .addOnFailureListener(error -> {
+                    final ArrayList<String> fallback;
+                    synchronized (lock) {
+                        if (closed) return;
+                        modelReady = false;
+                        modelLoading = false;
+                        fallback = new ArrayList<>(pending);
+                        pending.clear();
+                    }
+                    postStatus("英文翻譯模型下載失敗，已保留英文原文：" + readableMessage(error));
+                    for (String phrase : fallback) {
+                        mainHandler.post(() -> {
+                            if (!closed && listener != null) listener.onTranslatedSubtitle(phrase, phrase);
+                        });
+                    }
+                });
     }
 
     private void drainQueue() {
@@ -162,6 +231,7 @@ public final class AiSubtitleTranslationEngine {
             closed = true;
             pending.clear();
             modelReady = false;
+            modelLoading = false;
         }
         try {
             translator.close();
