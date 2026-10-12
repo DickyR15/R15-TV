@@ -237,27 +237,29 @@ jobs:
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
           python3 scripts/apply-audio-capture-poc.py --tv-dir sources/TV --patch-dir patches/audio-capture
-          grep -Fq 'android:allowAudioPlaybackCapture="true"' sources/TV/app/src/main/AndroidManifest.xml
-          grep -Fq 'android.permission.RECORD_AUDIO' sources/TV/app/src/main/AndroidManifest.xml
-          grep -Fq 'addMatchingUid(Process.myUid())' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java
-          grep -Fq "com.google.mlkit:translate:17.0.3" sources/TV/app/build.gradle
-          grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
-          grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
-          grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
-          grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
-          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
-          grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
-          grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
-          grep -Fq 'mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java
-          grep -Fq 'PLAYBACK_QUALITY_ADAPTIVE' sources/TV/app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java
-          grep -Fq 'switch (PlayerSetting.getPlaybackQuality())' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
-          grep -Fq 'ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES' sources/TV/app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java
-          test -s sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java
-          test -s sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
-          grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
-          grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
-          test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
-          test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
+          python3 scripts/apply-audio-capture-poc.py --tv-dir sources/TV --patch-dir patches/audio-capture
+          verify() { echo "VERIFY: $*"; "$@"; }
+          verify grep -Fq 'android:allowAudioPlaybackCapture="true"' sources/TV/app/src/main/AndroidManifest.xml
+          verify grep -Fq 'android.permission.RECORD_AUDIO' sources/TV/app/src/main/AndroidManifest.xml
+          verify grep -Fq 'addMatchingUid(Process.myUid())' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitlePlaybackCapture.java
+          verify grep -Fq "com.google.mlkit:translate:17.0.3" sources/TV/app/build.gradle
+          verify grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
+          verify grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
+          verify grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          verify grep -Fq 'ggml-base.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
+          verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          verify grep -Fq 'builder.setForceHighestSupportedBitrate(false);' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+          verify grep -Fq 'mBinding.aiSubtitle.setOnClickListener(this::onAiSubtitle);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java
+          verify grep -Fq 'PLAYBACK_QUALITY_ADAPTIVE' sources/TV/app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java
+          verify grep -Fq 'switch (PlayerSetting.getPlaybackQuality())' sources/TV/app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java
+          verify grep -Fq 'ERROR_CODE_DECODING_FORMAT_EXCEEDS_CAPABILITIES' sources/TV/app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java
+          verify test -s sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/AiSubtitleSettingsActivity.java
+          verify test -s sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
+          verify grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
+          verify grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
+          verify test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
+          verify test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
           echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
           echo "The multilingual Whisper Base model is downloaded inside the app after the user taps the model button; model weights are not bundled in the APK."
           echo "ML Kit English-to-Chinese translation and OpenCC S2TWP remain on-device after first-use translation model download."
