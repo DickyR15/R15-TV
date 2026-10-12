@@ -14,6 +14,7 @@ import android.widget.Toast;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.ai.subtitle.AiSubtitleTranslationEngine;
+import com.fongmi.android.tv.ai.subtitle.GroqSpeechToText;
 import com.fongmi.android.tv.ai.subtitle.WhisperModelManager;
 import com.fongmi.android.tv.databinding.ActivityAiSubtitleSettingsBinding;
 import com.fongmi.android.tv.ui.base.BaseActivity;
@@ -35,7 +36,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private static final String KEY_AUTO_START = "auto_start_v2";
     private static final String KEY_TRANSLATION_SERVICE = "translation_service";
     private static final String KEY_SUBTITLE_DISPLAY = "subtitle_display";
+    private static final String KEY_ASR_SERVICE = "asr_service";
 
+    public static final int ASR_LOCAL_WHISPER = 0;
+    public static final int ASR_GROQ_CLOUD = 1;
     public static final int TRANSLATION_GOOGLE_MLKIT = 0;
     public static final int TRANSLATION_ORIGINAL_ONLY = 1;
     public static final int DISPLAY_TRANSLATED_ONLY = 0;
@@ -47,6 +51,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private boolean draftAutoStart;
     private int draftTranslationService;
     private int draftSubtitleDisplay;
+    private int draftAsrService;
     private boolean bindingSelections;
     private long translationTestStartMs;
 
@@ -65,6 +70,15 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 .getInt(KEY_SUBTITLE_DISPLAY, DISPLAY_TRANSLATED_ONLY);
     }
 
+    public static int getAsrService(Context context) {
+        return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getInt(KEY_ASR_SERVICE, ASR_LOCAL_WHISPER);
+    }
+
+    public static boolean isCloudAsrEnabled(Context context) {
+        return getAsrService(context) == ASR_GROQ_CLOUD;
+    }
+
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, AiSubtitleSettingsActivity.class));
     }
@@ -80,8 +94,15 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         draftAutoStart = isAutoStartEnabled(this);
         draftTranslationService = getTranslationService(this);
         draftSubtitleDisplay = getSubtitleDisplayMode(this);
+        draftAsrService = getAsrService(this);
 
         mBinding.autoStartSwitch.setChecked(draftAutoStart);
+        mBinding.groqApiKeyStatus.setText(GroqSpeechToText.hasApiKey(this)
+                ? "Groq API Key 已儲存（不會顯示完整金鑰）"
+                : "尚未儲存 Groq API Key");
+        mBinding.asrServiceSpinner.setAdapter(makeAdapter(Arrays.asList(
+                "本機 Whisper Base（使用電視盒 CPU）",
+                "Groq 雲端 Whisper（降低本機辨識負載，需網路／API Key）")));
         ArrayAdapter<String> translationAdapter = makeAdapter(Arrays.asList(
                 "Google 翻譯（ML Kit 本機模型）", "只顯示辨識原文（不翻譯）"));
         mBinding.translationServiceSpinner.setAdapter(translationAdapter);
@@ -94,9 +115,19 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 draftTranslationService, TRANSLATION_GOOGLE_MLKIT, TRANSLATION_ORIGINAL_ONLY));
         mBinding.subtitleDisplaySpinner.setSelection(clamp(
                 draftSubtitleDisplay, DISPLAY_TRANSLATED_ONLY, DISPLAY_SOURCE_AND_TRANSLATION));
+        mBinding.asrServiceSpinner.setSelection(clamp(
+                draftAsrService, ASR_LOCAL_WHISPER, ASR_GROQ_CLOUD));
         bindingSelections = false;
 
         mBinding.autoStartSwitch.setOnCheckedChangeListener((button, checked) -> draftAutoStart = checked);
+        mBinding.asrServiceSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (bindingSelections) return;
+                draftAsrService = position;
+                updateAsrOptions();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
         mBinding.translationServiceSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
@@ -115,9 +146,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         });
 
         refreshModelState(null);
+        updateAsrOptions();
         updateTranslationOptions();
-        if (!modelManager.isDownloaded()) mBinding.modelButton.requestFocus();
-        else mBinding.autoStartSwitch.requestFocus();
+        if (draftAsrService == ASR_LOCAL_WHISPER && !modelManager.isDownloaded()) mBinding.modelButton.requestFocus();
+        else mBinding.asrServiceSpinner.requestFocus();
     }
 
     private void jumpTo(View target) {
@@ -163,6 +195,8 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         mBinding.jumpDisplayButton.setOnClickListener(v -> jumpTo(mBinding.displaySectionTitle));
         mBinding.modelButton.setOnClickListener(this::downloadModel);
         mBinding.deleteModelButton.setOnClickListener(this::confirmDeleteModel);
+        mBinding.saveGroqApiKeyButton.setOnClickListener(this::saveGroqApiKey);
+        mBinding.clearGroqApiKeyButton.setOnClickListener(this::clearGroqApiKey);
         mBinding.testTranslationButton.setOnClickListener(this::testTranslation);
         mBinding.saveApplyButton.setOnClickListener(this::saveAndApply);
     }
@@ -178,6 +212,41 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 ? "Google ML Kit 英翻中＋OpenCC 臺灣繁體。首次使用需下載翻譯模型；下載完成後可離線翻譯。"
                 : "不啟動翻譯模型，直接顯示 Whisper 辨識文字。");
         mBinding.testTranslationButton.setEnabled(translationEnabled);
+    }
+
+    private void updateAsrOptions() {
+        if (mBinding == null) return;
+        boolean cloud = draftAsrService == ASR_GROQ_CLOUD;
+        mBinding.cloudApiSection.setVisibility(cloud ? View.VISIBLE : View.GONE);
+        mBinding.asrMode.setText(cloud
+                ? "Groq 雲端 Whisper large-v3-turbo｜多語音訊辨識；需網路並會上傳音訊"
+                : "Whisper Base 多語模型｜自動辨識語音，音訊留在本機");
+        refreshModelState(null);
+    }
+
+    private void saveGroqApiKey(View view) {
+        String key = mBinding.groqApiKeyInput.getText() == null
+                ? "" : mBinding.groqApiKeyInput.getText().toString().trim();
+        if (key.isEmpty()) {
+            mBinding.groqApiKeyStatus.setText("請先輸入 Groq API Key；空白不會覆蓋既有金鑰");
+            return;
+        }
+        GroqSpeechToText.saveApiKey(this, key);
+        mBinding.groqApiKeyInput.setText("");
+        mBinding.groqApiKeyStatus.setText("Groq API Key 已儲存；實際有效性會在開始辨識時確認");
+    }
+
+    private void clearGroqApiKey(View view) {
+        new AlertDialog.Builder(this)
+                .setTitle("清除 Groq API Key？")
+                .setMessage("清除後，雲端語音辨識需重新輸入金鑰才能使用。")
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .setPositiveButton("清除", (dialog, which) -> {
+                    GroqSpeechToText.clearApiKey(this);
+                    mBinding.groqApiKeyInput.setText("");
+                    mBinding.groqApiKeyStatus.setText("Groq API Key 已清除");
+                })
+                .show();
     }
 
     private void downloadModel(View view) {
@@ -235,8 +304,18 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     private void refreshModelState(String notice) {
         if (mBinding == null || isFinishing()) return;
+        boolean cloud = draftAsrService == ASR_GROQ_CLOUD;
         boolean ready = modelManager != null && modelManager.isDownloaded();
         boolean downloading = modelManager != null && modelManager.isDownloading();
+        if (cloud) {
+            mBinding.modelStatus.setText(notice != null ? notice : "雲端辨識不需要下載本機 Whisper 模型");
+            mBinding.modelStatus.setVisibility(View.GONE);
+            mBinding.modelButton.setVisibility(View.GONE);
+            mBinding.deleteModelButton.setVisibility(View.GONE);
+            mBinding.modelProgress.setVisibility(View.GONE);
+            return;
+        }
+        mBinding.modelStatus.setVisibility(View.VISIBLE);
         mBinding.modelStatus.setText(notice != null ? notice : ready
                 ? "模型狀態：Whisper Base 多語模型已下載"
                 : downloading ? "模型下載中，請稍候…" : "模型狀態：尚未下載");
@@ -315,10 +394,14 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     }
 
     private void saveAndApply(View view) {
+        String key = mBinding.groqApiKeyInput.getText() == null
+                ? "" : mBinding.groqApiKeyInput.getText().toString().trim();
+        if (!key.isEmpty()) GroqSpeechToText.saveApiKey(this, key);
         getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
                 .putBoolean(KEY_AUTO_START, draftAutoStart)
                 .putInt(KEY_TRANSLATION_SERVICE, draftTranslationService)
                 .putInt(KEY_SUBTITLE_DISPLAY, draftSubtitleDisplay)
+                .putInt(KEY_ASR_SERVICE, draftAsrService)
                 .apply();
         Toast.makeText(this, "AI 字幕設定已儲存並套用", Toast.LENGTH_SHORT).show();
         finish();
