@@ -172,10 +172,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         boolean translationEnabled = draftTranslationService == TRANSLATION_GOOGLE_MLKIT;
         mBinding.subtitleDisplaySpinner.setEnabled(translationEnabled);
         mBinding.subtitleDisplayHint.setText(translationEnabled
-                ? "目前支援英文語音翻成臺灣繁體；其他來源語言的翻譯尚未整合。"
+                ? "Whisper 可自動辨識語言；若 ML Kit 支援該來源語言，會翻成臺灣繁體。英文、日文、韓文等語言會視模型支援情況處理。"
                 : "已關閉翻譯，只顯示 Whisper 辨識原文。");
         mBinding.translationSummary.setText(translationEnabled
-                ? "Google ML Kit 英翻中＋OpenCC 臺灣繁體。首次使用需下載翻譯模型；下載完成後可離線翻譯。"
+                ? "Google ML Kit 多語→中文＋OpenCC 臺灣繁體。首次使用會下載來源語言模型；之後可離線翻譯。"
                 : "不啟動翻譯模型，直接顯示 Whisper 辨識文字。");
         mBinding.testTranslationButton.setEnabled(translationEnabled);
     }
