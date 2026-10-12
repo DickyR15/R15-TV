@@ -230,6 +230,11 @@ jobs:
               readelf -d "$build_dir/libr15whisper.so" >&2
               exit 1
             fi
+            if ! readelf -d "$build_dir/libr15whisper.so" | grep -Fq 'libc++_shared.so'; then
+              echo "Whisper JNI was expected to link against libc++_shared.so for $abi." >&2
+              readelf -d "$build_dir/libr15whisper.so" >&2
+              exit 1
+            fi
           done
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
