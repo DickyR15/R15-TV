@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - "research/realtime-subtitles-tv"
+      - "feature/caption-action-style-poc85"
     paths:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
@@ -246,6 +247,9 @@ jobs:
           verify grep -Fq "com.github.qichuan:android-opencc:1.2.0" sources/TV/app/build.gradle
           verify grep -Fq 'ConversionType.S2TWP' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
           verify grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          verify grep -Fq 'MIN_MODEL_BYTES = 20L * 1024L * 1024L' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
+          verify grep -Fq 'TranslateLanguage.fromLanguageTag' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
+          verify grep -Fq 'WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
           verify grep -Fq 'ggml-tiny-q5_1.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
@@ -527,7 +531,7 @@ jobs:
             sha256sum "R15 TV-POC-"*.apk > SHA256SUMS.txt
           )
           {
-            echo "## R15 TV Whisper Tiny Q5_1 Subtitle POC build result"
+            echo "## R15 TV Caption Action style local subtitle POC build result"
             echo "- This artifact contains separate Android TV APKs for arm64-v8a and armeabi-v7a. Install the armeabi-v7a APK on devices whose Android userspace supports only 32-bit ARM."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
@@ -535,7 +539,7 @@ jobs:
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
               echo "- Experimental debug APK only; not a release and not ready for general use."
-            echo "- Scope: in-app playback audio capture + downloadable multilingual Whisper Tiny Q5_1 + on-device ML Kit English-to-Chinese translation + OpenCC S2TWP."
+            echo "- Scope: in-app playback audio capture + downloadable multilingual Whisper Tiny Q5_1 + on-device multilingual ML Kit translation to Traditional Chinese + OpenCC S2TWP."
             echo "- First use downloads Whisper Tiny Q5_1 and the ML Kit translation model; inference and translation are intended to run locally afterward."
             else
               echo "- Build configuration is pinned for reproducibility; not signed for stable updates."
