@@ -36,9 +36,9 @@ public final class AiSubtitleEngine {
 
     private static final int ASR_SAMPLE_RATE = 16000;
     // Shorter windows and hop intervals cap CPU time for live captioning on TV boxes.
-    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3;
-    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2;
-    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 2;
+    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2;
+    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3 / 2;
+    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3 / 4;
     private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -157,11 +157,11 @@ public final class AiSubtitleEngine {
             // Let video rendering and audio playback take priority on low-core TV boxes.
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             if (modelFile == null || !modelFile.isFile()) {
-                throw new IllegalStateException("請先下載 Whisper Base 多語模型");
+                throw new IllegalStateException("請先下載 Whisper Tiny Q5_1 多語模型");
             }
-            postStatus("正在載入 Whisper Base 多語模型…");
+            postStatus("正在載入 Whisper Tiny Q5_1 多語模型…");
             whisperContext = WhisperCpp.createContext(modelFile);
-            postStatus("Whisper Base 已啟動；多語自動辨識中");
+            postStatus("Whisper Tiny Q5_1 已啟動；多語自動辨識中");
 
             float[] ring = new float[MAX_WINDOW_SAMPLES];
             int writeIndex = 0;
@@ -237,7 +237,7 @@ public final class AiSubtitleEngine {
                     if (!newText.isEmpty()) postFinalSubtitle(newText, detectedLanguage);
                     previousTranscript = transcript;
                     previousLanguage = detectedLanguage;
-                    postStatus("Whisper Base · 偵測 " + detectedLanguage + " · "
+                    postStatus("Whisper Tiny Q5_1 · 偵測 " + detectedLanguage + " · "
                             + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
                             + inferenceMs + " ms");
                 } else {
@@ -246,7 +246,7 @@ public final class AiSubtitleEngine {
             }
         } catch (Throwable error) {
             running = false;
-            postStatus("Whisper Base 啟動失敗：" + readableMessage(error));
+            postStatus("Whisper Tiny Q5_1 啟動失敗：" + readableMessage(error));
         } finally {
             try {
                 WhisperCpp.freeContext(whisperContext);
