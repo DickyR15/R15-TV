@@ -337,14 +337,19 @@ def patch_mpv_engine(path: Path) -> None:
 
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    permission = '<uses-permission android:name="android.permission.RECORD_AUDIO" />'
-    if permission not in text:
-        text = replace_once(
-            text,
-            '<uses-permission android:name="android.permission.INTERNET" />',
-            '<uses-permission android:name="android.permission.INTERNET" />\n    ' + permission,
-            path,
-        )
+    permissions = [
+        '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
+        '<uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />',
+    ]
+    for permission in permissions:
+        if permission not in text:
+            text = replace_once(
+                text,
+                '<uses-permission android:name="android.permission.INTERNET" />',
+                '<uses-permission android:name="android.permission.INTERNET" />\\n    ' + permission,
+                path,
+            )
     attr = 'android:allowAudioPlaybackCapture="true"'
     if attr not in text:
         text = replace_once(
@@ -357,6 +362,10 @@ def patch_manifest(path: Path) -> None:
     activity = '        <activity android:name=".ui.activity.AiSubtitleSettingsActivity" android:exported="false" />'
     if activity not in text:
         text = replace_once(text, crash_anchor, activity + '\n\n' + crash_anchor, path)
+    service = ('        <service android:name=".ai.subtitle.AiSubtitleProjectionService" '
+               'android:exported="false" android:foregroundServiceType="mediaProjection" />')
+    if service not in text:
+        text = replace_once(text, crash_anchor, service + '\\n\\n' + crash_anchor, path)
     path.write_text(text, encoding="utf-8")
 
 
@@ -429,6 +438,7 @@ def main() -> None:
         "AiSubtitleEngine.java",
         "AiSubtitleOverlay.java",
         "AiSubtitlePlaybackCapture.java",
+        "AiSubtitleProjectionService.java",
         "AiSubtitleTranslationEngine.java",
         "WhisperCpp.java",
         "WhisperModelManager.java",
