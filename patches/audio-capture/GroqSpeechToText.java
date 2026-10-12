@@ -34,6 +34,37 @@ public final class GroqSpeechToText {
 
     private GroqSpeechToText() { }
 
+    public static final class TranscriptionResult {
+        public final String text;
+        public final String language;
+        TranscriptionResult(String text, String language) {
+            this.text = text == null ? "" : text.trim();
+            this.language = normalizeLanguage(language);
+        }
+    }
+
+    private static String normalizeLanguage(String language) {
+        if (language == null) return "und";
+        String value = language.trim().toLowerCase(java.util.Locale.ROOT);
+        switch (value) {
+            case "english": return "en";
+            case "chinese": return "zh";
+            case "japanese": return "ja";
+            case "korean": return "ko";
+            case "spanish": return "es";
+            case "french": return "fr";
+            case "german": return "de";
+            case "italian": return "it";
+            case "portuguese": return "pt";
+            case "russian": return "ru";
+            case "thai": return "th";
+            case "vietnamese": return "vi";
+            case "arabic": return "ar";
+            case "undetermined": return "und";
+            default: return value.matches("[a-z]{2,3}") ? value : "und";
+        }
+    }
+
     public static void saveApiKey(Context context, String apiKey) {
         String value = apiKey == null ? "" : apiKey.trim();
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -61,6 +92,11 @@ public final class GroqSpeechToText {
      */
     public static String transcribe(Context context, float[] pcm16k, String language)
             throws Exception {
+        return transcribeDetailed(context, pcm16k, language).text;
+    }
+
+    public static TranscriptionResult transcribeDetailed(
+            Context context, float[] pcm16k, String language) throws Exception {
         String apiKey = getApiKey(context);
         if (apiKey.isEmpty()) throw new IllegalStateException("尚未設定 Groq API Key");
         if (pcm16k == null || pcm16k.length == 0) {
@@ -78,6 +114,7 @@ public final class GroqSpeechToText {
             connection.setRequestMethod("POST");
             connection.setConnectTimeout(CONNECT_TIMEOUT_MS);
             connection.setReadTimeout(READ_TIMEOUT_MS);
+            connection.setUseCaches(false);
             connection.setDoOutput(true);
             connection.setRequestProperty("Authorization", "Bearer " + apiKey);
             connection.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + boundary);
@@ -90,7 +127,7 @@ public final class GroqSpeechToText {
                         && !"auto".equalsIgnoreCase(language.trim())) {
                     writeField(out, boundary, "language", language.trim());
                 }
-                writeField(out, boundary, "response_format", "json");
+                writeField(out, boundary, "response_format", "verbose_json");
                 out.writeBytes("--" + boundary + "\r\n");
                 out.writeBytes("Content-Disposition: form-data; name=\"file\"; filename=\"r15-audio.wav\"\r\n");
                 out.writeBytes("Content-Type: audio/wav\r\n\r\n");
@@ -117,7 +154,8 @@ public final class GroqSpeechToText {
                 throw new IllegalStateException(hint);
             }
             JSONObject json = new JSONObject(body);
-            return json.optString("text", "").trim();
+            return new TranscriptionResult(json.optString("text", ""),
+                    json.optString("language", "und"));
         } finally {
             if (connection != null) connection.disconnect();
         }
