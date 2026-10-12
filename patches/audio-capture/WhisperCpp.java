@@ -11,8 +11,8 @@ final class WhisperCpp {
     private WhisperCpp() { }
 
     static long createContext(File modelFile) {
-        if (modelFile == null || !modelFile.isFile() || modelFile.length() < 100L * 1024L * 1024L) {
-            throw new IllegalStateException("Whisper Base 模型不存在或檔案不完整");
+        if (modelFile == null || !modelFile.isFile() || modelFile.length() < 20L * 1024L * 1024L) {
+            throw new IllegalStateException("Whisper Tiny Q5_1 模型不存在或檔案不完整");
         }
         return nativeCreateContext(modelFile.getAbsolutePath());
     }
