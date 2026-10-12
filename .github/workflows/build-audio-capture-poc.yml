@@ -305,14 +305,14 @@ jobs:
 
           text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
           text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
-          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv.poc"', text, count=1)
+          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv.poc65"', text, count=1)
           gradle_file.write_text(text, encoding="utf-8")
 
           for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = strings_file.read_text(encoding="utf-8")
               changed = re.sub(
                   r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
-                  r"\g<1>R15 TV 字幕測試\g<2>",
+                  r"\g<1>R15 TV 字幕測試 POC-65\g<2>",
                   xml,
                   count=1,
                   flags=re.DOTALL,
@@ -326,7 +326,7 @@ jobs:
               output.write(f"version_name={version_name}\n")
               output.write(f"version_code={version_code}\n")
           print(f"R15 TV subtitle POC version: {version_name} (code {version_code})")
-          print("Application ID changed to com.dicky.r15tv.poc so it can coexist with any installed R15 TV build.")
+          print("Application ID changed to com.dicky.r15tv.poc65 so this POC can install alongside older test builds.")
           PY
 
       - name: Configure persistent POC debug signing key
