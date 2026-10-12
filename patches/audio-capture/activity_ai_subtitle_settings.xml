@@ -137,6 +137,98 @@
             android:textColor="@color/white"
             android:textSize="18sp" />
 
+        <Spinner
+            android:id="@+id/asrServiceSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginBottom="12dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:spinnerMode="dropdown" />
+
+        <androidx.appcompat.widget.LinearLayoutCompat
+            android:id="@+id/cloudApiSection"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="18dp"
+            android:background="@drawable/selector_item"
+            android:orientation="vertical"
+            android:padding="16dp"
+            android:visibility="gone">
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Groq 雲端 API Key"
+                android:textColor="@color/white"
+                android:textSize="19sp"
+                android:textStyle="bold" />
+
+            <EditText
+                android:id="@+id/groqApiKeyInput"
+                android:layout_width="match_parent"
+                android:layout_height="58dp"
+                android:layout_marginTop="10dp"
+                android:hint="貼上 Groq API Key（gsk_…）"
+                android:inputType="textPassword|textNoSuggestions"
+                android:singleLine="true"
+                android:selectAllOnFocus="true"
+                android:focusable="true"
+                android:focusableInTouchMode="true"
+                android:textColor="@color/white"
+                android:textColorHint="#FFAAAAAA"
+                android:textSize="17sp" />
+
+            <androidx.appcompat.widget.LinearLayoutCompat
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/saveGroqApiKeyButton"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginEnd="6dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:text="儲存 API Key"
+                    android:textAllCaps="false"
+                    android:textSize="16sp" />
+
+                <androidx.appcompat.widget.AppCompatButton
+                    android:id="@+id/clearGroqApiKeyButton"
+                    android:layout_width="0dp"
+                    android:layout_height="54dp"
+                    android:layout_marginStart="6dp"
+                    android:layout_weight="1"
+                    android:focusable="true"
+                    android:text="清除 API Key"
+                    android:textAllCaps="false"
+                    android:textSize="16sp" />
+            </androidx.appcompat.widget.LinearLayoutCompat>
+
+            <com.google.android.material.textview.MaterialTextView
+                android:id="@+id/groqApiKeyStatus"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="尚未儲存 Groq API Key"
+                android:textColor="#FFD0D0D0"
+                android:textSize="15sp" />
+
+            <com.google.android.material.textview.MaterialTextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="雲端模式會將播放音訊片段傳送給 Groq。金鑰保存在此 App 的私有偏好設定，但仍可能被有能力分析 APK／裝置的人取出；請勿在公開或多人共用的版本使用個人金鑰。免費額度及延遲依服務方案而變。"
+                android:textColor="#FFFFD080"
+                android:textSize="14sp" />
+        </androidx.appcompat.widget.LinearLayoutCompat>
+
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/modelStatus"
             android:layout_width="match_parent"
