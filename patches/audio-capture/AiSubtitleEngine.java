@@ -371,6 +371,14 @@ public final class AiSubtitleEngine {
         return current.trim();
     }
 
+    private static boolean containsCjk(String text) {
+        return text != null && text.codePoints().anyMatch(codePoint ->
+                (codePoint >= 0x4E00 && codePoint <= 0x9FFF)
+                || (codePoint >= 0x3400 && codePoint <= 0x4DBF)
+                || (codePoint >= 0x3040 && codePoint <= 0x30FF)
+                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF));
+    }
+
     private static String normalizeUnicodeText(String text) {
         return text == null ? "" : text.toLowerCase(Locale.ROOT)
                 .replaceAll("[^\\p{L}\\p{N}]+", "");
