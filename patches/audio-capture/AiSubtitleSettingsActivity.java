@@ -119,6 +119,15 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         else mBinding.autoStartSwitch.requestFocus();
     }
 
+    private void jumpTo(View target) {
+        if (target == null || mBinding == null) return;
+        mBinding.subtitleSettingsScroll.post(() -> {
+            int top = target.getTop() - dp(16);
+            mBinding.subtitleSettingsScroll.smoothScrollTo(0, Math.max(0, top));
+            target.requestFocus();
+        });
+    }
+
     private ArrayAdapter<String> makeAdapter(java.util.List<String> values) {
         return new ArrayAdapter<String>(this, android.R.layout.simple_spinner_item, values) {
             @Override
@@ -148,6 +157,9 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     @Override
     protected void initEvent() {
+        mBinding.jumpModelButton.setOnClickListener(v -> jumpTo(mBinding.modelSectionTitle));
+        mBinding.jumpTranslationButton.setOnClickListener(v -> jumpTo(mBinding.translationSectionTitle));
+        mBinding.jumpDisplayButton.setOnClickListener(v -> jumpTo(mBinding.displaySectionTitle));
         mBinding.modelButton.setOnClickListener(this::downloadModel);
         mBinding.deleteModelButton.setOnClickListener(this::confirmDeleteModel);
         mBinding.testTranslationButton.setOnClickListener(this::testTranslation);
