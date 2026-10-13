@@ -27,10 +27,11 @@ public final class TaiwanTraditionalConverter implements AutoCloseable {
         File root = new File(app.getFilesDir(), DATA_DIR);
         File config = new File(root, "config/s2twp.json");
         File dictionaries = new File(root, "dictionary");
-        if (!config.isFile()) {
+        if (!isComplete(config, dictionaries)) {
+            deleteRecursively(root);
             copyAssetsRecursively(app.getAssets(), ASSET_ROOT, root);
         }
-        if (!config.isFile() || !dictionaries.isDirectory()) {
+        if (!isComplete(config, dictionaries)) {
             throw new IOException("OpenCC 1.4.2 臺灣繁體字典不完整，請重新安裝／修復資產");
         }
         TaiwanTraditionalConverter created = new TaiwanTraditionalConverter(
@@ -58,6 +59,33 @@ public final class TaiwanTraditionalConverter implements AutoCloseable {
             handle = 0;
         }
         INSTANCE.compareAndSet(this, null);
+    }
+
+    private static boolean isComplete(File config, File dictionaries) {
+        if (!config.isFile() || !dictionaries.isDirectory()) return false;
+        String[] required = {
+                "CJK_Compatibility_Ideographs.ocd2",
+                "STPhrases.ocd2",
+                "STPhrases_GeneratedFromRegionalPhrases.ocd2",
+                "STCharacters.ocd2",
+                "TWPhrases.ocd2",
+                "TWVariantsPhrases.ocd2",
+                "TWVariants.ocd2"
+        };
+        for (String name : required) {
+            File file = new File(dictionaries, name);
+            if (!file.isFile() || file.length() == 0) return false;
+        }
+        return true;
+    }
+
+    private static void deleteRecursively(File file) throws IOException {
+        if (!file.exists()) return;
+        if (file.isDirectory()) {
+            File[] children = file.listFiles();
+            if (children != null) for (File child : children) deleteRecursively(child);
+        }
+        if (!file.delete()) throw new IOException("無法清除舊版 OpenCC 資產：" + file.getName());
     }
 
     private static void copyAssetsRecursively(AssetManager assets, String assetPath, File output) throws IOException {
