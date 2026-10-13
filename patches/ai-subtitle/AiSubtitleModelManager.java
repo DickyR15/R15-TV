@@ -237,6 +237,33 @@ public final class AiSubtitleModelManager {
         }
     }
 
+
+    /** Full content verification, called only from the ASR worker (can read hundreds of MB). */
+    public void verifyPackIntegrity(String id) throws IOException {
+        JSONObject pack = findPack(id);
+        if (pack == null) throw new IOException("不支援的辨識語言：" + id);
+        JSONArray files = pack.optJSONArray("files");
+        if (files == null || files.length() == 0) throw new IOException("模型清單沒有檔案：" + id);
+        try {
+            File directory = getModelDirectory(id);
+            for (int i = 0; i < files.length(); i++) {
+                JSONObject entry = files.getJSONObject(i);
+                File file = new File(directory, entry.getString("name"));
+                if (!file.isFile() || file.length() != entry.getLong("sizeBytes")) {
+                    throw new IOException(getLanguageLabel(id) + " 模型檔案大小錯誤：" + entry.getString("name"));
+                }
+                String expected = entry.getString("sha256").toLowerCase(Locale.ROOT);
+                if (!expected.equals(sha256(file))) {
+                    throw new IOException(getLanguageLabel(id) + " 模型 SHA-256 驗證失敗：" + entry.getString("name") + "；請刪除後重新下載");
+                }
+            }
+        } catch (IOException error) {
+            throw error;
+        } catch (Exception error) {
+            throw new IOException("無法驗證語音模型：" + readableMessage(error), error);
+        }
+    }
+
     private JSONObject findPack(String id) {
         JSONArray languages = manifest.optJSONArray("languages");
         if (languages == null) return null;
