@@ -322,8 +322,10 @@ public final class AiSubtitleEngine {
                 } finally {
                     inferenceStartedAtMs = 0;
                 }
+                if (!running) break;
                 stallReported.set(false);
             }
+            if (!running) break;
 
             OnlineRecognizerResult result = recognizer.getResult(stream);
             String text = clean(result == null ? "" : result.getText());
