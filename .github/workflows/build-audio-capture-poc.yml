@@ -6,6 +6,7 @@ on:
     branches:
       - "research/realtime-subtitles-tv"
       - "feature/caption-action-style-poc85"
+      - "fix/whisper-inference-stall-poc86"
     paths:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
