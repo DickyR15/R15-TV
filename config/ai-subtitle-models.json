@@ -1,0 +1,250 @@
+{
+  "schema": 1,
+  "base": {
+    "repository": "iptvorganization/TV-AutoBuild",
+    "release": "autobuild-170",
+    "releaseUrl": "https://github.com/iptvorganization/TV-AutoBuild/releases/tag/autobuild-170",
+    "speechRuntime": {
+      "name": "sherpa-onnx",
+      "version": "v1.13.8",
+      "commit": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
+      "url": "https://github.com/k2-fsa/sherpa-onnx"
+    },
+    "sampleRateHz": 16000,
+    "subtitleTarget": "zh-TW",
+    "openccConversion": "S2TWP",
+    "allowSimplifiedChineseOutput": false
+  },
+  "languages": [
+    {
+      "id": "yue",
+      "label": "粵語",
+      "modelId": "cantonese-wenetspeech-ctc",
+      "engine": "offline-wenet-ctc",
+      "minimumRamMb": 1280,
+      "files": [
+        {
+          "name": "model.int8.onnx",
+          "sizeBytes": 134698500,
+          "sha256": "201bfd9e12ec4ac9ee3b23c5e071d9fa2381a8b21df317e2e08a170d6f1f55d3",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/cantonese-wenetspeech-ctc/model.int8.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 85361,
+          "sha256": "c7750677a1183606d2fd6f16d792e06e70d9843dba8a0c6e23a9dec78e06977a",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/cantonese-wenetspeech-ctc/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "de",
+      "label": "德語",
+      "modelId": "german-kroko-streaming",
+      "engine": "online-transducer",
+      "minimumRamMb": 1024,
+      "files": [
+        {
+          "name": "encoder.onnx",
+          "sizeBytes": 70091557,
+          "sha256": "6e83993d6967ec7a3498b055b7e85ace85b5d64d1b1e8773cb29a43a11f5edb5",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/german-kroko-streaming/encoder.onnx"
+        },
+        {
+          "name": "decoder.onnx",
+          "sizeBytes": 617489,
+          "sha256": "94a29592b403c53fa2231b478637da1ab4abcef7f5e46e432098416a4a3ed562",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/german-kroko-streaming/decoder.onnx"
+        },
+        {
+          "name": "joiner.onnx",
+          "sizeBytes": 336817,
+          "sha256": "28356bff070aea51ab1d725a3278e81d19f9300f860d3248a7014292264df15a",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/german-kroko-streaming/joiner.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 5606,
+          "sha256": "86e8370994ff2c01149ba8c4f8709aa93cdc18914b27a717e291e96faf39a6eb",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/german-kroko-streaming/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "en",
+      "label": "英語",
+      "modelId": "english-kroko-streaming",
+      "engine": "online-transducer",
+      "minimumRamMb": 1024,
+      "files": [
+        {
+          "name": "encoder.onnx",
+          "sizeBytes": 70092599,
+          "sha256": "d4881c57449d581e0770fd53fa66c2fdc6cd167d92ece7c715e603defc96d9d4",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/english-kroko-streaming/encoder.onnx"
+        },
+        {
+          "name": "decoder.onnx",
+          "sizeBytes": 617488,
+          "sha256": "455ba38466fce8d5a57e7db68a323b684079ca4d9e1dd93a740d9b2429aae3b1",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/english-kroko-streaming/decoder.onnx"
+        },
+        {
+          "name": "joiner.onnx",
+          "sizeBytes": 336817,
+          "sha256": "d406f616736350e2a7df3e39398b78eb2fc1a2ca6973a19d3853fa3227e25b52",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/english-kroko-streaming/joiner.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 6310,
+          "sha256": "396dbeb5f4858875690716084f54e90d339679d0ba3e6b5b584f3d7589254d2d",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/english-kroko-streaming/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "fr",
+      "label": "法語",
+      "modelId": "french-kroko-streaming",
+      "engine": "online-transducer",
+      "minimumRamMb": 1024,
+      "files": [
+        {
+          "name": "encoder.onnx",
+          "sizeBytes": 70092599,
+          "sha256": "e02facae1daf6f1f13da67ea3ace7c722516d0868d1768d78c0580bc22cc0c5b",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/french-kroko-streaming/encoder.onnx"
+        },
+        {
+          "name": "decoder.onnx",
+          "sizeBytes": 617488,
+          "sha256": "6aed547570e3ab5afc05429a017cedd3a056c16df3baa5703f02461cefa25bac",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/french-kroko-streaming/decoder.onnx"
+        },
+        {
+          "name": "joiner.onnx",
+          "sizeBytes": 336817,
+          "sha256": "a51eec759bcdcaae2614686fa2a8b57417b2d420dd55a5a5558b388d35a9b2b6",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/french-kroko-streaming/joiner.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 5415,
+          "sha256": "fedfb9c844bfb2bf14171f8184863e3d617b815a8667bdd9fc9a3149fde73298",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/french-kroko-streaming/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "es",
+      "label": "西班牙語",
+      "modelId": "spanish-kroko-streaming",
+      "engine": "online-transducer",
+      "minimumRamMb": 1280,
+      "files": [
+        {
+          "name": "encoder.onnx",
+          "sizeBytes": 154878102,
+          "sha256": "2d9f5ef87d1a5257f8a6687e21501c56f3aa2fcbfcfab9364dcc4ce4e06ae81b",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/spanish-kroko-streaming/encoder.onnx"
+        },
+        {
+          "name": "decoder.onnx",
+          "sizeBytes": 617488,
+          "sha256": "d4ce176b94b25f7acc88717bc3f704fcf5d6e131aaac2e0cabab3885541181ee",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/spanish-kroko-streaming/decoder.onnx"
+        },
+        {
+          "name": "joiner.onnx",
+          "sizeBytes": 336817,
+          "sha256": "dae35df88d676e320fcdb99217328e66dcf722bf11b0f2459e14ddb5b982ded5",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/spanish-kroko-streaming/joiner.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 6385,
+          "sha256": "1be5e0a58e05d06d327df4c6b7b5e4f8aba01da6981eb016fcaceafc6a56680f",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/spanish-kroko-streaming/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "ja",
+      "label": "日語",
+      "modelId": "japanese-moonshine-tiny",
+      "engine": "offline-moonshine",
+      "minimumRamMb": 1280,
+      "files": [
+        {
+          "name": "encoder_model.ort",
+          "sizeBytes": 13238184,
+          "sha256": "86ece73812604b9b5f1274b4d1e6eec0d783b96088ff46d49e30a53f881cad73",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/japanese-moonshine-tiny/encoder_model.ort"
+        },
+        {
+          "name": "decoder_model_merged.ort",
+          "sizeBytes": 58327272,
+          "sha256": "9fcd9b71323a496b307e20dd305c4e9a1b533c7bedd6e4f660e974967dd60bb6",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/japanese-moonshine-tiny/decoder_model_merged.ort"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 549350,
+          "sha256": "2870d843e14c1e187bf191f18a521562a63b53933814bd7f2145120468f494a049",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/japanese-moonshine-tiny/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "zh",
+      "label": "中文（普通話）",
+      "modelId": "mandarin-zipformer-ctc",
+      "engine": "offline-zipformer-ctc",
+      "minimumRamMb": 1280,
+      "files": [
+        {
+          "name": "model.int8.onnx",
+          "sizeBytes": 162290887,
+          "sha256": "24ffdc19ba9aaed5a6a9beaede1e087745217d82425cf4041bca0c696661801e",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/mandarin-zipformer-ctc/model.int8.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 20628,
+          "sha256": "6193c7ea1c96d0d9a1e9652789b40d13a8a913b434a5451e93158f5a09fd6652",
+          "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/mandarin-zipformer-ctc/tokens.txt"
+        }
+      ]
+    },
+    {
+      "id": "ko",
+      "label": "韓語",
+      "modelId": "sense-voice",
+      "engine": "offline-sensevoice",
+      "minimumRamMb": 1536,
+      "files": [
+        {
+          "name": "model.int8.onnx",
+          "sizeBytes": 237115547,
+          "sha256": "12ca1a2ae7ecf3e0019ef2822307ee0b5cadc9196569e379b4c4026f8205276d",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09/resolve/main/model.int8.onnx"
+        },
+        {
+          "name": "tokens.txt",
+          "sizeBytes": 315894,
+          "sha256": "f449eb28dc567533d7fa6f3fce34e2abca8784f771850c78a47fb731a31429a1dc",
+          "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09/resolve/main/tokens.txt"
+        }
+      ]
+    }
+  ],
+  "common": {
+    "vad": {
+      "name": "silero_vad.onnx",
+      "sizeBytes": 643854,
+      "sha256": "9e2449e1087496d8c4aba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/silero_vad.onnx"
+    }
+  }
+}
