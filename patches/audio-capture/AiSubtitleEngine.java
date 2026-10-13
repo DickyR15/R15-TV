@@ -36,10 +36,10 @@ public final class AiSubtitleEngine {
 
     private static final int ASR_SAMPLE_RATE = 16000;
     // Shorter windows and hop intervals cap CPU time for live captioning on TV boxes.
-    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2;
-    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3 / 2;
-    // Whisper Tiny on low-power TV SoCs needs a little breathing room between passes.
-    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 5 / 4;
+    // F1 commentary is English: use a short live window and skip per-window language detection.
+    private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3 / 2;
+    private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 5 / 4;
+    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3 / 4;
     private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -164,15 +164,14 @@ public final class AiSubtitleEngine {
             }
             postStatus("正在載入 Whisper Tiny Q5_1 多語模型…");
             whisperContext = WhisperCpp.createContext(modelFile);
-            postStatus("Whisper Tiny Q5_1 已啟動；多語自動辨識中");
+            postStatus("Whisper Tiny Q5_1 已啟動；F1 英文快速辨識模式");
 
             float[] ring = new float[MAX_WINDOW_SAMPLES];
             int writeIndex = 0;
             int bufferedSamples = 0;
             int samplesSinceInference = 0;
             String previousTranscript = "";
-            String previousLanguage = "";
-            int inferencesSinceAutoDetect = 0;
+            String previousLanguage = "en";
 
             while (running || !audioQueue.isEmpty()) {
                 float[] samples;
@@ -202,29 +201,24 @@ public final class AiSubtitleEngine {
 
                 float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
                 long inferenceStarted = SystemClock.elapsedRealtime();
-                // Reserve CPU capacity for decoding and rendering on lower-power TV devices.
-                int inferenceThreads = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors()));
+                // F1's English commentary benefits from skipping auto language detection.
+                // Use up to four native threads so the CPU-only TV box can finish a short window.
+                int inferenceThreads = Math.max(1, Math.min(4, Runtime.getRuntime().availableProcessors()));
                 postStatus("正在辨識直播語音…");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
                 heartbeat[0] = () -> {
                     if (!running || !inferenceActive.get()) return;
                     long seconds = (SystemClock.elapsedRealtime() - inferenceStarted) / 1000L;
-                    postStatus("Whisper 本機辨識仍在運算 · 已等待 " + seconds + " 秒");
+                    postStatus("Whisper 本機辨識仍在運算 · F1 英文模式 · 已等待 " + seconds + " 秒");
                     MAIN.postDelayed(heartbeat[0], 5000L);
                 };
                 MAIN.postDelayed(heartbeat[0], 5000L);
-                // Detect the language on the first pass, then reuse it for most passes to avoid
-                // repeating Whisper language-detection work on every overlapping audio window.
-                // Re-check every ninth inference so a changing broadcast can switch languages.
-                boolean detectLanguage = previousLanguage.isEmpty() || "und".equals(previousLanguage)
-                        || inferencesSinceAutoDetect >= 8;
-                String inferenceLanguage = detectLanguage ? "auto" : previousLanguage;
-                if (detectLanguage) inferencesSinceAutoDetect = 0;
-                else inferencesSinceAutoDetect++;
+                // This diagnostic POC targets English-language F1 broadcasts. Passing "en"
+                // directly avoids repeating the multilingual auto-detection pass every window.
                 String result;
                 try {
-                    result = WhisperCpp.transcribe(whisperContext, window, inferenceLanguage, inferenceThreads);
+                    result = WhisperCpp.transcribe(whisperContext, window, "en", inferenceThreads);
                 } finally {
                     inferenceActive.set(false);
                     MAIN.removeCallbacks(heartbeat[0]);
