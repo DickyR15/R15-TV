@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "ui": {
+    "matchReference": "iptvorganization/TV-AutoBuild@autobuild-170",
+    "locale": "zh-TW",
+    "targetLanguage": "zh-TW",
+    "targetLabel": "臺灣繁體中文字幕",
+    "exposeProviderSpecificSettingsOnlyForAllowedProviders": true
+  },
+  "allowedProviders": [
+    {
+      "id": "google",
+      "label": "Google 翻譯",
+      "mode": "online",
+      "note": "Keep the AutoBuild-style Google provider. Normalize every result with OpenCC S2TWP before display."
+    },
+    {
+      "id": "bing",
+      "label": "Bing 翻譯",
+      "mode": "online",
+      "note": "Keep the AutoBuild-style Bing provider. Normalize every result with OpenCC S2TWP before display."
+    }
+  ],
+  "forbiddenProviders": [
+    {
+      "id": "youdao",
+      "label": "有道翻譯",
+      "removeFrom": [
+        "provider-selector",
+        "provider-settings",
+        "translation-dispatch",
+        "fallback",
+        "cached-provider-state"
+      ]
+    },
+    {
+      "id": "tencent",
+      "label": "騰訊翻譯",
+      "removeFrom": [
+        "provider-selector",
+        "provider-settings",
+        "translation-dispatch",
+        "fallback",
+        "cached-provider-state"
+      ]
+    }
+  ],
+  "outputRules": {
+    "useOpenCC": true,
+    "openccConversion": "S2TWP",
+    "simplifiedChineseOutputOption": false,
+    "noProviderMayOverrideTarget": true,
+    "noSimplifiedOutputOnFailure": true,
+    "forChineseOrCantoneseAsr": "Convert recognized Chinese text with S2TWP; do not call a translation provider just to convert script/terms.",
+    "failureBehavior": "Show an explicit translation failure state. In source-plus-translation mode the original source caption may remain; never label source text as a successful Chinese translation."
+  },
+  "tests": [
+    "Provider UI lists Google and Bing only.",
+    "Youdao has no reachable dispatch path.",
+    "Tencent has no reachable dispatch path.",
+    "All successful provider responses pass through OpenCC S2TWP before display.",
+    "Provider failures never fall back to Simplified Chinese.",
+    "Chinese and Cantonese recognition use OpenCC S2TWP without Youdao/Tencent."
+  ]
+}
