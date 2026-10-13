@@ -4,7 +4,9 @@
 
 - Reference release: TV-AutoBuild `autobuild-170`, app version `6.4.0-autobuild.170`.
 - Public build base: FongMi/TV public source; do not copy private signing materials.
-- Speech runtime: sherpa-onnx `v1.13.8`, commit `11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf`.
+- Speech runtime: sherpa-onnx `v1.13.8`, commit `11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf`, verified as the latest stable release on 2026-10-14.
+- Traditional Chinese conversion: official OpenCC `ver.1.4.2`, tag object `d5e960a8f60aa62fb252f48a23a577acb242f3f0`, verified as the latest stable release on 2026-10-14. The Android wrapper `qichuan/android-opencc:1.2.0` is from 2021 and must not be treated as a latest-dictionary build; port/build current official OpenCC source and its `s2twp` dictionaries for Android.
+- Version/source tracking: `config/ai-subtitle-versions.json`. Translation endpoints that are server-managed do not expose a single portable model version; configured MTranServer/OpenAI-compatible endpoints must report their actual server/model identity instead of being falsely labeled latest.
 - Model files are pinned in `config/ai-subtitle-models.json` by URL, exact byte count and SHA-256. Downloads must fail closed if validation fails.
 - Preserve the MPV player. Subtitle capture must never block the playback/audio thread.
 
@@ -55,7 +57,7 @@ This branch is intentionally reset to the clean `public-source-build` baseline b
 
 ## Acceptance criteria (do not call it fixed until all pass)
 
-- [ ] Clean build succeeds with pinned source and sherpa-onnx v1.13.8.
+- [ ] Clean build succeeds with pinned source, sherpa-onnx v1.13.8 and official OpenCC 1.4.2 Android JNI/dictionaries.
 - [ ] All eight model packs download with SHA-256 and byte-size validation.
 - [ ] All eight languages produce recognized source text on actual device audio.
 - [ ] The provider selector matches AutoBuild's layout and remaining options, with Youdao/Tencent removed from UI and dispatch.
