@@ -38,7 +38,8 @@ public final class AiSubtitleEngine {
     // Shorter windows and hop intervals cap CPU time for live captioning on TV boxes.
     private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 2;
     private static final int INITIAL_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3 / 2;
-    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 3 / 4;
+    // Whisper Tiny on low-power TV SoCs needs a little breathing room between passes.
+    private static final int UPDATE_SAMPLES = ASR_SAMPLE_RATE * 5 / 4;
     private static final int MAX_WINDOW_SAMPLES = ASR_SAMPLE_RATE * 4;
     private static final AtomicReference<AiSubtitleEngine> ACTIVE = new AtomicReference<>();
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
@@ -155,7 +156,9 @@ public final class AiSubtitleEngine {
         long whisperContext = 0L;
         try {
             // Let video rendering and audio playback take priority on low-core TV boxes.
-            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            // Keep inference at normal priority; Android's BACKGROUND priority made CPU-only
+            // Whisper inference appear stalled on low-power TV boxes.
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
             if (modelFile == null || !modelFile.isFile()) {
                 throw new IllegalStateException("請先下載 Whisper Tiny Q5_1 多語模型");
             }
@@ -169,6 +172,7 @@ public final class AiSubtitleEngine {
             int samplesSinceInference = 0;
             String previousTranscript = "";
             String previousLanguage = "";
+            int inferencesSinceAutoDetect = 0;
 
             while (running || !audioQueue.isEmpty()) {
                 float[] samples;
@@ -199,7 +203,7 @@ public final class AiSubtitleEngine {
                 float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
                 long inferenceStarted = SystemClock.elapsedRealtime();
                 // Reserve CPU capacity for decoding and rendering on lower-power TV devices.
-                int inferenceThreads = 1;
+                int inferenceThreads = Math.max(1, Math.min(2, Runtime.getRuntime().availableProcessors()));
                 postStatus("正在辨識直播語音…");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
@@ -210,9 +214,17 @@ public final class AiSubtitleEngine {
                     MAIN.postDelayed(heartbeat[0], 5000L);
                 };
                 MAIN.postDelayed(heartbeat[0], 5000L);
+                // Detect the language on the first pass, then reuse it for most passes to avoid
+                // repeating Whisper language-detection work on every overlapping audio window.
+                // Re-check every ninth inference so a changing broadcast can switch languages.
+                boolean detectLanguage = previousLanguage.isEmpty() || "und".equals(previousLanguage)
+                        || inferencesSinceAutoDetect >= 8;
+                String inferenceLanguage = detectLanguage ? "auto" : previousLanguage;
+                if (detectLanguage) inferencesSinceAutoDetect = 0;
+                else inferencesSinceAutoDetect++;
                 String result;
                 try {
-                    result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                    result = WhisperCpp.transcribe(whisperContext, window, inferenceLanguage, inferenceThreads);
                 } finally {
                     inferenceActive.set(false);
                     MAIN.removeCallbacks(heartbeat[0]);
