@@ -133,9 +133,50 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginBottom="8dp"
-            android:text="Whisper Base 多語模型｜自動辨識語音"
+            android:text="Whisper 本機辨識｜固定指定語言"
             android:textColor="@color/white"
             android:textSize="18sp" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="4dp"
+            android:text="辨識語言（固定語言，不使用多語自動辨識）"
+            android:textColor="@color/white"
+            android:textSize="17sp" />
+
+        <Spinner
+            android:id="@+id/asrLanguageSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:spinnerMode="dropdown" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="4dp"
+            android:text="語音辨識模型"
+            android:textColor="@color/white"
+            android:textSize="17sp" />
+
+        <Spinner
+            android:id="@+id/asrModelSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="58dp"
+            android:layout_marginBottom="10dp"
+            android:background="@drawable/selector_item"
+            android:focusable="true"
+            android:focusableInTouchMode="true"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:spinnerMode="dropdown" />
 
         <com.google.android.material.textview.MaterialTextView
             android:id="@+id/modelStatus"
@@ -293,7 +334,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="注意：目前翻譯功能是英文→繁體中文；Whisper 可辨識多語，但日文等非英文語音的翻譯尚未接好。首次下載模型需要網路，之後的辨識與翻譯在本機執行。"
+            android:text="辨識語言可選英文、中文、日文、韓文；英文為 F1 預設。Base 與 Tiny Q5_1 共用 Whisper.cpp，需分別下載。Google ML Kit 翻譯模型首次下載後可在本機執行；中文來源只做臺灣繁體轉換。"
             android:textColor="#FFD0D0D0"
             android:textSize="15sp"
             tools:ignore="HardcodedText" />

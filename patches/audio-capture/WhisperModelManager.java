@@ -15,14 +15,18 @@ import java.nio.file.StandardCopyOption;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** Downloads the official multilingual Whisper Base weights into app-private storage. */
+/** Downloads on-device Whisper weights into app-private storage. */
 public final class WhisperModelManager {
+    public static final String MODEL_BASE = "base";
+    public static final String MODEL_TINY_Q5_1 = "tiny_q5_1";
     public static final String MODEL_NAME = "Whisper Base 多語模型";
     public static final String MODEL_FILENAME = "ggml-base.bin";
     public static final String MODEL_URL =
             "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin";
+
     private static volatile WhisperModelManager INSTANCE;
-    private static final long MIN_MODEL_BYTES = 100L * 1024L * 1024L;
+    private static final long BASE_MIN_MODEL_BYTES = 100L * 1024L * 1024L;
+    private static final long TINY_MIN_MODEL_BYTES = 20L * 1024L * 1024L;
     private static final int BUFFER_SIZE = 128 * 1024;
     private static final Handler MAIN = new Handler(Looper.getMainLooper());
 
@@ -33,14 +37,14 @@ public final class WhisperModelManager {
         void onError(String message);
     }
 
-    private final File modelFile;
-    private final File partialFile;
+    private final File directory;
     private final ExecutorService executor = Executors.newSingleThreadExecutor(r -> {
         Thread thread = new Thread(r, "r15-whisper-model-download");
         thread.setDaemon(true);
         return thread;
     });
     private volatile boolean downloading;
+    private volatile String downloadingModelId = "";
 
     public static synchronized WhisperModelManager getInstance(Context context) {
         if (INSTANCE == null) INSTANCE = new WhisperModelManager(context.getApplicationContext());
@@ -48,44 +52,101 @@ public final class WhisperModelManager {
     }
 
     public WhisperModelManager(Context context) {
-        File directory = new File(context.getApplicationContext().getFilesDir(), "whisper-models");
+        directory = new File(context.getApplicationContext().getFilesDir(), "whisper-models");
         if (!directory.exists() && !directory.mkdirs()) {
             throw new IllegalStateException("無法建立 Whisper 模型目錄");
         }
-        modelFile = new File(directory, MODEL_FILENAME);
-        partialFile = new File(directory, MODEL_FILENAME + ".part");
+    }
+
+    public static String normalizeModelId(String modelId) {
+        return MODEL_TINY_Q5_1.equals(modelId) ? MODEL_TINY_Q5_1 : MODEL_BASE;
+    }
+
+    public static String getModelName(String modelId) {
+        return MODEL_TINY_Q5_1.equals(normalizeModelId(modelId))
+                ? "Whisper Tiny Q5_1 模型" : "Whisper Base 多語模型";
+    }
+
+    public static String getModelFilename(String modelId) {
+        return MODEL_TINY_Q5_1.equals(normalizeModelId(modelId))
+                ? "ggml-tiny-q5_1.bin" : MODEL_FILENAME;
+    }
+
+    public static String getModelUrl(String modelId) {
+        return MODEL_TINY_Q5_1.equals(normalizeModelId(modelId))
+                ? "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin"
+                : MODEL_URL;
+    }
+
+    public static int getEstimatedSizeMb(String modelId) {
+        return MODEL_TINY_Q5_1.equals(normalizeModelId(modelId)) ? 31 : 148;
+    }
+
+    private static long minimumBytes(String modelId) {
+        return MODEL_TINY_Q5_1.equals(normalizeModelId(modelId))
+                ? TINY_MIN_MODEL_BYTES : BASE_MIN_MODEL_BYTES;
     }
 
     public File getModelFile() {
-        return modelFile;
+        return getModelFile(MODEL_BASE);
+    }
+
+    public File getModelFile(String modelId) {
+        return new File(directory, getModelFilename(modelId));
+    }
+
+    private File getPartialFile(String modelId) {
+        return new File(directory, getModelFilename(modelId) + ".part");
     }
 
     public boolean isDownloaded() {
-        return modelFile.isFile() && modelFile.length() >= MIN_MODEL_BYTES;
+        return isDownloaded(MODEL_BASE);
+    }
+
+    public boolean isDownloaded(String modelId) {
+        File file = getModelFile(modelId);
+        return file.isFile() && file.length() >= minimumBytes(modelId);
     }
 
     public boolean isDownloading() {
         return downloading;
     }
 
+    public boolean isDownloading(String modelId) {
+        return downloading && normalizeModelId(modelId).equals(downloadingModelId);
+    }
+
     public synchronized void download(Listener listener) {
+        download(MODEL_BASE, listener);
+    }
+
+    public synchronized void download(String modelId, Listener listener) {
         if (downloading) return;
+        final String selected = normalizeModelId(modelId);
         downloading = true;
-        executor.execute(() -> downloadInternal(listener));
+        downloadingModelId = selected;
+        executor.execute(() -> downloadInternal(selected, listener));
     }
 
     public synchronized void delete(Listener listener) {
+        delete(MODEL_BASE, listener);
+    }
+
+    public synchronized void delete(String modelId, Listener listener) {
         if (downloading) {
             postError(listener, "模型下載中，請先等候下載完成");
             return;
         }
+        final String selected = normalizeModelId(modelId);
         executor.execute(() -> {
+            File modelFile = getModelFile(selected);
+            File partialFile = getPartialFile(selected);
             try {
                 if (partialFile.exists() && !partialFile.delete()) {
                     throw new IOException("無法清除未完成的模型檔");
                 }
                 if (modelFile.exists() && !modelFile.delete()) {
-                    throw new IOException("無法刪除 Whisper Base 模型");
+                    throw new IOException("無法刪除 " + getModelName(selected));
                 }
                 MAIN.post(() -> {
                     if (listener != null) listener.onDeleted();
@@ -96,14 +157,16 @@ public final class WhisperModelManager {
         });
     }
 
-    private void downloadInternal(Listener listener) {
+    private void downloadInternal(String modelId, Listener listener) {
         HttpURLConnection connection = null;
+        File modelFile = getModelFile(modelId);
+        File partialFile = getPartialFile(modelId);
         try {
             if (partialFile.exists() && !partialFile.delete()) {
                 throw new IOException("無法清除上次未完成的下載檔");
             }
 
-            connection = (HttpURLConnection) new URL(MODEL_URL).openConnection();
+            connection = (HttpURLConnection) new URL(getModelUrl(modelId)).openConnection();
             connection.setInstanceFollowRedirects(true);
             connection.setConnectTimeout(30000);
             connection.setReadTimeout(60000);
@@ -135,8 +198,8 @@ public final class WhisperModelManager {
                 output.getFD().sync();
             }
 
-            if (downloadedBytes < MIN_MODEL_BYTES) {
-                throw new IOException("下載的檔案太小，可能不是完整的 Whisper Base 模型");
+            if (downloadedBytes < minimumBytes(modelId)) {
+                throw new IOException("下載的 " + getModelName(modelId) + " 檔案太小，可能不完整");
             }
             if (totalBytes > 0 && downloadedBytes != totalBytes) {
                 throw new IOException("模型下載大小不符，請重新下載");
@@ -154,7 +217,7 @@ public final class WhisperModelManager {
                 }
             }
 
-            if (!isDownloaded()) throw new IOException("模型檔案驗證失敗");
+            if (!isDownloaded(modelId)) throw new IOException("模型檔案驗證失敗");
             postProgress(listener, downloadedBytes, downloadedBytes);
             MAIN.post(() -> {
                 if (listener != null) listener.onDownloaded(modelFile);
@@ -165,6 +228,7 @@ public final class WhisperModelManager {
         } finally {
             if (connection != null) connection.disconnect();
             downloading = false;
+            downloadingModelId = "";
         }
     }
 
@@ -183,7 +247,6 @@ public final class WhisperModelManager {
     private static String readableMessage(Throwable error) {
         String message = error.getMessage();
         return message == null || message.trim().isEmpty()
-                ? error.getClass().getSimpleName()
-                : message;
+                ? error.getClass().getSimpleName() : message;
     }
 }

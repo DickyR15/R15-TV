@@ -1,6 +1,6 @@
 # R15 TV：Whisper Base 多語模型實作計畫
 
-**已定案的第一版技術路線：Whisper Base 多語模型 + Google ML Kit 本機英翻中 + OpenCC S2TWP。** 先把下載、辨識、翻譯、臺灣繁體轉換與播放器內顯示串起來，再用實體 Google TV 效能決定是否升級 Whisper Small 量化版。
+**預設基準：Whisper Base 多語模型 + 固定來源語言 + Google ML Kit 裝置端翻譯 + OpenCC S2TWP。** 另加入 Caption Action 使用的 whisper.cpp Tiny Q5_1 權重做可選比較；Base 保留作為精度基準，Tiny 作為較低資源負擔的候選，實際效能與品質仍需在 Google TV 實測。
 
 ## 目前實作狀態
 

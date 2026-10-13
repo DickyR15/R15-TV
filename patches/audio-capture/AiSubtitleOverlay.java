@@ -76,7 +76,7 @@ public final class AiSubtitleOverlay {
         caption = new TextView(activity);
         modelLoadWarning = () -> {
             if (enabled && !whisperReady && !hasRecognizedCaption) {
-                caption.setText("Whisper Base 仍在載入；模型較大時可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
+                caption.setText("Whisper 模型仍在載入；首次載入可能需要一些時間。若持續超過 30 秒，請停止字幕並回報。");
                 caption.setVisibility(android.view.View.VISIBLE);
             }
         };
@@ -129,6 +129,19 @@ public final class AiSubtitleOverlay {
         if (overlay != null) overlay.detachView();
     }
 
+    private String selectedModelId() {
+        return AiSubtitleSettingsActivity.getSelectedModelId(activity);
+    }
+
+    private String selectedModelName() {
+        return WhisperModelManager.getModelName(selectedModelId());
+    }
+
+    private String selectedLanguageLabel() {
+        return AiSubtitleSettingsActivity.getAsrLanguageLabel(
+                AiSubtitleSettingsActivity.getAsrLanguage(activity));
+    }
+
     private void buildView() {
         int pad = dp(10);
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -153,7 +166,7 @@ public final class AiSubtitleOverlay {
         panel.addView(closePanelButton, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        status.setText("Whisper Base 多語辨識 · Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
+        status.setText("Whisper 固定語言辨識 · 免費 Google ML Kit 本機翻譯 · OpenCC 臺灣繁體");
         status.setTextColor(0xFFBFD7FF);
         status.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
         status.setGravity(Gravity.CENTER);
@@ -161,7 +174,7 @@ public final class AiSubtitleOverlay {
         panel.addView(status, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        modelStatus.setText("語音辨識模型：Whisper Base 多語版");
+        modelStatus.setText("語音辨識模型：" + selectedModelName() + "｜固定語言：" + selectedLanguageLabel());
         modelStatus.setTextColor(0xFFFFFFFF);
         modelStatus.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14);
         modelStatus.setGravity(Gravity.CENTER);
@@ -169,7 +182,7 @@ public final class AiSubtitleOverlay {
         panel.addView(modelStatus, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        modelButton.setText("下載 Whisper Base 多語模型（約 148 MB）");
+        modelButton.setText("下載 " + selectedModelName() + "（約 " + WhisperModelManager.getEstimatedSizeMb(selectedModelId()) + " MB）");
         modelButton.setAllCaps(false);
         modelButton.setFocusable(true);
         modelButton.setOnClickListener(view -> downloadModel());
@@ -235,19 +248,19 @@ public final class AiSubtitleOverlay {
         }
         if (modelManager.isDownloading()) return;
         modelButton.setEnabled(false);
-        modelButton.setText("正在準備 Whisper Base 下載…");
+        modelButton.setText("正在準備 " + selectedModelName() + " 下載…");
         modelStatus.setText("第一次下載需要網路；模型下載完成後可在本機辨識");
-        modelManager.download(new WhisperModelManager.Listener() {
+        modelManager.download(selectedModelId(), new WhisperModelManager.Listener() {
             @Override
             public void onProgress(long downloadedBytes, long totalBytes) {
                 if (activity.isFinishing()) return;
                 String downloaded = formatMiB(downloadedBytes);
                 if (totalBytes > 0) {
                     int percent = (int) Math.min(100L, downloadedBytes * 100L / totalBytes);
-                    modelButton.setText("下載 Whisper Base：" + percent + "%");
+                    modelButton.setText("下載 " + selectedModelName() + "：" + percent + "%");
                     modelStatus.setText("模型下載中 " + downloaded + " / " + formatMiB(totalBytes));
                 } else {
-                    modelButton.setText("下載 Whisper Base：" + downloaded);
+                    modelButton.setText("下載 " + selectedModelName() + "：" + downloaded);
                     modelStatus.setText("模型下載中 " + downloaded);
                 }
             }
@@ -255,13 +268,13 @@ public final class AiSubtitleOverlay {
             @Override
             public void onDownloaded(java.io.File file) {
                 if (activity.isFinishing()) return;
-                modelStatus.setText("Whisper Base 已下載；開始字幕時才會載入模型");
+                modelStatus.setText(selectedModelName() + " 已下載；開始字幕時才會載入模型");
                 updateModelControls();
             }
 
             @Override
             public void onDeleted() {
-                modelStatus.setText("Whisper Base 模型已刪除");
+                modelStatus.setText(selectedModelName() + " 已刪除");
                 updateModelControls();
             }
 
@@ -277,12 +290,13 @@ public final class AiSubtitleOverlay {
     private void confirmDeleteModel() {
         if (enabled || modelManager.isDownloading()) return;
         new AlertDialog.Builder(activity)
-                .setTitle("刪除 Whisper Base 模型？")
-                .setMessage("會移除約 148 MB 的本機模型；日後可重新下載。")
+                .setTitle("刪除 " + selectedModelName() + "？")
+                .setMessage("會移除約 " + WhisperModelManager.getEstimatedSizeMb(selectedModelId())
+                        + " MB 的本機模型；日後可重新下載。")
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .setPositiveButton("刪除", (dialog, which) -> {
                     modelStatus.setText("正在刪除模型…");
-                    modelManager.delete(new WhisperModelManager.Listener() {
+                    modelManager.delete(selectedModelId(), new WhisperModelManager.Listener() {
                         @Override
                         public void onProgress(long downloadedBytes, long totalBytes) { }
 
@@ -291,7 +305,7 @@ public final class AiSubtitleOverlay {
 
                         @Override
                         public void onDeleted() {
-                            modelStatus.setText("Whisper Base 模型已刪除");
+                            modelStatus.setText(selectedModelName() + " 已刪除");
                             updateModelControls();
                         }
 
@@ -306,19 +320,21 @@ public final class AiSubtitleOverlay {
     }
 
     private void updateModelControls() {
-        boolean ready = modelManager.isDownloaded();
+        boolean ready = modelManager.isDownloaded(selectedModelId());
         boolean downloading = modelManager.isDownloading();
         if (ready) {
-            modelStatus.setText("語音辨識模型：Whisper Base 多語版（已下載）");
+            modelStatus.setText("語音辨識模型：" + selectedModelName() + "（已下載）｜固定語言：" + selectedLanguageLabel());
             modelButton.setVisibility(android.view.View.GONE);
             deleteModelButton.setVisibility(enabled ? android.view.View.GONE : android.view.View.VISIBLE);
         } else {
             modelButton.setVisibility(android.view.View.VISIBLE);
             deleteModelButton.setVisibility(android.view.View.GONE);
-            if (!downloading) modelButton.setText("下載 Whisper Base 多語模型（約 148 MB）");
+            if (!downloading) modelButton.setText("下載 " + selectedModelName() + "（約 "
+                    + WhisperModelManager.getEstimatedSizeMb(selectedModelId()) + " MB）");
             modelButton.setEnabled(!downloading && !enabled);
             deleteModelButton.setEnabled(false);
-            if (!downloading) modelStatus.setText("語音辨識模型：Whisper Base 多語版（尚未下載）");
+            if (!downloading) modelStatus.setText("語音辨識模型：" + selectedModelName()
+                    + "（尚未下載）｜固定語言：" + selectedLanguageLabel());
         }
     }
 
@@ -357,7 +373,7 @@ public final class AiSubtitleOverlay {
         playerView.post(() -> playerView.postDelayed(() -> {
             if (activity.isFinishing() || !playerView.isAttachedToWindow()
                     || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
-            if (!enabled && modelManager.isDownloaded() && !modelManager.isDownloading()) {
+            if (!enabled && modelManager.isDownloaded(selectedModelId()) && !modelManager.isDownloading()) {
                 ensureAutoStartCapture();
             }
         }, 1500L));
@@ -368,7 +384,7 @@ public final class AiSubtitleOverlay {
         entryButton.setVisibility(android.view.View.GONE);
         if (enabled) caption.setVisibility(android.view.View.GONE);
         panel.bringToFront();
-        if (!modelManager.isDownloaded()) modelButton.requestFocus();
+        if (!modelManager.isDownloaded(selectedModelId())) modelButton.requestFocus();
         else toggle.requestFocus();
     }
 
@@ -400,11 +416,11 @@ public final class AiSubtitleOverlay {
             return;
         }
         if (modelManager.isDownloading()) {
-            modelStatus.setText("請等 Whisper Base 模型下載完成");
+            modelStatus.setText("請等 Whisper 模型下載完成");
             return;
         }
-        if (!modelManager.isDownloaded()) {
-            modelStatus.setText("請先下載 Whisper Base 多語模型（約 148 MB）");
+        if (!modelManager.isDownloaded(selectedModelId())) {
+            modelStatus.setText("請先下載所選 Whisper 模型");
             modelButton.requestFocus();
             return;
         }
@@ -488,7 +504,7 @@ public final class AiSubtitleOverlay {
 
             if (AiSubtitleSettingsActivity.getTranslationService(activity)
                     == AiSubtitleSettingsActivity.TRANSLATION_GOOGLE_MLKIT) {
-                translationEngine = new AiSubtitleTranslationEngine(activity,
+                translationEngine = new AiSubtitleTranslationEngine(activity, AiSubtitleSettingsActivity.getAsrLanguage(activity),
                         new AiSubtitleTranslationEngine.Listener() {
                             @Override
                             public void onStatus(String message) {
@@ -514,7 +530,8 @@ public final class AiSubtitleOverlay {
                 translationStatus.setText("已停用翻譯；目前只顯示語音辨識原文");
             }
 
-            AiSubtitleEngine.start(activity, modelManager.getModelFile(), new AiSubtitleEngine.Listener() {
+            AiSubtitleEngine.start(activity, modelManager.getModelFile(selectedModelId()),
+                    AiSubtitleSettingsActivity.getAsrLanguage(activity), new AiSubtitleEngine.Listener() {
                 @Override
                 public void onStatus(String message) {
                     if (!enabled) return;
@@ -529,25 +546,25 @@ public final class AiSubtitleOverlay {
                         hasInferenceStatus = true;
                         caption.setText(message);
                         caption.setVisibility(android.view.View.VISIBLE);
-                    } else if (message.startsWith("正在載入 Whisper Base")) {
+                    } else if (message.startsWith("正在載入 Whisper")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = false;
                         whisperReady = false;
                         mainHandler.removeCallbacks(modelLoadWarning);
                         mainHandler.postDelayed(modelLoadWarning, 15000L);
-                        caption.setText("正在載入 Whisper Base 模型（首次載入可能需要數秒）…");
+                        caption.setText("正在載入所選 Whisper 模型（首次載入可能需要數秒）…");
                         caption.setVisibility(android.view.View.VISIBLE);
-                    } else if (message.startsWith("Whisper Base 已啟動")) {
+                    } else if (message.startsWith("Whisper 本機引擎已啟動")) {
                         whisperReady = true;
                         mainHandler.removeCallbacks(modelLoadWarning);
                         if (!hasRecognizedCaption && !hasTranslatedCaption) {
                             caption.setText("模型已載入，等待直播語音…");
                             caption.setVisibility(android.view.View.VISIBLE);
                         }
-                    } else if (message.startsWith("Whisper Base · 偵測 ")) {
+                    } else if (message.startsWith("Whisper 本機辨識 · ")) {
                         inferenceInProgress = false;
                         hasInferenceStatus = true;
-                    } else if (message.startsWith("Whisper Base 啟動失敗")) {
+                    } else if (message.startsWith("Whisper 本機辨識啟動失敗")) {
                         mainHandler.removeCallbacks(modelLoadWarning);
                         stopCapture(message);
                         caption.setText(message);

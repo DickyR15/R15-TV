@@ -35,6 +35,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private static final String KEY_AUTO_START = "auto_start_v2";
     private static final String KEY_TRANSLATION_SERVICE = "translation_service";
     private static final String KEY_SUBTITLE_DISPLAY = "subtitle_display";
+    private static final String KEY_ASR_LANGUAGE = "asr_language";
+    private static final String KEY_MODEL_ID = "model_id";
+    private static final String[] ASR_LANGUAGE_CODES = {"en", "zh", "ja", "ko"};
+    private static final String[] ASR_LANGUAGE_LABELS = {"英文（F1 預設）", "中文", "日文", "韓文"};
 
     public static final int TRANSLATION_GOOGLE_MLKIT = 0;
     public static final int TRANSLATION_ORIGINAL_ONLY = 1;
@@ -47,6 +51,8 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private boolean draftAutoStart;
     private int draftTranslationService;
     private int draftSubtitleDisplay;
+    private String draftAsrLanguage = "en";
+    private String draftModelId = WhisperModelManager.MODEL_BASE;
     private boolean bindingSelections;
     private long translationTestStartMs;
 
@@ -65,6 +71,33 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 .getInt(KEY_SUBTITLE_DISPLAY, DISPLAY_TRANSLATED_ONLY);
     }
 
+    public static String getAsrLanguage(Context context) {
+        String selected = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_ASR_LANGUAGE, "en");
+        for (String code : ASR_LANGUAGE_CODES) if (code.equals(selected)) return code;
+        return "en";
+    }
+
+    public static String getSelectedModelId(Context context) {
+        String selected = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .getString(KEY_MODEL_ID, WhisperModelManager.MODEL_BASE);
+        return WhisperModelManager.normalizeModelId(selected);
+    }
+
+    public static String getAsrLanguageLabel(String code) {
+        for (int i = 0; i < ASR_LANGUAGE_CODES.length; i++) {
+            if (ASR_LANGUAGE_CODES[i].equals(code)) return ASR_LANGUAGE_LABELS[i];
+        }
+        return ASR_LANGUAGE_LABELS[0];
+    }
+
+    private static int languageIndex(String code) {
+        for (int i = 0; i < ASR_LANGUAGE_CODES.length; i++) {
+            if (ASR_LANGUAGE_CODES[i].equals(code)) return i;
+        }
+        return 0;
+    }
+
     public static void start(Activity activity) {
         activity.startActivity(new Intent(activity, AiSubtitleSettingsActivity.class));
     }
@@ -80,8 +113,14 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         draftAutoStart = isAutoStartEnabled(this);
         draftTranslationService = getTranslationService(this);
         draftSubtitleDisplay = getSubtitleDisplayMode(this);
+        draftAsrLanguage = getAsrLanguage(this);
+        draftModelId = getSelectedModelId(this);
 
         mBinding.autoStartSwitch.setChecked(draftAutoStart);
+        mBinding.asrLanguageSpinner.setAdapter(makeAdapter(Arrays.asList(ASR_LANGUAGE_LABELS)));
+        mBinding.asrModelSpinner.setAdapter(makeAdapter(Arrays.asList(
+                "Whisper Base 多語版（約 148 MB，優先準確度）",
+                "Whisper Tiny Q5_1（約 31 MB，較輕量）")));
         ArrayAdapter<String> translationAdapter = makeAdapter(Arrays.asList(
                 "Google 翻譯（ML Kit 本機模型）", "只顯示辨識原文（不翻譯）"));
         mBinding.translationServiceSpinner.setAdapter(translationAdapter);
@@ -94,9 +133,33 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 draftTranslationService, TRANSLATION_GOOGLE_MLKIT, TRANSLATION_ORIGINAL_ONLY));
         mBinding.subtitleDisplaySpinner.setSelection(clamp(
                 draftSubtitleDisplay, DISPLAY_TRANSLATED_ONLY, DISPLAY_SOURCE_AND_TRANSLATION));
+        mBinding.asrLanguageSpinner.setSelection(languageIndex(draftAsrLanguage));
+        mBinding.asrModelSpinner.setSelection(
+                WhisperModelManager.MODEL_TINY_Q5_1.equals(draftModelId) ? 1 : 0);
         bindingSelections = false;
 
         mBinding.autoStartSwitch.setOnCheckedChangeListener((button, checked) -> draftAutoStart = checked);
+        mBinding.asrLanguageSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (bindingSelections) return;
+                draftAsrLanguage = ASR_LANGUAGE_CODES[Math.max(0, Math.min(ASR_LANGUAGE_CODES.length - 1, position))];
+                updateLanguageOptions();
+                updateTranslationOptions();
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
+        mBinding.asrModelSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
+            @Override
+            public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
+                if (bindingSelections) return;
+                draftModelId = position == 1
+                        ? WhisperModelManager.MODEL_TINY_Q5_1 : WhisperModelManager.MODEL_BASE;
+                updateLanguageOptions();
+                refreshModelState(null);
+            }
+            @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
+        });
         mBinding.translationServiceSpinner.setOnItemSelectedListener(new android.widget.AdapterView.OnItemSelectedListener() {
             @Override
             public void onItemSelected(android.widget.AdapterView<?> parent, View view, int position, long id) {
@@ -114,9 +177,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
             @Override public void onNothingSelected(android.widget.AdapterView<?> parent) { }
         });
 
+        updateLanguageOptions();
         refreshModelState(null);
         updateTranslationOptions();
-        if (!modelManager.isDownloaded()) mBinding.modelButton.requestFocus();
+        if (!modelManager.isDownloaded(draftModelId)) mBinding.modelButton.requestFocus();
         else mBinding.autoStartSwitch.requestFocus();
     }
 
@@ -167,26 +231,41 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         mBinding.saveApplyButton.setOnClickListener(this::saveAndApply);
     }
 
+    private void updateLanguageOptions() {
+        if (mBinding == null) return;
+        mBinding.asrMode.setText(WhisperModelManager.getModelName(draftModelId)
+                + "｜固定辨識語言：" + getAsrLanguageLabel(draftAsrLanguage));
+    }
+
     private void updateTranslationOptions() {
         if (mBinding == null) return;
         boolean translationEnabled = draftTranslationService == TRANSLATION_GOOGLE_MLKIT;
+        boolean sourceChinese = "zh".equals(draftAsrLanguage);
         mBinding.subtitleDisplaySpinner.setEnabled(translationEnabled);
         mBinding.subtitleDisplayHint.setText(translationEnabled
-                ? "目前支援英文語音翻成臺灣繁體；其他來源語言的翻譯尚未整合。"
+                ? "字幕可僅顯示繁體結果，或同時顯示來源文字與繁體結果。"
                 : "已關閉翻譯，只顯示 Whisper 辨識原文。");
-        mBinding.translationSummary.setText(translationEnabled
-                ? "Google ML Kit 英翻中＋OpenCC 臺灣繁體。首次使用需下載翻譯模型；下載完成後可離線翻譯。"
-                : "不啟動翻譯模型，直接顯示 Whisper 辨識文字。");
+        if (!translationEnabled) {
+            mBinding.translationSummary.setText("不啟動翻譯模型，直接顯示 Whisper 辨識文字。");
+        } else if (sourceChinese) {
+            mBinding.translationSummary.setText("中文辨識後使用 OpenCC s2twp 轉為臺灣繁體；不需要翻譯模型。");
+        } else {
+            mBinding.translationSummary.setText("免費 Google ML Kit 本機翻譯：" + getAsrLanguageLabel(draftAsrLanguage)
+                    + " → 中文，再使用 OpenCC s2twp 轉為臺灣繁體。首次使用需下載對應語言模型；完成後可離線翻譯。");
+        }
         mBinding.testTranslationButton.setEnabled(translationEnabled);
     }
 
     private void downloadModel(View view) {
         if (modelManager.isDownloading()) return;
+        final String modelId = draftModelId;
+        final String modelName = WhisperModelManager.getModelName(modelId);
         mBinding.modelButton.setEnabled(false);
+        mBinding.asrModelSpinner.setEnabled(false);
         mBinding.modelProgress.setVisibility(View.VISIBLE);
         mBinding.modelProgress.setProgress(0);
-        mBinding.modelStatus.setText("正在連線下載 Whisper Base 多語模型…");
-        modelManager.download(new WhisperModelManager.Listener() {
+        mBinding.modelStatus.setText("正在連線下載 " + modelName + "…");
+        modelManager.download(modelId, new WhisperModelManager.Listener() {
             @Override
             public void onProgress(long downloadedBytes, long totalBytes) {
                 if (isFinishing()) return;
@@ -202,10 +281,10 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 }
             }
             @Override public void onDownloaded(File file) {
-                if (!isFinishing()) refreshModelState("Whisper Base 已下載完成。");
+                if (!isFinishing()) refreshModelState(modelName + " 已下載完成。");
             }
             @Override public void onDeleted() {
-                if (!isFinishing()) refreshModelState("Whisper Base 模型已刪除。");
+                if (!isFinishing()) refreshModelState(modelName + " 已刪除。");
             }
             @Override public void onError(String message) {
                 if (!isFinishing()) refreshModelState("模型下載失敗：" + message);
@@ -215,16 +294,19 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     private void confirmDeleteModel(View view) {
         if (modelManager.isDownloading()) return;
+        final String modelId = draftModelId;
+        final String modelName = WhisperModelManager.getModelName(modelId);
         new AlertDialog.Builder(this)
-                .setTitle("刪除 Whisper Base 模型？")
-                .setMessage("會刪除約 148 MB 的本機語音辨識模型；日後可重新下載。")
+                .setTitle("刪除 " + modelName + "？")
+                .setMessage("會刪除約 " + WhisperModelManager.getEstimatedSizeMb(modelId)
+                        + " MB 的本機語音辨識模型；日後可重新下載。")
                 .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
                 .setPositiveButton("刪除", (dialog, which) ->
-                        modelManager.delete(new WhisperModelManager.Listener() {
+                        modelManager.delete(modelId, new WhisperModelManager.Listener() {
                             @Override public void onProgress(long downloadedBytes, long totalBytes) { }
                             @Override public void onDownloaded(File file) { }
                             @Override public void onDeleted() {
-                                if (!isFinishing()) refreshModelState("Whisper Base 模型已刪除。");
+                                if (!isFinishing()) refreshModelState(modelName + " 已刪除。");
                             }
                             @Override public void onError(String message) {
                                 if (!isFinishing()) refreshModelState("刪除失敗：" + message);
@@ -235,23 +317,36 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     private void refreshModelState(String notice) {
         if (mBinding == null || isFinishing()) return;
-        boolean ready = modelManager != null && modelManager.isDownloaded();
+        boolean ready = modelManager != null && modelManager.isDownloaded(draftModelId);
         boolean downloading = modelManager != null && modelManager.isDownloading();
+        String modelName = WhisperModelManager.getModelName(draftModelId);
         mBinding.modelStatus.setText(notice != null ? notice : ready
-                ? "模型狀態：Whisper Base 多語模型已下載"
-                : downloading ? "模型下載中，請稍候…" : "模型狀態：尚未下載");
+                ? "模型狀態：" + modelName + " 已下載"
+                : downloading ? "模型下載中，請稍候…" : "模型狀態：" + modelName + " 尚未下載");
         mBinding.modelButton.setVisibility(ready ? View.GONE : View.VISIBLE);
         mBinding.modelButton.setEnabled(!downloading);
+        mBinding.asrModelSpinner.setEnabled(!downloading);
         mBinding.modelButton.setText(downloading
-                ? "正在下載 Whisper Base…"
-                : "下載 Whisper Base 多語模型（約 148 MB）");
+                ? "正在下載 " + modelName + "…"
+                : "下載 " + modelName + "（約 " + WhisperModelManager.getEstimatedSizeMb(draftModelId) + " MB）");
         mBinding.deleteModelButton.setVisibility(ready ? View.VISIBLE : View.GONE);
+        mBinding.deleteModelButton.setEnabled(!downloading);
         mBinding.modelProgress.setVisibility(downloading ? View.VISIBLE : View.GONE);
     }
 
     private void testTranslation(View view) {
         if (draftTranslationService != TRANSLATION_GOOGLE_MLKIT) {
             mBinding.translationTestStatus.setText("已選擇只顯示辨識原文，不需要翻譯模型。");
+            return;
+        }
+        if ("zh".equals(draftAsrLanguage)) {
+            try {
+                String source = "這場比賽將在十分鐘後開始。";
+                String traditional = ChineseConverter.convert(source, ConversionType.S2TWP, this);
+                mBinding.translationTestStatus.setText("中文繁體轉換成功：" + (traditional == null ? source : traditional));
+            } catch (Throwable error) {
+                mBinding.translationTestStatus.setText("繁體轉換失敗：" + readableMessage(error));
+            }
             return;
         }
         if (testTranslator != null) {
@@ -261,18 +356,19 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         mBinding.testTranslationButton.setEnabled(false);
         mBinding.translationTestProgress.setVisibility(View.VISIBLE);
         mBinding.translationTestProgress.setProgress(0);
-        mBinding.translationTestStatus.setText("正在檢查／下載 Google 翻譯模型…");
+        mBinding.translationTestStatus.setText("正在檢查／下載 " + getAsrLanguageLabel(draftAsrLanguage) + "→繁中翻譯模型…");
         translationTestStartMs = SystemClock.elapsedRealtime();
         TranslatorOptions options = new TranslatorOptions.Builder()
-                .setSourceLanguage(TranslateLanguage.ENGLISH)
+                .setSourceLanguage(mlKitLanguageCode(draftAsrLanguage))
                 .setTargetLanguage(TranslateLanguage.CHINESE)
                 .build();
+        String sample = samplePhrase(draftAsrLanguage);
         testTranslator = Translation.getClient(options);
         testTranslator.downloadModelIfNeeded(new DownloadConditions.Builder().build())
                 .addOnSuccessListener(unused -> {
                     if (isFinishing() || testTranslator == null) return;
                     mBinding.translationTestStatus.setText("模型已就緒，正在測試翻譯…");
-                    testTranslator.translate("The match starts in ten minutes.")
+                    testTranslator.translate(sample)
                             .addOnSuccessListener(translated -> {
                                 if (isFinishing()) return;
                                 String traditional = translated;
@@ -282,7 +378,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                                     if (converted != null && !converted.trim().isEmpty()) traditional = converted.trim();
                                 } catch (Throwable ignored) { }
                                 long elapsed = SystemClock.elapsedRealtime() - translationTestStartMs;
-                                mBinding.translationTestStatus.setText("測試成功（" + elapsed + " ms）："
+                                mBinding.translationTestStatus.setText("測試成功（" + elapsed + " ms）：" 
                                         + traditional + "。首次下載時間不列入純翻譯延遲。");
                                 finishTranslationTest();
                             })
@@ -299,6 +395,22 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                         finishTranslationTest();
                     }
                 });
+    }
+
+    private static String mlKitLanguageCode(String code) {
+        switch (code) {
+            case "ja": return TranslateLanguage.JAPANESE;
+            case "ko": return TranslateLanguage.KOREAN;
+            default: return TranslateLanguage.ENGLISH;
+        }
+    }
+
+    private static String samplePhrase(String code) {
+        switch (code) {
+            case "ja": return "レースは10分後にスタートします。";
+            case "ko": return "경주는 10분 후에 시작합니다.";
+            default: return "The race starts in ten minutes.";
+        }
     }
 
     private void finishTranslationTest() {
@@ -319,6 +431,8 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                 .putBoolean(KEY_AUTO_START, draftAutoStart)
                 .putInt(KEY_TRANSLATION_SERVICE, draftTranslationService)
                 .putInt(KEY_SUBTITLE_DISPLAY, draftSubtitleDisplay)
+                .putString(KEY_ASR_LANGUAGE, draftAsrLanguage)
+                .putString(KEY_MODEL_ID, draftModelId)
                 .apply();
         Toast.makeText(this, "AI 字幕設定已儲存並套用", Toast.LENGTH_SHORT).show();
         finish();

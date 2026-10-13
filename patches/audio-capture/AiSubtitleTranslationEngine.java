@@ -19,10 +19,6 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.RejectedExecutionException;
 
-/**
- * Free on-device English-to-Chinese translation followed by OpenCC Taiwan conversion.
- * The ML Kit language model is downloaded once on first use; translation itself is local.
- */
 public final class AiSubtitleTranslationEngine {
     public interface Listener {
         void onStatus(String status);
@@ -33,6 +29,7 @@ public final class AiSubtitleTranslationEngine {
 
     private final Context context;
     private final Listener listener;
+    private final String sourceLanguage;
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService conversionExecutor =
             Executors.newSingleThreadExecutor(r -> {
@@ -51,41 +48,49 @@ public final class AiSubtitleTranslationEngine {
     private String lastQueuedPhrase = "";
     private String processingPhrase = "";
 
-    public AiSubtitleTranslationEngine(Context context, Listener listener) {
+    public AiSubtitleTranslationEngine(Context context, String sourceLanguage, Listener listener) {
         this.context = context.getApplicationContext();
         this.listener = listener;
-        TranslatorOptions options = new TranslatorOptions.Builder()
-                .setSourceLanguage(TranslateLanguage.ENGLISH)
-                .setTargetLanguage(TranslateLanguage.CHINESE)
-                .build();
-        translator = Translation.getClient(options);
+        this.sourceLanguage = normalizeSourceLanguage(sourceLanguage);
+        if ("zh".equals(this.sourceLanguage)) {
+            translator = null;
+            modelReady = true;
+        } else {
+            TranslatorOptions options = new TranslatorOptions.Builder()
+                    .setSourceLanguage(toMlKitLanguage(this.sourceLanguage))
+                    .setTargetLanguage(TranslateLanguage.CHINESE)
+                    .build();
+            translator = Translation.getClient(options);
+        }
     }
 
-    /**
-     * Defer ML Kit initialization until an English phrase actually needs translation.
-     * This avoids loading an English-to-Chinese model for Mandarin/Japanese channels.
-     */
     public void start() {
-        postStatus("已啟用語言偵測；只有辨識到英文時才準備英翻中模型");
+        if ("zh".equals(sourceLanguage)) {
+            postStatus("中文辨識已設定；將使用 OpenCC 轉為臺灣繁體，不需下載翻譯模型");
+        } else {
+            postStatus("免費 Google ML Kit 本機翻譯：" + languageLabel(sourceLanguage)
+                    + "→繁體中文；首次使用下載模型");
+        }
     }
 
     public void translateFinalPhrase(String text) {
-        translateFinalPhrase(text, "en");
+        translateFinalPhrase(text, sourceLanguage);
     }
 
-    public void translateFinalPhrase(String text, String sourceLanguage) {
+    public void translateFinalPhrase(String text, String sourceLanguageFromAsr) {
         if (closed || text == null) return;
         String phrase = text.trim();
         if (phrase.isEmpty()) return;
-        String language = sourceLanguage == null ? "und" : sourceLanguage.trim().toLowerCase(Locale.ROOT);
 
-        if ("zh".equals(language) || ("und".equals(language) && containsCjk(phrase))) {
-            deliverOriginal(phrase, true, "已辨識中文；直接轉為臺灣繁體，不啟動英翻中模型");
+        String language = normalizeSourceLanguageOrUnd(sourceLanguageFromAsr);
+        if ("und".equals(language)) language = sourceLanguage;
+
+        if ("zh".equals(sourceLanguage)) {
+            deliverOriginal(phrase, true, "已辨識中文；轉為臺灣繁體");
             return;
         }
-        if (!"en".equals(language)) {
-            deliverOriginal(phrase, false, "已辨識 " + language
-                    + "；目前僅支援英文→繁體中文翻譯，先顯示辨識原文");
+        if (!sourceLanguage.equals(language)) {
+            deliverOriginal(phrase, false, "辨識語言與固定選項不一致；先保留原文");
             return;
         }
 
@@ -94,11 +99,11 @@ public final class AiSubtitleTranslationEngine {
             lastQueuedPhrase = phrase;
             if (pending.size() >= MAX_PENDING_PHRASES) {
                 pending.removeFirst();
-                postStatus("翻譯略有積壓，已略過最舊句段以保持直播同步");
+                postStatus("翻譯略有積壓，略過最舊句段以保持直播同步");
             }
             pending.addLast(phrase);
         }
-        ensureEnglishModelLoaded();
+        ensureTranslationModelLoaded();
         drainQueue();
     }
 
@@ -125,20 +130,12 @@ public final class AiSubtitleTranslationEngine {
         }
     }
 
-    private static boolean containsCjk(String text) {
-        return text.codePoints().anyMatch(codePoint ->
-                (codePoint >= 0x4E00 && codePoint <= 0x9FFF)
-                || (codePoint >= 0x3400 && codePoint <= 0x4DBF)
-                || (codePoint >= 0x3040 && codePoint <= 0x30FF)
-                || (codePoint >= 0xAC00 && codePoint <= 0xD7AF));
-    }
-
-    private void ensureEnglishModelLoaded() {
+    private void ensureTranslationModelLoaded() {
         synchronized (lock) {
-            if (closed || modelReady || modelLoading) return;
+            if (closed || modelReady || modelLoading || translator == null) return;
             modelLoading = true;
         }
-        postStatus("偵測到英文，正在準備本機英翻中模型…");
+        postStatus("正在準備 " + languageLabel(sourceLanguage) + "→繁中本機翻譯模型…");
         translator.downloadModelIfNeeded(new DownloadConditions.Builder().build())
                 .addOnSuccessListener(unused -> {
                     synchronized (lock) {
@@ -146,7 +143,7 @@ public final class AiSubtitleTranslationEngine {
                         modelReady = true;
                         modelLoading = false;
                     }
-                    postStatus("英文→繁中本機翻譯已就緒");
+                    postStatus(languageLabel(sourceLanguage) + "→繁中本機翻譯已就緒");
                     drainQueue();
                 })
                 .addOnFailureListener(error -> {
@@ -158,7 +155,7 @@ public final class AiSubtitleTranslationEngine {
                         fallback = new ArrayList<>(pending);
                         pending.clear();
                     }
-                    postStatus("英文翻譯模型下載失敗，已保留英文原文：" + readableMessage(error));
+                    postStatus("翻譯模型下載失敗，已保留來源字幕：" + readableMessage(error));
                     for (String phrase : fallback) {
                         mainHandler.post(() -> {
                             if (!closed && listener != null) listener.onTranslatedSubtitle(phrase, phrase);
@@ -170,7 +167,7 @@ public final class AiSubtitleTranslationEngine {
     private void drainQueue() {
         final String source;
         synchronized (lock) {
-            if (closed || !modelReady || translating || pending.isEmpty()) return;
+            if (closed || !modelReady || translating || pending.isEmpty() || translator == null) return;
             translating = true;
             source = pending.removeFirst();
             processingPhrase = source;
@@ -197,12 +194,9 @@ public final class AiSubtitleTranslationEngine {
                                 taiwanTraditional = translated;
                             }
                             final String result = taiwanTraditional == null || taiwanTraditional.trim().isEmpty()
-                                    ? translated
-                                    : taiwanTraditional.trim();
+                                    ? translated : taiwanTraditional.trim();
                             mainHandler.post(() -> {
-                                if (!closed && listener != null) {
-                                    listener.onTranslatedSubtitle(source, result);
-                                }
+                                if (!closed && listener != null) listener.onTranslatedSubtitle(source, result);
                             });
                             finishOne();
                         });
@@ -211,7 +205,7 @@ public final class AiSubtitleTranslationEngine {
                     }
                 })
                 .addOnFailureListener(error -> {
-                    postStatus("本機翻譯失敗，保留原文字幕：" + readableMessage(error));
+                    postStatus("本機翻譯失敗，保留來源字幕：" + readableMessage(error));
                     finishOne();
                 });
     }
@@ -233,9 +227,10 @@ public final class AiSubtitleTranslationEngine {
             modelReady = false;
             modelLoading = false;
         }
-        try {
-            translator.close();
-        } catch (Throwable ignored) {
+        if (translator != null) {
+            try {
+                translator.close();
+            } catch (Throwable ignored) { }
         }
         conversionExecutor.shutdownNow();
     }
@@ -246,10 +241,38 @@ public final class AiSubtitleTranslationEngine {
         });
     }
 
+    private static String normalizeSourceLanguage(String value) {
+        if ("zh".equals(value) || "ja".equals(value) || "ko".equals(value)) return value;
+        return "en";
+    }
+
+    private static String normalizeSourceLanguageOrUnd(String value) {
+        if (value == null || value.trim().isEmpty() || "und".equalsIgnoreCase(value.trim())) return "und";
+        String code = value.trim().toLowerCase(Locale.ROOT);
+        if ("zh".equals(code) || "ja".equals(code) || "ko".equals(code) || "en".equals(code)) return code;
+        return "und";
+    }
+
+    private static String toMlKitLanguage(String language) {
+        switch (language) {
+            case "ja": return TranslateLanguage.JAPANESE;
+            case "ko": return TranslateLanguage.KOREAN;
+            default: return TranslateLanguage.ENGLISH;
+        }
+    }
+
+    private static String languageLabel(String language) {
+        switch (language) {
+            case "zh": return "中文";
+            case "ja": return "日文";
+            case "ko": return "韓文";
+            default: return "英文";
+        }
+    }
+
     private static String readableMessage(Throwable error) {
         String message = error.getMessage();
         return message == null || message.trim().isEmpty()
-                ? error.getClass().getSimpleName()
-                : message;
+                ? error.getClass().getSimpleName() : message;
     }
 }

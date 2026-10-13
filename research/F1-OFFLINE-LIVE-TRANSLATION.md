@@ -13,7 +13,7 @@ POC 原始碼：[AudioPlaybackCapture](../patches/audio-capture/AiSubtitlePlayba
 ### 最終整合方向：英文 ASR + 離線翻譯 + 臺灣正體字詞轉換
 
 1. **先驗證 App 內 AudioPlaybackCapture。** 它可以限制只讀 R15 TV 自己 UID 的播放音訊，先避免 native 重編；需要 `RECORD_AUDIO` 與使用者同意的 MediaProjection 工作階段。若電視上的 MPV 聲音不可擷取，才改為研究 MPV native PCM tap；現有 `setAudioOutputListener(effect::applyAudioEffect)` 不是已證實的 PCM callback。
-2. **第一版 ASR：Whisper Base 多語 `ggml-base.bin`。** 使用者在字幕面板自行下載模型；APK 不包含約 148 MB 模型權重。Whisper 先辨識英文 F1 解說，再由 ML Kit 本機英翻中，最後使用 OpenCC `s2twp`。Small 量化版（例如 `ggml-small-q5_1.bin`）只在 Base 的電視實測顯示效能或準確率不足後再比較，不提前加入第一版。
+2. **預設 ASR：Whisper Base 多語 `ggml-base.bin`，並新增可選 Whisper Tiny Q5_1 `ggml-tiny-q5_1.bin`。** 兩者都由使用者在字幕設定內自行下載，模型權重不包進 APK。英文為預設來源語言；也可固定選中文、日文或韓文。Tiny 是較輕量的比較候選，不能預先認定比 Base 準確或在所有電視盒上更快。
 3. **離線翻譯：第一版使用可在裝置端執行的 ML Kit Translation SDK。** 翻譯需在穩定句段完成後執行，不要每來一個字就重新翻譯。先比較字幕品質、延遲、RAM／CPU 與模型授權；不採用需要 API 金鑰或按量付費的翻譯服務。
 4. **臺灣繁體中文輸出：使用 [OpenCC](https://github.com/BYVoid/OpenCC) 的 `s2twp`／臺灣正體流程做字形與常用詞轉換。** OpenCC 是離線簡繁／地區詞轉換，不是英翻中的翻譯器；必須先有翻譯模型，再做字詞轉換。
 5. **F1 詞庫：** 為車手、車隊、賽道與常用戰術詞建立可維護的字典／譯名表，例如 Leclerc、Verstappen、Norris、Piastri、undercut、overcut、tyre degradation、DRS、Safety Car、Virtual Safety Car、track limits、box、pit wall。只能用於術語校正，不應盲目替換一般句子中的相似字串。

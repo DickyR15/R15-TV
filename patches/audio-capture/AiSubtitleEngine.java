@@ -45,6 +45,7 @@ public final class AiSubtitleEngine {
     private static final float[] POISON = new float[0];
 
     private final File modelFile;
+    private final String sourceLanguage;
     private final Listener listener;
     private final ArrayBlockingQueue<float[]> audioQueue = new ArrayBlockingQueue<>(30);
     private final Object resampleLock = new Object();
@@ -58,14 +59,15 @@ public final class AiSubtitleEngine {
     private float previousInputSample;
     private boolean hasPreviousInputSample;
 
-    private AiSubtitleEngine(File modelFile, Listener listener) {
+    private AiSubtitleEngine(File modelFile, String sourceLanguage, Listener listener) {
         this.modelFile = modelFile;
+        this.sourceLanguage = normalizeLanguage(sourceLanguage);
         this.listener = listener;
     }
 
-    public static void start(Context context, File modelFile, Listener listener) {
+    public static void start(Context context, File modelFile, String sourceLanguage, Listener listener) {
         stop();
-        AiSubtitleEngine engine = new AiSubtitleEngine(modelFile, listener);
+        AiSubtitleEngine engine = new AiSubtitleEngine(modelFile, sourceLanguage, listener);
         ACTIVE.set(engine);
         engine.worker = new Thread(engine::runRecognizer, "r15-ai-subtitles");
         engine.worker.setDaemon(true);
@@ -157,11 +159,11 @@ public final class AiSubtitleEngine {
             // Let video rendering and audio playback take priority on low-core TV boxes.
             Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
             if (modelFile == null || !modelFile.isFile()) {
-                throw new IllegalStateException("請先下載 Whisper Base 多語模型");
+                throw new IllegalStateException("請先下載所選 Whisper 模型");
             }
-            postStatus("正在載入 Whisper Base 多語模型…");
+            postStatus("正在載入 Whisper 本機模型…");
             whisperContext = WhisperCpp.createContext(modelFile);
-            postStatus("Whisper Base 已啟動；多語自動辨識中");
+            postStatus("Whisper 本機引擎已啟動；固定語言：" + languageLabel(sourceLanguage));
 
             float[] ring = new float[MAX_WINDOW_SAMPLES];
             int writeIndex = 0;
@@ -212,7 +214,7 @@ public final class AiSubtitleEngine {
                 MAIN.postDelayed(heartbeat[0], 5000L);
                 String result;
                 try {
-                    result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                    result = WhisperCpp.transcribe(whisperContext, window, sourceLanguage, inferenceThreads);
                 } finally {
                     inferenceActive.set(false);
                     MAIN.removeCallbacks(heartbeat[0]);
@@ -231,13 +233,15 @@ public final class AiSubtitleEngine {
                 }
 
                 if (!transcript.isEmpty()) {
+                    // The selected language is authoritative; this run does not use auto detection.
+                    detectedLanguage = sourceLanguage;
                     postSubtitle(transcript);
                     String newText = detectedLanguage.equals(previousLanguage)
                             ? extractNewText(previousTranscript, transcript) : transcript;
                     if (!newText.isEmpty()) postFinalSubtitle(newText, detectedLanguage);
                     previousTranscript = transcript;
                     previousLanguage = detectedLanguage;
-                    postStatus("Whisper Base · 偵測 " + detectedLanguage + " · "
+                    postStatus("Whisper 本機辨識 · 固定 " + languageLabel(sourceLanguage) + " · "
                             + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
                             + inferenceMs + " ms");
                 } else {
@@ -246,7 +250,7 @@ public final class AiSubtitleEngine {
             }
         } catch (Throwable error) {
             running = false;
-            postStatus("Whisper Base 啟動失敗：" + readableMessage(error));
+            postStatus("Whisper 本機辨識啟動失敗：" + readableMessage(error));
         } finally {
             try {
                 WhisperCpp.freeContext(whisperContext);
@@ -276,6 +280,8 @@ public final class AiSubtitleEngine {
     private static String extractNewText(String previous, String current) {
         if (current == null || current.trim().isEmpty()) return "";
         if (previous == null || previous.trim().isEmpty()) return current.trim();
+
+        if (containsCjk(previous) || containsCjk(current)) return extractUnicodeTail(previous, current);
 
         String prevNorm = normalizeText(previous);
         String currentNorm = normalizeText(current);
@@ -318,12 +324,73 @@ public final class AiSubtitleEngine {
 
     private static String normalizeText(String text) {
         return text == null ? "" : text.toLowerCase(Locale.ROOT)
-                .replaceAll("[^a-z0-9']+", " ").trim();
+                .replaceAll("[^\\p{L}\\p{N}']+", " ").trim();
     }
 
     private static String normalizeToken(String token) {
         return token == null ? "" : token.toLowerCase(Locale.ROOT)
-                .replaceAll("^[^a-z0-9']+|[^a-z0-9']+$", "");
+                .replaceAll("^[^\\p{L}\\p{N}']+|[^\\p{L}\\p{N}']+$", "");
+    }
+
+    private static String normalizeLanguage(String language) {
+        if ("zh".equals(language) || "ja".equals(language) || "ko".equals(language)) return language;
+        return "en";
+    }
+
+    private static String languageLabel(String language) {
+        switch (normalizeLanguage(language)) {
+            case "zh": return "中文";
+            case "ja": return "日文";
+            case "ko": return "韓文";
+            default: return "英文";
+        }
+    }
+
+    private static boolean containsCjk(String text) {
+        if (text == null) return false;
+        return text.codePoints().anyMatch(cp ->
+                (cp >= 0x3400 && cp <= 0x9FFF)
+                || (cp >= 0x3040 && cp <= 0x30FF)
+                || (cp >= 0xAC00 && cp <= 0xD7AF));
+    }
+
+    private static String extractUnicodeTail(String previous, String current) {
+        String prevNorm = normalizeText(previous).replace(" ", "");
+        String currNorm = normalizeText(current).replace(" ", "");
+        if (currNorm.isEmpty()) return "";
+        if (prevNorm.isEmpty()) return current.trim();
+        if (prevNorm.equals(currNorm) || prevNorm.contains(currNorm)) return "";
+
+        int maxOverlap = Math.min(80, Math.min(prevNorm.length(), currNorm.length()));
+        for (int overlap = maxOverlap; overlap >= 2; overlap--) {
+            if (prevNorm.regionMatches(prevNorm.length() - overlap, currNorm, 0, overlap)) {
+                int rawStart = rawIndexAfterLetters(current, overlap);
+                if (rawStart >= current.length()) return "";
+                return current.substring(rawStart)
+                        .replaceFirst("^[\\s，。！？、：；,.!?;:'\"「」『』（）【】]+", "")
+                        .trim();
+            }
+        }
+        if (currNorm.contains(prevNorm)) {
+            int rawPos = current.toLowerCase(Locale.ROOT)
+                    .indexOf(previous.toLowerCase(Locale.ROOT));
+            if (rawPos >= 0) {
+                int end = rawPos + previous.length();
+                return end < current.length() ? current.substring(end).trim() : "";
+            }
+        }
+        return current.trim();
+    }
+
+    private static int rawIndexAfterLetters(String text, int wanted) {
+        int seen = 0;
+        int index = 0;
+        while (index < text.length() && seen < wanted) {
+            int cp = text.codePointAt(index);
+            if (Character.isLetterOrDigit(cp)) seen++;
+            index += Character.charCount(cp);
+        }
+        return index;
     }
 
     private void postStatus(String message) {
