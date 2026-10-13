@@ -5,20 +5,40 @@
     "locale": "zh-TW",
     "targetLanguage": "zh-TW",
     "targetLabel": "臺灣繁體中文字幕",
-    "exposeProviderSpecificSettingsOnlyForAllowedProviders": true
+    "exposeProviderSpecificSettingsOnlyForAllowedProviders": true,
+    "displayOriginalOnlyOption": true,
+    "displayOriginalOnlyLabel": "僅顯示辨識原文"
   },
   "allowedProviders": [
-    {
-      "id": "google",
-      "label": "Google 翻譯",
-      "mode": "online",
-      "note": "Keep the AutoBuild-style Google provider. Normalize every result with OpenCC S2TWP before display."
-    },
     {
       "id": "bing",
       "label": "Bing 翻譯",
       "mode": "online",
-      "note": "Keep the AutoBuild-style Bing provider. Normalize every result with OpenCC S2TWP before display."
+      "note": "Keep the AutoBuild-style Bing provider; convert all successful results with OpenCC S2TWP before display."
+    },
+    {
+      "id": "deepl",
+      "label": "DeepL 翻譯",
+      "mode": "online",
+      "note": "Keep the AutoBuild-style DeepL provider if the upstream implementation/deployment supports it; convert results with OpenCC S2TWP."
+    },
+    {
+      "id": "google",
+      "label": "Google 翻譯",
+      "mode": "online",
+      "note": "Keep the AutoBuild-style Google provider; convert all successful results with OpenCC S2TWP before display."
+    },
+    {
+      "id": "mtran",
+      "label": "MTranServer",
+      "mode": "self-hosted",
+      "note": "Optional self-hosted backend with URL and optional token."
+    },
+    {
+      "id": "openai",
+      "label": "大模型（OpenAI 相容）",
+      "mode": "user-configured",
+      "note": "Optional OpenAI-compatible endpoint, model name and API key; this is a configurable backend, not a promise of free service."
     }
   ],
   "forbiddenProviders": [
@@ -29,8 +49,10 @@
         "provider-selector",
         "provider-settings",
         "translation-dispatch",
-        "fallback",
-        "cached-provider-state"
+        "retries",
+        "fallbacks",
+        "cached-provider-state",
+        "provider-migration"
       ]
     },
     {
@@ -40,8 +62,10 @@
         "provider-selector",
         "provider-settings",
         "translation-dispatch",
-        "fallback",
-        "cached-provider-state"
+        "retries",
+        "fallbacks",
+        "cached-provider-state",
+        "provider-migration"
       ]
     }
   ],
@@ -52,14 +76,14 @@
     "noProviderMayOverrideTarget": true,
     "noSimplifiedOutputOnFailure": true,
     "forChineseOrCantoneseAsr": "Convert recognized Chinese text with S2TWP; do not call a translation provider just to convert script/terms.",
-    "failureBehavior": "Show an explicit translation failure state. In source-plus-translation mode the original source caption may remain; never label source text as a successful Chinese translation."
+    "failureBehavior": "Show a clear translation-error state. In source-plus-translation mode, retain original source-language captions as the source line. Never label them as completed translations or fall back to Simplified Chinese."
   },
   "tests": [
-    "Provider UI lists Google and Bing only.",
-    "Youdao has no reachable dispatch path.",
-    "Tencent has no reachable dispatch path.",
+    "Provider selector contains only Bing, DeepL, Google, MTranServer, and OpenAI-compatible LLM; original-only mode is separate.",
+    "No Youdao item, saved enum, dispatch path, retry, fallback, or cached provider state is reachable.",
+    "No Tencent translation item, saved enum, dispatch path, retry, fallback, or cached provider state is reachable.",
     "All successful provider responses pass through OpenCC S2TWP before display.",
     "Provider failures never fall back to Simplified Chinese.",
-    "Chinese and Cantonese recognition use OpenCC S2TWP without Youdao/Tencent."
+    "Chinese and Cantonese recognition use OpenCC S2TWP without invoking Youdao/Tencent."
   ]
 }
