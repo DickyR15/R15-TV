@@ -27,8 +27,8 @@ Model artifacts and hashes are recorded in `config/ai-subtitle-models.json`. Eac
 
 - UI must say **「臺灣繁體中文字幕翻譯」**, never 「簡體中文字幕翻譯」.
 - Only translation output target: `zh-TW`.
-- Translation providers allowed in the selector: **Google 翻譯、Bing 翻譯 only**. The provider allowlist is `config/ai-subtitle-translation-policy.json`.
-- **Remove 有道翻譯 and 騰訊翻譯 completely** from the selector, settings forms, dispatch/routing code, retries, fallbacks, and cached provider state. Do not merely hide their labels.
+- Keep the AutoBuild-style translation settings and options except remove **有道翻譯** and **騰訊翻譯** completely. The remaining configurable providers are Bing、DeepL、Google、MTranServer and OpenAI 相容大模型; 「僅顯示辨識原文」 remains a display mode rather than a translation provider. The allowlist is `config/ai-subtitle-translation-policy.json`.
+- Remove 有道 and Tencent translation from the selector, settings forms, dispatch/routing code, retries, fallbacks, and cached provider state. Do not merely hide their labels.
 - After every allowed provider returns text, convert using OpenCC `S2TWP` before showing or saving a caption. This applies to single-line, bilingual and cached results.
 - No Simplified Chinese output mode, provider output mode or UI option is allowed.
 - Chinese ASR output is also passed through OpenCC `S2TWP`; this is script and Taiwan-term conversion, not translation.
@@ -37,7 +37,7 @@ Model artifacts and hashes are recorded in `config/ai-subtitle-models.json`. Eac
 
 ## Settings UI
 
-Mirror AutoBuild 170's layout/interaction flow: enable switch, source-language selector, selected language model status, download/delete language pack, translation provider selector (Google/Bing only), subtitle display mode, provider-specific settings for allowed providers only, translation self-test, and save/apply. Keep TV remote/D-pad navigation predictable. Localize the UI to Traditional Chinese and remove the Mainland Simplified output semantics.
+Mirror AutoBuild 170's layout/interaction flow: enable switch, source-language selector, selected language model status, download/delete language pack, translation provider selector (without Youdao/Tencent), subtitle display mode, provider-specific settings for allowed providers only, translation self-test, and save/apply. Keep TV remote/D-pad navigation predictable. Localize the UI to Traditional Chinese and remove the Mainland Simplified output semantics.
 
 ## Runtime and reliability
 
@@ -58,7 +58,7 @@ This branch is intentionally reset to the clean `public-source-build` baseline b
 - [ ] Clean build succeeds with pinned source and sherpa-onnx v1.13.8.
 - [ ] All eight model packs download with SHA-256 and byte-size validation.
 - [ ] All eight languages produce recognized source text on actual device audio.
-- [ ] Only Google and Bing appear as translation providers; there is no Youdao/Tencent translation UI or dispatch path.
+- [ ] The provider selector matches AutoBuild's layout and remaining options, with Youdao/Tencent removed from UI and dispatch.
 - [ ] All translations displayed by the UI are Taiwan Traditional Chinese after S2TWP conversion.
 - [ ] No Simplified Chinese caption display option exists.
 - [ ] No infinite “still processing” state: watchdog reports and recovers from stalled inference.
