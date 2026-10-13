@@ -22,6 +22,8 @@ env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
   NDK_VERSION: 28.2.13676358
+  OPENCC_VERSION: 1.4.2
+  OPENCC_COMMIT: 025f371dc76b598d77384fbdab90c937471844d8
 
 jobs:
   build:
@@ -117,6 +119,77 @@ jobs:
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
             "ndk;${NDK_VERSION}"
+
+      - name: Fetch official OpenCC 1.4.2 source
+        env:
+          EXPECTED_OPENCC_COMMIT: ${{ env.OPENCC_COMMIT }}
+        run: |
+          set -euo pipefail
+          mkdir -p sources/OpenCC
+          git -C sources/OpenCC init
+          git -C sources/OpenCC remote add origin https://github.com/BYVoid/OpenCC.git
+          git -C sources/OpenCC fetch --depth=1 origin refs/tags/ver.1.4.2
+          git -C sources/OpenCC checkout --detach FETCH_HEAD
+          actual=$(git -C sources/OpenCC rev-parse HEAD)
+          test "$actual" = "$EXPECTED_OPENCC_COMMIT"
+          test -s sources/OpenCC/LICENSE
+          test -s sources/OpenCC/data/config/s2twp.json
+          echo "Official OpenCC 1.4.2 source: $actual"
+
+      - name: Build OpenCC 1.4.2 dictionaries and Android JNI for both ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S sources/OpenCC -B build/opencc-host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DOPENCC_ENABLE_INSTALL=OFF \
+            -DENABLE_GTEST=OFF \
+            -DENABLE_BENCHMARK=OFF \
+            -DBUILD_DOCUMENTATION=OFF \
+            -DBUILD_PYTHON=OFF \
+            -DOPENCC_DICT_FORMAT=ocd2
+          cmake --build build/opencc-host --target Dictionaries --parallel 2
+
+          asset_root="sources/TV/app/src/main/assets/opencc-1.4.2"
+          mkdir -p "$asset_root/config" "$asset_root/dictionary"
+          cp sources/OpenCC/data/config/s2twp.json "$asset_root/config/s2twp.json"
+          cp sources/OpenCC/LICENSE "$asset_root/LICENSE"
+          dictionaries=(
+            CJK_Compatibility_Ideographs.ocd2
+            STPhrases.ocd2
+            STPhrases_GeneratedFromRegionalPhrases.ocd2
+            STCharacters.ocd2
+            TWPhrases.ocd2
+            TWVariantsPhrases.ocd2
+            TWVariants.ocd2
+          )
+          for dictionary in "${dictionaries[@]}"; do
+            source_file="build/opencc-host/data/$dictionary"
+            test -s "$source_file"
+            cp "$source_file" "$asset_root/dictionary/$dictionary"
+          done
+
+          app_java="sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle"
+          mkdir -p "$app_java"
+          cp patches/ai-subtitle/TaiwanTraditionalConverter.java "$app_java/TaiwanTraditionalConverter.java"
+          for abi in arm64-v8a armeabi-v7a; do
+            build_dir="$GITHUB_WORKSPACE/build/opencc-android-$abi"
+            cmake -S patches/opencc-android -B "$build_dir" \
+              -DOPENCC_SOURCE_DIR="$GITHUB_WORKSPACE/sources/OpenCC" \
+              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$abi" \
+              -DANDROID_PLATFORM=android-24 \
+              -DANDROID_STL=c++_static \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            cmake --build "$build_dir" --target r15opencc --parallel 2
+            native_lib=$(find "$build_dir" -type f -name libr15opencc.so -print -quit)
+            test -n "$native_lib" && test -s "$native_lib"
+            mkdir -p "sources/TV/app/src/main/jniLibs/$abi"
+            install -m 755 "$native_lib" "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
+          done
+          echo "Built official OpenCC 1.4.2 JNI and current s2twp dictionaries for both Android ABIs."
 
       - name: Configure signing and local.properties
         id: signing
