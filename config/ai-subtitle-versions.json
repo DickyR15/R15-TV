@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "verifiedAt": "2026-10-14",
+  "sourceBaseline": {
+    "repository": "iptvorganization/TV-AutoBuild",
+    "releaseTag": "autobuild-170",
+    "versionName": "6.4.0-autobuild.170",
+    "releaseUrl": "https://github.com/iptvorganization/TV-AutoBuild/releases/tag/autobuild-170",
+    "note": "This is the latest release returned by the upstream repository at verification time. Speech model assets are served separately and do not carry independent semantic versions; pin each model by file size and SHA-256."
+  },
+  "speechRuntime": {
+    "package": "sherpa-onnx",
+    "version": "1.13.8",
+    "tag": "v1.13.8",
+    "commit": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
+    "releaseUrl": "https://github.com/k2-fsa/sherpa-onnx/releases/tag/v1.13.8",
+    "status": "latest stable release checked 2026-10-14"
+  },
+  "languageModels": {
+    "catalog": "config/ai-subtitle-models.json",
+    "catalogSource": "TV-AutoBuild autobuild-170 APK model registry",
+    "verification": [
+      "exact HTTPS source URL",
+      "exact byte size",
+      "SHA-256 before atomic install"
+    ],
+    "updatePolicy": "When a newer TV-AutoBuild release or changed model hash is detected, refresh the catalog in a dedicated review commit; never silently accept new bytes from a mutable URL."
+  },
+  "traditionalChinese": {
+    "project": "OpenCC",
+    "latestOfficialRelease": "1.4.2",
+    "tag": "ver.1.4.2",
+    "gitRefObject": "d5e960a8f60aa62fb252f48a23a577acb242f3f0",
+    "releaseUrl": "https://github.com/BYVoid/OpenCC/releases/tag/ver.1.4.2",
+    "conversion": "s2twp",
+    "status": "official upstream latest stable release checked 2026-10-14",
+    "migrationNote": "Do not assume qichuan/android-opencc 1.2.0 contains the current OpenCC 1.4.2 dictionary/runtime. Build the official OpenCC source for Android or refresh its runtime and s2twp dictionaries explicitly."
+  },
+  "translatorProviders": {
+    "allowed": [
+      {
+        "id": "bing",
+        "label": "Bing 翻譯",
+        "protocol": "provider adapter; no standalone model version"
+      },
+      {
+        "id": "deepl",
+        "label": "DeepL 翻譯",
+        "protocol": "provider adapter; no standalone model version"
+      },
+      {
+        "id": "google",
+        "label": "Google 翻譯",
+        "protocol": "provider adapter; no standalone model version"
+      },
+      {
+        "id": "mtran",
+        "label": "MTranServer",
+        "protocol": "user-configured server; server version is administrator-controlled"
+      },
+      {
+        "id": "openai",
+        "label": "大模型（OpenAI 相容）",
+        "protocol": "user-configured endpoint/model; version is controlled by the configured service"
+      }
+    ],
+    "removed": [
+      "youdao",
+      "tencent"
+    ],
+    "outputTarget": "zh-TW",
+    "postprocess": "OpenCC S2TWP",
+    "policyFile": "config/ai-subtitle-translation-policy.json",
+    "updatePolicy": "Provider adapters are reviewed against upstream behavior and smoke-tested; user-configured model endpoints are not mislabeled as a single latest model."
+  }
+}
