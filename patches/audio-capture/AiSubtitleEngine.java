@@ -200,8 +200,11 @@ public final class AiSubtitleEngine {
 
                 float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, WINDOW_SAMPLES));
                 long inferenceStarted = SystemClock.elapsedRealtime();
-                // Reserve CPU capacity for decoding and rendering on lower-power TV devices.
-                int inferenceThreads = 1;
+                // Keep one core available for video/audio playback while allowing Whisper
+                // to use a second core on quad-core TV boxes. A single inference thread can
+                // leave Tiny Q5_1 looking permanently busy on slower ARM TV hardware.
+                int inferenceThreads = Math.max(1,
+                        Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
                 postStatus("正在辨識直播語音…");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
