@@ -7,6 +7,7 @@ on:
       - "research/realtime-subtitles-tv"
       - "feature/caption-action-style-poc85"
       - "fix/whisper-inference-stall-poc86"
+      - "fix/whisper-live-f1-fastpath-poc87"
     paths:
       - ".github/workflows/build-audio-capture-poc.yml"
       - "patches/audio-capture/**"
