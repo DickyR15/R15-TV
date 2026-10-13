@@ -253,6 +253,9 @@ public final class AiSubtitleEngine {
                             + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
                             + inferenceMs + " ms");
                 } else {
+                    // Even a quiet/unclear window can yield a usable language ID. Keep it so
+                    // every subsequent window does not repeat expensive auto-detection.
+                    if (!"und".equals(detectedLanguage)) previousLanguage = detectedLanguage;
                     postStatus("已收到音訊，但尚未辨識到清楚語音；持續聆聽…");
                 }
             }
