@@ -251,7 +251,7 @@ jobs:
           verify grep -Fq 'WhisperCpp.transcribe' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
           verify grep -Fq 'MIN_MODEL_BYTES = 20L * 1024L * 1024L' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
           verify grep -Fq 'TranslateLanguage.fromLanguageTag' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleTranslationEngine.java
-          verify grep -Eq 'WINDOW_SAMPLES = ASR_SAMPLE_RATE \\* (2|3 / 2)' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
+          verify grep -Eq 'WINDOW_SAMPLES = ASR_SAMPLE_RATE \* (2|3 / 2)' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/AiSubtitleEngine.java
           verify grep -Fq 'ggml-tiny-q5_1.bin' sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle/WhisperModelManager.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           verify grep -Fq 'AiSubtitleOverlay.attach(this, mBinding.player);' sources/TV/app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
