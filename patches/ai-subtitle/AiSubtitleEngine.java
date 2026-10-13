@@ -380,17 +380,19 @@ public final class AiSubtitleEngine {
             float[] window = snapshotTail(ring, writeIndex, OFFLINE_WINDOW_SAMPLES);
             OfflineStream stream = recognizer.createStream();
             long start = SystemClock.elapsedRealtime();
+            OfflineRecognizerResult result;
             inferenceStartedAtMs = start;
             try {
                 stream.acceptWaveform(window, SAMPLE_RATE);
                 recognizer.decode(stream);
+                result = recognizer.getResult(stream);
             } finally {
                 inferenceStartedAtMs = 0;
                 stream.release();
             }
             stallReported.set(false);
+            if (!running) break;
 
-            OfflineRecognizerResult result = recognizer.getResult(stream);
             String fullText = clean(result == null ? "" : result.getText());
             if (!fullText.isEmpty()) {
                 String delta = removeOverlap(previousTranscript, fullText);
