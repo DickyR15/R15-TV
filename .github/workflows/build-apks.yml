@@ -73,6 +73,8 @@ jobs:
           git -C sources/TV remote add origin https://github.com/FongMi/TV.git
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
+          # Preserve the public upstream dependency graph; its Media3 artifacts are published by catvod build logic.
+          git -C sources/TV submodule update --init --recursive || true
 
       - name: Verify checkout and required public dependencies
         env:
@@ -360,6 +362,7 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
+            :catvod:assembleRelease \
             :app:assembleLeanbackDebug \
             :app:assembleMobileDebug
 
