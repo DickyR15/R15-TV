@@ -223,10 +223,10 @@ public final class AiSubtitleOverlay {
         panel.addView(toggle, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        entryButton.setText("AI 字幕／語音設定");
+        entryButton.setText("R15 TV 即時字幕設定");
         entryButton.setAllCaps(false);
         entryButton.setFocusable(true);
-        entryButton.setContentDescription("開啟 AI 字幕與語音設定");
+        entryButton.setContentDescription("開啟 R15 TV 即時字幕設定");
         entryButton.setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
         entryButton.setTextColor(Color.WHITE);
         entryButton.setPadding(dp(18), dp(10), dp(18), dp(10));
@@ -357,6 +357,21 @@ public final class AiSubtitleOverlay {
         captionParams.setMargins(dp(24), 0, dp(24), dp(28));
         overlay.addView(caption, captionParams);
 
+        FrameLayout.LayoutParams panelParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
+        panelParams.setMargins(dp(20), 0, dp(20), dp(84));
+        panel.setVisibility(android.view.View.GONE);
+        overlay.addView(panel, panelParams);
+
+        FrameLayout.LayoutParams entryParams = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.TOP | Gravity.END);
+        entryParams.setMargins(dp(12), dp(18), dp(18), 0);
+        overlay.addView(entryButton, entryParams);
+
         // Reuse the overlay across media-item changes: the player view stays attached
         // while the channel changes. Start once per attached PlayerView, not per stream.
         playerView.addOnAttachStateChangeListener(new android.view.View.OnAttachStateChangeListener() {
@@ -390,7 +405,7 @@ public final class AiSubtitleOverlay {
 
     private void hideSettingsPanel() {
         panel.setVisibility(android.view.View.GONE);
-        entryButton.setText(enabled ? "AI 字幕：開啟" : "AI 字幕／語音設定");
+        entryButton.setText(enabled ? "R15 TV 字幕：開啟" : "R15 TV 即時字幕設定");
         entryButton.setVisibility(android.view.View.VISIBLE);
         if (enabled) caption.setVisibility(android.view.View.VISIBLE);
         entryButton.bringToFront();
