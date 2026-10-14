@@ -588,7 +588,6 @@ public final class AiSubtitleOverlay {
                             caption.setVisibility(android.view.View.VISIBLE);
                         }
                     }
-                    }
                 }
 
                 @Override
