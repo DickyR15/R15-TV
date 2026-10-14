@@ -214,6 +214,12 @@ def write_flavor_localizations(tv: Path) -> int:
 
 
 def main() -> None:
+    # Preserve canonical Android XML namespace prefixes when ElementTree writes
+    # localized layouts. This keeps AAPT/ViewBinding parsing predictable.
+    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    ET.register_namespace("app", "http://schemas.android.com/apk/res-auto")
+    ET.register_namespace("tools", "http://schemas.android.com/tools")
+    ET.register_namespace("xliff", "urn:oasis:names:tc:xliff:document:1.2")
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
     args = parser.parse_args()
