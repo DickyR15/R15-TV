@@ -205,66 +205,32 @@ jobs:
           done
           echo "Built official OpenCC 1.4.2 JNI and current s2twp dictionaries for both Android ABIs."
 
-      - name: Fetch pinned sherpa-onnx 1.13.8 source
-        env:
-          EXPECTED_SHERPA_COMMIT: ${{ env.SHERPA_COMMIT }}
-        run: |
-          set -euo pipefail
-          mkdir -p sources/sherpa-onnx
-          git -C sources/sherpa-onnx init
-          git -C sources/sherpa-onnx remote add origin https://github.com/k2-fsa/sherpa-onnx.git
-          git -C sources/sherpa-onnx fetch --depth=1 origin refs/tags/v1.13.8
-          git -C sources/sherpa-onnx checkout --detach FETCH_HEAD
-          actual=$(git -C sources/sherpa-onnx rev-parse HEAD)
-          test "$actual" = "$EXPECTED_SHERPA_COMMIT"
-          echo "sherpa-onnx 1.13.8 source: $actual"
-
-      - name: Build sherpa-onnx JNI runtime and stage R15 AI subtitle classes
+      - name: Fetch pinned sherpa-onnx 1.13.8 Android AAR
         shell: bash
         run: |
           set -euo pipefail
-          export ANDROID_NDK="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION"
-          cd sources/sherpa-onnx
-          ./build-android-arm64-v8a.sh
-          ./build-android-armv7-eabi.sh
-          make -C sherpa-onnx/java-api clean all
-          cd "$GITHUB_WORKSPACE"
-
           mkdir -p sources/TV/app/libs
-          install -m 644 sources/sherpa-onnx/sherpa-onnx/java-api/build/sherpa-onnx.jar \
-            sources/TV/app/libs/sherpa-onnx-v1.13.8.jar
-          mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a sources/TV/app/src/main/jniLibs/armeabi-v7a
-          install -m 755 sources/sherpa-onnx/build-android-arm64-v8a-static/install/lib/libsherpa-onnx-jni.so \
-            sources/TV/app/src/main/jniLibs/arm64-v8a/libsherpa-onnx-jni.so
-          install -m 755 sources/sherpa-onnx/build-android-armv7-eabi-static/install/lib/libsherpa-onnx-jni.so \
-            sources/TV/app/src/main/jniLibs/armeabi-v7a/libsherpa-onnx-jni.so
-
-          python3 - <<'PY'
-          from pathlib import Path
-          gradle = Path("sources/TV/app/build.gradle")
-          text = gradle.read_text(encoding="utf-8")
-          old = 'implementation fileTree(dir: "libs", include: ["*.aar"])'
-          new = 'implementation fileTree(dir: "libs", include: ["*.aar", "*.jar"])'
-          if new not in text:
-              if text.count(old) != 1:
-                  raise SystemExit("Unable to enable the pinned sherpa-onnx Java API JAR.")
-              gradle.write_text(text.replace(old, new, 1), encoding="utf-8")
-          PY
-
-          ai_dir="sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle"
-          mkdir -p "$ai_dir"
-          cp patches/ai-subtitle/AiSubtitleModelManager.java "$ai_dir/AiSubtitleModelManager.java"
-          cp patches/ai-subtitle/AiSubtitleEngine.java "$ai_dir/AiSubtitleEngine.java"
-          cp patches/ai-subtitle/AiSubtitleTranslationProvider.java "$ai_dir/AiSubtitleTranslationProvider.java"
-          cp patches/ai-subtitle/TaiwanTraditionalConverter.java "$ai_dir/TaiwanTraditionalConverter.java"
-
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar" \
+            -o sources/TV/app/libs/sherpa-onnx-v1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  sources/TV/app/libs/sherpa-onnx-v1.13.8.aar" | sha256sum --check
+          unzip -l sources/TV/app/libs/sherpa-onnx-v1.13.8.aar > build/sherpa-aar-contents.txt
           for abi in arm64-v8a armeabi-v7a; do
-            test -s "sources/TV/app/src/main/jniLibs/$abi/libsherpa-onnx-jni.so"
-            test -s "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
+            grep -Fq "jni/$abi/libsherpa-onnx-jni.so" build/sherpa-aar-contents.txt
+            grep -Fq "jni/$abi/libonnxruntime.so" build/sherpa-aar-contents.txt
           done
+          echo "Verified the official sherpa-onnx 1.13.8 Android AAR and required native libraries."
 
+      - name: Stage R15 AI subtitle classes and verify native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
           python3 -m py_compile scripts/apply-ai-subtitle.py
           python3 scripts/apply-ai-subtitle.py --tv-dir sources/TV --patch-dir patches/ai-subtitle
+          test -s sources/TV/app/libs/sherpa-onnx-v1.13.8.aar
+          for abi in arm64-v8a armeabi-v7a; do
+            test -s "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
+          done
           echo "Staged sherpa-onnx, official OpenCC, eight-language AI subtitle UI, and player capture hooks for both ABIs."
       - name: Configure signing and local.properties
         id: signing
