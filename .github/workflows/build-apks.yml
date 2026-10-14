@@ -99,8 +99,8 @@ jobs:
           base_url="https://raw.githubusercontent.com/$repo/$commit/app/libs"
           libs_dir="sources/TV/app/libs"
           mkdir -p "$libs_dir" build
-          jq -r '.artifacts[] | [.name, (.size|tostring), .gitBlobSha1] | @tsv' config/media3-android-artifacts.json > build/media3-artifacts.tsv
-          while IFS="$(printf '\\t')" read -r name expected_size expected_blob; do
+          jq -r '.artifacts[] | [.name, (.size|tostring), .gitBlobSha1] | join("|")' config/media3-android-artifacts.json > build/media3-artifacts.txt
+          while IFS='|' read -r name expected_size expected_blob; do
             target="$libs_dir/$name"
             curl -fL --retry 3 --retry-all-errors "$base_url/$name" -o "$target"
             actual_size=$(wc -c < "$target" | tr -d ' ')
@@ -112,7 +112,7 @@ jobs:
             sha256=$(sha256sum "$target" | awk '{print $1}')
             echo "Verified $name (size=$actual_size git-blob=$actual_blob sha256=$sha256)"
             echo "- $name: $sha256" >> "$GITHUB_STEP_SUMMARY"
-          done < build/media3-artifacts.tsv
+          done < build/media3-artifacts.txt
           for required in media3-common.aar media3-exoplayer.aar media3-ui.aar media3-ui-danmaku.aar media3-mpvplayer.aar mpv-android.jar; do
             test -s "$libs_dir/$required"
           done
@@ -401,7 +401,7 @@ jobs:
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
           count=0
-          while IFS= read -r -d '' apk; do
+          while IFS='|' read -r name expected_size expected_blob; do
             lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *arm64*v8a*) abi="arm64-v8a" ;;
@@ -448,7 +448,7 @@ jobs:
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
           found=0
-          while IFS= read -r -d '' apk; do
+          while IFS='|' read -r name expected_size expected_blob; do
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
@@ -839,7 +839,7 @@ jobs:
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
           count=0
-          while IFS= read -r -d '' apk; do
+          while IFS='|' read -r name expected_size expected_blob; do
             lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *arm64*v8a*) abi="arm64-v8a" ;;
@@ -886,7 +886,7 @@ jobs:
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
           found=0
-          while IFS= read -r -d '' apk; do
+          while IFS='|' read -r name expected_size expected_blob; do
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
               *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
