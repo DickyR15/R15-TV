@@ -36,7 +36,7 @@
     },
     {
       "id": "openai",
-      "label": "大模型（OpenAI 相容）",
+      "label": "大型語言模型（OpenAI 相容）",
       "mode": "user-configured",
       "note": "Optional OpenAI-compatible endpoint, model name and API key; this is a configurable backend, not a promise of free service."
     }
