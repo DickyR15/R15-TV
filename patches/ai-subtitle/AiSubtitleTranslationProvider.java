@@ -17,7 +17,7 @@ public enum AiSubtitleTranslationProvider {
     DEEPL("deepl", "DeepL 翻譯", true, false),
     GOOGLE("google", "Google 翻譯", true, false),
     MTRAN("mtran", "MTranServer", true, true),
-    OPENAI("openai", "大模型（OpenAI 相容）", true, true);
+    OPENAI("openai", "大型語言模型（OpenAI 相容）", true, true);
 
     private final String id;
     private final String label;
