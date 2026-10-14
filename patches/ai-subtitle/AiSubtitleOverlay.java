@@ -1,5 +1,4 @@
 package com.fongmi.android.tv.ai.subtitle;
-// POC UI is packaged as com.dicky.r15tv.poc so it can coexist with an installed R15 TV build.
 
 import android.Manifest;
 import android.app.Activity;
