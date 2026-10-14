@@ -226,6 +226,11 @@ jobs:
         run: |
           set -euo pipefail
           python3 -m py_compile scripts/apply-ai-subtitle.py
+          # Guard against accidental package headers copied from the old POC namespace.
+          if grep -R -n "POC UI is packaged" patches/ai-subtitle; then
+            echo "Remove stale POC namespace comments before staging." >&2
+            exit 1
+          fi
           python3 scripts/apply-ai-subtitle.py --tv-dir sources/TV --patch-dir patches/ai-subtitle
           test -s sources/TV/app/libs/sherpa-onnx-v1.13.8.aar
           for abi in arm64-v8a armeabi-v7a; do
