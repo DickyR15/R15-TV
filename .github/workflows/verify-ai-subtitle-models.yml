@@ -31,22 +31,29 @@ jobs:
           manifest_path = Path("config/ai-subtitle-models.json")
           manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
           failures = 0
+          entries = []
           for pack in manifest.get("languages", []):
               for entry in pack.get("files", []):
-                  stored = entry.get("sha256", "")
-                  if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
-                      continue
-                  url = entry["url"]
-                  req = urllib.request.Request(url, headers={"User-Agent": "R15-TV-model-checksum-verifier"})
-                  with urllib.request.urlopen(req, timeout=60) as response:
-                      data = response.read()
-                  digest = hashlib.sha256(data).hexdigest()
-                  actual_size = len(data)
-                  expected_size = int(entry["sizeBytes"])
-                  print(f"CHECKSUM_RESULT id={pack['id']} file={entry['name']} sha256={digest} bytes={actual_size} expected_bytes={expected_size}")
-                  if actual_size != expected_size:
-                      print(f"::error::Upstream file size changed for {pack['id']}/{entry['name']}")
-                      failures += 1
+                  entries.append((pack["id"], entry))
+          common_vad = manifest.get("common", {}).get("vad")
+          if common_vad:
+              entries.append(("common", common_vad))
+
+          for pack_id, entry in entries:
+              stored = entry.get("sha256", "")
+              if len(stored) == 64 and all(c in "0123456789abcdef" for c in stored):
+                  continue
+              url = entry["url"]
+              req = urllib.request.Request(url, headers={"User-Agent": "R15-TV-model-checksum-verifier"})
+              with urllib.request.urlopen(req, timeout=60) as response:
+                  data = response.read()
+              digest = hashlib.sha256(data).hexdigest()
+              actual_size = len(data)
+              expected_size = int(entry["sizeBytes"])
+              print(f"CHECKSUM_RESULT id={pack_id} file={entry['name']} sha256={digest} bytes={actual_size} expected_bytes={expected_size}")
+              if actual_size != expected_size:
+                  print(f"::error::Upstream file size changed for {pack_id}/{entry['name']}")
+                  failures += 1
           if failures:
               raise SystemExit(f"{failures} model files differ from the pinned byte size")
           print("Checksum inspection complete. Copy the reported SHA-256 values into the reviewed manifest; do not auto-accept changes.")
