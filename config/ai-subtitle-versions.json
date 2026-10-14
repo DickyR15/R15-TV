@@ -60,7 +60,7 @@
       },
       {
         "id": "openai",
-        "label": "大模型（OpenAI 相容）",
+        "label": "大型語言模型（OpenAI 相容）",
         "protocol": "user-configured endpoint/model; version is controlled by the configured service"
       }
     ],
