@@ -2,6 +2,17 @@ name: Build R15 TV APKs
 run-name: R15 TV APK Build (manual or source update)
 
 on:
+  push:
+    branches:
+      - "research/autobuild-170-port"
+    paths:
+      - ".github/workflows/build-apks.yml"
+      - "config/**"
+      - "patches/ai-subtitle/**"
+      - "patches/opencc-android/**"
+      - "scripts/**"
+      - "research/AUTOBUILD-170-TRADITIONAL-CHINESE-PORT.md"
+      - "README.md"
   workflow_dispatch:
     inputs:
       publish_release:
