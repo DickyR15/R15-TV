@@ -243,7 +243,7 @@
     "vad": {
       "name": "silero_vad.onnx",
       "sizeBytes": 643854,
-      "sha256": "9e2449e1087496d8c4aba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
+      "sha256": "9e2449e1087496d8d4caba907f23e0bd3f78d91fa552479bb9c23ac09cbb1fd6",
       "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/silero_vad.onnx"
     }
   }
