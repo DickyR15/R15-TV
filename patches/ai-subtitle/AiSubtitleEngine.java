@@ -459,8 +459,17 @@ public final class AiSubtitleEngine {
     }
 
     private void postSubtitle(String text) {
+        String visibleText = text == null ? "" : text;
+        if ("zh".equals(language) || "yue".equals(language)) {
+            try {
+                visibleText = TaiwanTraditionalConverter.getInstance(context).convert(visibleText);
+            } catch (Throwable error) {
+                postStatus("臺灣繁體轉換失敗，來源字幕暫時保留：" + readableMessage(error));
+            }
+        }
+        final String result = visibleText;
         MAIN.post(() -> {
-            if (running && listener != null) listener.onSubtitle(text);
+            if (running && listener != null && !result.isEmpty()) listener.onSubtitle(result);
         });
     }
 
