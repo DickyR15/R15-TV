@@ -73,8 +73,6 @@ jobs:
           git -C sources/TV remote add origin https://github.com/FongMi/TV.git
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
-          # Preserve the public upstream dependency graph; its Media3 artifacts are published by catvod build logic.
-          git -C sources/TV submodule update --init --recursive || true
 
       - name: Verify checkout and required public dependencies
         env:
@@ -91,6 +89,451 @@ jobs:
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
+
+      - name: Fetch and verify pinned Media3 and MPV companion artifacts
+        shell: bash
+        run: |
+          set -euo pipefail
+          repo=$(jq -r '.source.repository' config/media3-android-artifacts.json)
+          commit=$(jq -r '.source.commit' config/media3-android-artifacts.json)
+          base_url="https://raw.githubusercontent.com/${repo}/${commit}/app/libs"
+          libs_dir="sources/TV/app/libs"
+          mkdir -p "$libs_dir"
+          while IFS=        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: sources/TV/**/*.gradle*
+
+      - name: Set up Python for Chaquopy build
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: sources/TV/chaquo/requirements.txt
+
+      - name: Install latest OpenCC tooling and validate subtitle catalogs
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check "opencc==1.4.2"
+          python3 -m py_compile scripts/apply-taiwan-localization.py scripts/validate-ai-subtitle-config.py
+          python3 scripts/validate-ai-subtitle-config.py
+          python3 scripts/apply-taiwan-localization.py --tv-dir sources/TV
+          mkdir -p sources/TV/app/src/main/assets
+          cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
+          cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
+          cp config/ai-subtitle-versions.json sources/TV/app/src/main/assets/ai-subtitle-versions.json
+          cp config/ai-subtitle-versions.json sources/TV/app/src/main/assets/ai-subtitle-versions.json
+          echo "OpenCC 1.4.2 build tooling and Taiwan locale policy staged."
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android build packages
+        run: |
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;${NDK_VERSION}"
+
+      - name: Fetch official OpenCC 1.4.2 source
+        env:
+          EXPECTED_OPENCC_COMMIT: ${{ env.OPENCC_COMMIT }}
+        run: |
+          set -euo pipefail
+          mkdir -p sources/OpenCC
+          git -C sources/OpenCC init
+          git -C sources/OpenCC remote add origin https://github.com/BYVoid/OpenCC.git
+          git -C sources/OpenCC fetch --depth=1 origin refs/tags/ver.1.4.2
+          git -C sources/OpenCC checkout --detach FETCH_HEAD
+          actual=$(git -C sources/OpenCC rev-parse HEAD)
+          test "$actual" = "$EXPECTED_OPENCC_COMMIT"
+          test -s sources/OpenCC/LICENSE
+          test -s sources/OpenCC/data/config/s2twp.json
+          echo "Official OpenCC 1.4.2 source: $actual"
+
+      - name: Build OpenCC 1.4.2 dictionaries and Android JNI for both ABIs
+        shell: bash
+        run: |
+          set -euo pipefail
+          cmake -S sources/OpenCC -B build/opencc-host \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DOPENCC_ENABLE_INSTALL=OFF \
+            -DENABLE_GTEST=OFF \
+            -DENABLE_BENCHMARK=OFF \
+            -DBUILD_DOCUMENTATION=OFF \
+            -DBUILD_PYTHON=OFF \
+            -DOPENCC_DICT_FORMAT=ocd2
+          cmake --build build/opencc-host --target Dictionaries --parallel 2
+
+          asset_root="sources/TV/app/src/main/assets/opencc-1.4.2"
+          mkdir -p "$asset_root/config" "$asset_root/dictionary"
+          cp sources/OpenCC/data/config/s2twp.json "$asset_root/config/s2twp.json"
+          cp sources/OpenCC/LICENSE "$asset_root/LICENSE"
+          dictionaries=(
+            CJK_Compatibility_Ideographs.ocd2
+            STPhrases.ocd2
+            STPhrases_GeneratedFromRegionalPhrases.ocd2
+            STCharacters.ocd2
+            TWPhrases.ocd2
+            TWVariantsPhrases.ocd2
+            TWVariants.ocd2
+          )
+          for dictionary in "${dictionaries[@]}"; do
+            source_file="build/opencc-host/data/$dictionary"
+            test -s "$source_file"
+            cp "$source_file" "$asset_root/dictionary/$dictionary"
+          done
+
+          app_java="sources/TV/app/src/main/java/com/fongmi/android/tv/ai/subtitle"
+          mkdir -p "$app_java"
+          cp patches/ai-subtitle/TaiwanTraditionalConverter.java "$app_java/TaiwanTraditionalConverter.java"
+          for abi in arm64-v8a armeabi-v7a; do
+            build_dir="$GITHUB_WORKSPACE/build/opencc-android-$abi"
+            cmake -S patches/opencc-android -B "$build_dir" \
+              -DOPENCC_SOURCE_DIR="$GITHUB_WORKSPACE/sources/OpenCC" \
+              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+              -DANDROID_ABI="$abi" \
+              -DANDROID_PLATFORM=android-24 \
+              -DANDROID_STL=c++_static \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+            cmake --build "$build_dir" --target r15opencc --parallel 2
+            native_lib=$(find "$build_dir" -type f -name libr15opencc.so -print -quit)
+            test -n "$native_lib" && test -s "$native_lib"
+            mkdir -p "sources/TV/app/src/main/jniLibs/$abi"
+            install -m 755 "$native_lib" "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
+          done
+          echo "Built official OpenCC 1.4.2 JNI and current s2twp dictionaries for both Android ABIs."
+
+      - name: Fetch pinned sherpa-onnx 1.13.8 Android AAR
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p sources/TV/app/libs
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-1.13.8.aar" \
+            -o sources/TV/app/libs/sherpa-onnx-v1.13.8.aar
+          echo "633c24321e06b1fe79feafa03ea16cbc0f8a286641e2da3559bac91bdb13bd96  sources/TV/app/libs/sherpa-onnx-v1.13.8.aar" | sha256sum --check
+          unzip -l sources/TV/app/libs/sherpa-onnx-v1.13.8.aar > build/sherpa-aar-contents.txt
+          for abi in arm64-v8a armeabi-v7a; do
+            grep -Fq "jni/$abi/libsherpa-onnx-jni.so" build/sherpa-aar-contents.txt
+            grep -Fq "jni/$abi/libonnxruntime.so" build/sherpa-aar-contents.txt
+          done
+          echo "Verified the official sherpa-onnx 1.13.8 Android AAR and required native libraries."
+
+      - name: Stage R15 AI subtitle classes and verify native dependencies
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/apply-ai-subtitle.py
+          # Guard against accidental package headers copied from the old POC namespace.
+          if grep -R -n "POC UI is packaged" patches/ai-subtitle; then
+            echo "Remove stale POC namespace comments before staging." >&2
+            exit 1
+          fi
+          python3 scripts/apply-ai-subtitle.py --tv-dir sources/TV --patch-dir patches/ai-subtitle
+          test -s sources/TV/app/libs/sherpa-onnx-v1.13.8.aar
+          for abi in arm64-v8a armeabi-v7a; do
+            test -s "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
+          done
+          echo "Staged sherpa-onnx, official OpenCC, eight-language AI subtitle UI, and player capture hooks for both ABIs."
+      - name: Configure signing and local.properties
+        id: signing
+        working-directory: sources/TV
+        env:
+          KEYSTORE_B64: ${{ secrets.R15TV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.R15TV_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.R15TV_KEY_PASSWORD }}
+        run: |
+          SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
+          test -n "$SDK_PATH"
+          if [[ -n "$KEYSTORE_B64" || -n "$STORE_PASSWORD" || -n "$KEY_PASSWORD" ]]; then
+            if [[ -z "$KEYSTORE_B64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
+              echo "Configure all three secrets: R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, R15TV_KEY_PASSWORD." >&2
+              exit 1
+            fi
+            printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
+            cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$SDK_PATH
+          storeFile=../r15tv.keystore
+          keyAlias=r15tv
+          storePassword=$STORE_PASSWORD
+          keyPassword=$KEY_PASSWORD
+          EOF_PROPERTIES
+            echo "mode=release" >> "$GITHUB_OUTPUT"
+            echo "Release-signing key detected; building signed release APKs."
+          else
+            cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$SDK_PATH
+          storeFile=../r15tv-debug-placeholder.jks
+          keyAlias=r15tv-debug-placeholder
+          storePassword=not-used-for-debug
+          keyPassword=not-used-for-debug
+          EOF_PROPERTIES
+            echo "mode=debug" >> "$GITHUB_OUTPUT"
+            echo "::warning::Release-signing secrets are not configured. Building debug APKs for initial testing; these are not stable updateable releases."
+          fi
+
+      - name: Set R15 TV package metadata and app label
+        id: version
+        working-directory: sources/TV
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import re
+          from pathlib import Path
+
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          code_match = re.search(r"(?m)^\s*versionCode\s+(\d+)\s*$", text)
+          name_match = re.search(r'(?m)^\s*versionName\s+"([^"]+)"\s*$', text)
+          if not code_match or not name_match:
+              raise SystemExit("Unable to read upstream versionCode/versionName from app/build.gradle")
+
+          base_code = int(code_match.group(1))
+          base_name = name_match.group(1)
+          run_number = int(os.environ["RUN_NUMBER"])
+          source_sha = os.environ["SOURCE_SHA"]
+          version_code = base_code * 1_000_000 + run_number
+          if version_code > 2_100_000_000:
+              raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
+          version_name = f"{base_name}-r15.{run_number}+{source_sha[:7]}"
+
+          text = re.sub(r"(?m)^(\s*versionCode\s+)\d+\s*$", rf"\g<1>{version_code}", text, count=1)
+          text = re.sub(r'(?m)^(\s*versionName\s+)"[^"]+"\s*$', rf'\g<1>"{version_name}"', text, count=1)
+          text = re.sub(r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$', r'\g<1>"com.dicky.r15tv"', text, count=1)
+          gradle_file.write_text(text, encoding="utf-8")
+
+          for strings_file in Path("app/src/main/res").glob("values*/strings.xml"):
+              xml = strings_file.read_text(encoding="utf-8")
+              changed = re.sub(
+                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+                  r"\g<1>R15 TV\g<2>",
+                  xml,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if changed != xml:
+                  strings_file.write_text(changed, encoding="utf-8")
+
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as output:
+              output.write(f"base_version_name={base_name}\n")
+              output.write(f"base_version_code={base_code}\n")
+              output.write(f"version_name={version_name}\n")
+              output.write(f"version_code={version_code}\n")
+          print(f"R15 TV version: {version_name} (code {version_code})")
+          print("Application ID changed to com.dicky.r15tv so it can coexist with the official app.")
+          PY
+
+      - name: Record exact upstream source revision
+        env:
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          SOURCE_REPOSITORY: ${{ env.SOURCE_REPOSITORY }}
+          SOURCE_BRANCH: ${{ env.SOURCE_BRANCH }}
+        run: |
+          mkdir -p dist
+          jq -n \
+            --arg repository "$SOURCE_REPOSITORY" \
+            --arg branch "$SOURCE_BRANCH" \
+            --arg sha "$SOURCE_SHA" \
+            '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' \
+            > dist/SOURCE_REFS.json
+          printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
+
+      - name: Build signed release APKs
+        if: steps.signing.outputs.mode == 'release'
+        working-directory: sources/TV
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleLeanbackRelease \
+            :app:assembleMobileRelease
+
+      - name: Build debug APKs (initial test mode)
+        if: steps.signing.outputs.mode == 'debug'
+        working-directory: sources/TV
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace \
+            :app:assembleLeanbackDebug \
+            :app:assembleMobileDebug
+
+      - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+          TV_DIR="$GITHUB_WORKSPACE/sources/TV"
+          if [[ "${{ steps.signing.outputs.mode }}" == "release" ]]; then
+            APK_ROOT="$TV_DIR/Release/apk"
+          else
+            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+          fi
+          count=0
+          while IFS= read -r -d '' apk; do
+            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
+            case "$lower" in
+              *arm64*v8a*) abi="arm64-v8a" ;;
+              *armeabi*v7a*) abi="armeabi-v7a" ;;
+              *) echo "Unexpected ABI split: $apk" >&2; exit 1 ;;
+            esac
+            entries=$(unzip -Z1 "$apk")
+            grep -Fq "lib/$abi/libr15opencc.so" <<<"$entries"
+            grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
+            grep -Fq "assets/opencc-1.4.2/dictionary/STPhrases.ocd2" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-models.json" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
+            grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
+            grep -Fq "classes.dex" <<<"$entries"
+            echo "Verified OpenCC 1.4.2 and subtitle metadata: $(basename "$apk")"
+            count=$((count + 1))
+          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
+          test "$count" -eq 4
+          echo "Verified current OpenCC 1.4.2 assets across all four APK variants."
+          {
+            echo "## Localization and converter verification"
+            echo "- UI locale is forced to zh-TW by scripts/apply-taiwan-localization.py."
+            echo "- App label: R15 TV."
+            echo "- OpenCC runtime/dictionaries: official 1.4.2, s2twp."
+            echo "- AI speech and translation manifests are attached as assets."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Package APKs and verification metadata
+        env:
+          BUILD_MODE: ${{ steps.signing.outputs.mode }}
+          SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
+          VERSION_NAME: ${{ steps.version.outputs.version_name }}
+          VERSION_CODE: ${{ steps.version.outputs.version_code }}
+          BASE_VERSION_NAME: ${{ steps.version.outputs.base_version_name }}
+          BASE_VERSION_CODE: ${{ steps.version.outputs.base_version_code }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          TV_DIR="$GITHUB_WORKSPACE/sources/TV"
+          mkdir -p dist
+          if [[ "$BUILD_MODE" == "release" ]]; then
+            APK_ROOT="$TV_DIR/Release/apk"
+          else
+            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+          fi
+          found=0
+          while IFS= read -r -d '' apk; do
+            lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
+            case "$lower" in
+              *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
+              *leanback*armeabi*v7a*) name="R15 TV-leanback-armeabi-v7a.apk" ;;
+              *mobile*arm64*v8a*) name="R15 TV-mobile-arm64-v8a.apk" ;;
+              *mobile*armeabi*v7a*) name="R15 TV-mobile-armeabi-v7a.apk" ;;
+              *) continue ;;
+            esac
+            if [[ -e "dist/$name" ]]; then
+              continue
+            fi
+            cp "$apk" "dist/$name"
+            found=$((found + 1))
+          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
+          if [[ "$found" -ne 4 ]]; then
+            echo "Expected four ABI/flavor APKs under $APK_ROOT but packaged $found." >&2
+            find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
+            exit 1
+          fi
+
+          git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
+          git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
+          cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
+          cp "$GITHUB_WORKSPACE/sources/OpenCC/LICENSE" dist/OPENCC-APACHE-2.0-LICENSE.txt
+          jq -n \
+            --arg mode "$BUILD_MODE" \
+            --arg versionName "$VERSION_NAME" \
+            --argjson versionCode "$VERSION_CODE" \
+            --arg baseVersionName "$BASE_VERSION_NAME" \
+            --argjson baseVersionCode "$BASE_VERSION_CODE" \
+            --arg repository "FongMi/TV" \
+            --arg branch "fongmi" \
+            --arg sourceSha "$SOURCE_SHA" \
+            --arg runUrl "$RUN_URL" \
+            '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},workflowRun:$runUrl}' \
+            > dist/BUILD_INFO.json
+
+          (
+            cd dist
+            sha256sum "R15 TV-"*.apk > SHA256SUMS.txt
+          )
+          {
+            echo "## R15 TV build result"
+            echo "- Mode: $BUILD_MODE"
+            echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
+            echo "- Version: $VERSION_NAME ($VERSION_CODE)"
+            if [[ "$BUILD_MODE" == "debug" ]]; then
+              echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
+            else
+              echo "- APKs are signed with the private R15 TV release key supplied through GitHub Actions secrets."
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload APKs and source metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15 TV-${{ github.run_number }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Publish GitHub Release
+        if: steps.signing.outputs.mode == 'release' && inputs.publish_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: r15tv-${{ github.run_number }}
+          name: R15 TV ${{ steps.version.outputs.version_name }}
+          body: |
+            R15 TV build based on public FongMi/TV source.
+
+            - Version: ${{ steps.version.outputs.version_name }} (${{ steps.version.outputs.version_code }})
+            - Source commit: https://github.com/FongMi/TV/commit/${{ steps.sources.outputs.tv_sha }}
+            - Build metadata and SHA-256 checksums are attached.
+            - The app does not include IPTV/live-playlist sources.
+          files: |
+            dist/R15 TV-leanback-arm64-v8a.apk
+            dist/R15 TV-leanback-armeabi-v7a.apk
+            dist/R15 TV-mobile-arm64-v8a.apk
+            dist/R15 TV-mobile-armeabi-v7a.apk
+            dist/SOURCE_REFS.json
+            dist/SOURCE_COMMIT.txt
+            dist/BUILD_INFO.json
+            dist/SHA256SUMS.txt
+            dist/R15 TV-source.patch
+            dist/UPSTREAM-GPL-3.0-LICENSE.txt
+            dist/OPENCC-APACHE-2.0-LICENSE.txt
+          make_latest: true
+\t' read -r name expected_size expected_blob; do
+            target="$libs_dir/$name"
+            curl -fL --retry 3 --retry-all-errors "$base_url/$name" -o "$target"
+            actual_size=$(wc -c < "$target" | tr -d ' ')
+            actual_blob=$(git hash-object "$target")
+            if [[ "$actual_size" != "$expected_size" || "$actual_blob" != "$expected_blob" ]]; then
+              echo "Integrity check failed for $name (size=$actual_size blob=$actual_blob)." >&2
+              exit 1
+            fi
+            sha256=$(sha256sum "$target" | awk '{print $1}')
+            echo "Verified $name (size=$actual_size git-blob=$actual_blob sha256=$sha256)"
+            echo "- `$name`: $sha256" >> "$GITHUB_STEP_SUMMARY"
+          done < <(jq -r '.artifacts[] | [.name, (.size|tostring), .gitBlobSha1] | @tsv' config/media3-android-artifacts.json)
+          for required in media3-common.aar media3-exoplayer.aar media3-ui.aar media3-ui-danmaku.aar media3-mpvplayer.aar mpv-android.jar; do
+            test -s "$libs_dir/$required"
+          done
+          echo "Pinned player dependencies are ready for Gradle compilation."
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
