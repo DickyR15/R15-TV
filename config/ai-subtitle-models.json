@@ -6,7 +6,7 @@
     "releaseUrl": "https://github.com/iptvorganization/TV-AutoBuild/releases/tag/autobuild-170",
     "speechRuntime": {
       "name": "sherpa-onnx",
-      "version": "v1.13.8",
+      "version": "1.13.8",
       "commit": "11afbd009a7f8c08f4bcf2fc1b265d0df4670fbf",
       "url": "https://github.com/k2-fsa/sherpa-onnx"
     },
