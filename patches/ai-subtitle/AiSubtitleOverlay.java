@@ -594,11 +594,21 @@ public final class AiSubtitleOverlay {
 
                 @Override
                 public void onSubtitle(String text) {
-                    if (enabled && !hasTranslatedCaption) {
-                        hasRecognizedCaption = true;
-                        inferenceInProgress = false;
-                        hasInferenceStatus = true;
+                    if (!enabled) return;
+                    hasRecognizedCaption = true;
+                    inferenceInProgress = false;
+                    hasInferenceStatus = true;
+                    boolean sourceOnly = "source_only".equals(
+                            AiSubtitleSettingsActivity.getTranslationProvider(activity));
+                    boolean showSource = sourceOnly
+                            || AiSubtitleSettingsActivity.getSubtitleDisplayMode(activity)
+                                    == AiSubtitleSettingsActivity.DISPLAY_SOURCE_AND_TRANSLATION;
+                    if (showSource && !hasTranslatedCaption) {
                         caption.setText(text);
+                        caption.setVisibility(android.view.View.VISIBLE);
+                    } else if (!hasTranslatedCaption && !sourceOnly) {
+                        caption.setText("正在辨識語音，等待臺灣繁體譯文…");
+                        caption.setVisibility(android.view.View.VISIBLE);
                     }
                 }
 
