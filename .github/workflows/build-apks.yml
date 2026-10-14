@@ -291,12 +291,14 @@ jobs:
             grep -Fq "jni/$abi/libonnxruntime.so" build/sherpa-aar-contents.txt
           done
           echo "Verified the official sherpa-onnx 1.13.8 Android AAR and required native libraries."
+          # The official Android AAR already embeds the matching Java API classes.
+          # Keep the JVM JAR for source integrity verification only, not app/libs.
           curl -fL --retry 3 --retry-all-errors \
             "https://github.com/k2-fsa/sherpa-onnx/releases/download/v1.13.8/sherpa-onnx-jvm-1.13.8.jar" \
-            -o sources/TV/app/libs/sherpa-onnx-jvm-v1.13.8.jar
-          echo "77b7b047fade4eadada96b568eb92615049aaf1dc317c7244e46c1ea38b9a63b  sources/TV/app/libs/sherpa-onnx-jvm-v1.13.8.jar" | sha256sum --check
-          jar tf sources/TV/app/libs/sherpa-onnx-jvm-v1.13.8.jar | grep -F "com/k2fsa/sherpa/onnx/OnlineRecognizer.class"
-          echo "Verified matching official sherpa-onnx 1.13.8 JVM API JAR."
+            -o build/sherpa-onnx-jvm-v1.13.8.jar
+          echo "77b7b047fade4eadada96b568eb92615049aaf1dc317c7244e46c1ea38b9a63b  build/sherpa-onnx-jvm-v1.13.8.jar" | sha256sum --check
+          jar tf build/sherpa-onnx-jvm-v1.13.8.jar | grep -F "com/k2fsa/sherpa/onnx/OnlineRecognizer.class"
+          echo "Verified matching official sherpa-onnx 1.13.8 JVM API JAR; Android APK will use classes packaged in the AAR."
 
       - name: Stage R15 AI subtitle classes and verify native dependencies
         shell: bash
