@@ -74,22 +74,6 @@ jobs:
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
 
-      - name: Verify checkout and required public dependencies
-        env:
-          EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
-        run: |
-          set -euo pipefail
-          actual_sha=$(git -C sources/TV rev-parse HEAD)
-          test "$actual_sha" = "$EXPECTED_SHA"
-          test -f sources/TV/gradlew
-          test -f sources/TV/app/build.gradle
-          test -f sources/TV/app/libs/forcetech-release.aar
-          test -f sources/TV/LICENSE.md
-          test -f sources/TV/chaquo/requirements.txt
-          chmod +x sources/TV/gradlew
-          echo "Public source checked out: FongMi/TV@$actual_sha"
-          echo "This build does not include IPTV/live-playlist sources."
-
       - name: Fetch and verify pinned Media3 and MPV companion artifacts
         shell: bash
         run: |
@@ -117,6 +101,22 @@ jobs:
             test -s "$libs_dir/$required"
           done
           echo "Pinned player dependencies are ready for Gradle compilation."
+
+      - name: Verify checkout and required public dependencies
+        env:
+          EXPECTED_SHA: ${{ steps.sources.outputs.tv_sha }}
+        run: |
+          set -euo pipefail
+          actual_sha=$(git -C sources/TV rev-parse HEAD)
+          test "$actual_sha" = "$EXPECTED_SHA"
+          test -f sources/TV/gradlew
+          test -f sources/TV/app/build.gradle
+          test -f sources/TV/app/libs/forcetech-release.aar
+          test -f sources/TV/LICENSE.md
+          test -f sources/TV/chaquo/requirements.txt
+          chmod +x sources/TV/gradlew
+          echo "Public source checked out: FongMi/TV@$actual_sha"
+          echo "This build does not include IPTV/live-playlist sources."
 
       - name: Set up Java 21
         uses: actions/setup-java@v4
