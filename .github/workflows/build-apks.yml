@@ -18,7 +18,9 @@ permissions:
   actions: read
 
 concurrency:
-  group: r15tv-public-build
+  # Keep the build queue isolated by ref so an orphaned runner on a prior
+  # workflow revision cannot block repaired builds indefinitely.
+  group: r15tv-public-build-${{ github.ref }}
   cancel-in-progress: false
 
 env:
@@ -155,7 +157,7 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+          timeout 75m ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
             :lib-common:assembleRelease \
             :lib-container:assembleRelease \
             :lib-database:assembleRelease \
