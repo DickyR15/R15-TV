@@ -1,0 +1,81 @@
+{
+  "schema": 1,
+  "source": {
+    "repository": "tongxunlu/2026-07-09-fongmi-with-media3",
+    "commit": "3f3f7dfa3def514d66b75526044f9377a64eb597",
+    "upstreamContext": "Pinned public mirror for the companion AAR/JAR files that the public FongMi/TV README says are not stored in its Git repository."
+  },
+  "integrity": "Git blob SHA-1 and exact byte length verified against the pinned commit; workflow also records SHA-256 for each downloaded file.",
+  "artifacts": [
+    {
+      "name": "media3-common.aar",
+      "size": 621410,
+      "gitBlobSha1": "c25f65f8d82febe0501c0eed90c92f9e2b8fbda6"
+    },
+    {
+      "name": "media3-container.aar",
+      "size": 58271,
+      "gitBlobSha1": "7a7a78878e1915245251a0429e5dd7690c57278b"
+    },
+    {
+      "name": "media3-database.aar",
+      "size": 7197,
+      "gitBlobSha1": "a8c8d357c2b1d8a57f9d002beb6e09be8438228c"
+    },
+    {
+      "name": "media3-datasource-okhttp.aar",
+      "size": 9801,
+      "gitBlobSha1": "0d53466fc65c7b551e065ac37f08dabc561a61ff"
+    },
+    {
+      "name": "media3-datasource.aar",
+      "size": 179970,
+      "gitBlobSha1": "47b30525f5946ce90391427be657f44a78620b28"
+    },
+    {
+      "name": "media3-decoder.aar",
+      "size": 18220,
+      "gitBlobSha1": "f6a3723a367033687b3cbbfb305fd6c03b401907"
+    },
+    {
+      "name": "media3-exoplayer-hls.aar",
+      "size": 248930,
+      "gitBlobSha1": "c3b8a87cd514a90cf3701d706ba8c7b0af0d5150"
+    },
+    {
+      "name": "media3-exoplayer.aar",
+      "size": 1739732,
+      "gitBlobSha1": "26485d7b5bed23d6691162bce489e19595ab77b5"
+    },
+    {
+      "name": "media3-extractor.aar",
+      "size": 1000290,
+      "gitBlobSha1": "ad7b87ab2b0919e6cb56aa63b92407941f7a5210"
+    },
+    {
+      "name": "media3-mpvplayer.aar",
+      "size": 17212833,
+      "gitBlobSha1": "d8922865a3efa5c58dacd0784321dee5ce1299d1"
+    },
+    {
+      "name": "media3-session.aar",
+      "size": 916242,
+      "gitBlobSha1": "32d0d590b70dbaf0204332481811a99ee20bee12"
+    },
+    {
+      "name": "media3-ui-danmaku.aar",
+      "size": 83241,
+      "gitBlobSha1": "c39d811e48517e62e3a109b276d9ba124046b5dd"
+    },
+    {
+      "name": "media3-ui.aar",
+      "size": 440610,
+      "gitBlobSha1": "0030689d3d9cc19502e9ae7ffa4285dd6314b5fa"
+    },
+    {
+      "name": "mpv-android.jar",
+      "size": 317762,
+      "gitBlobSha1": "df06adcc34f34d1c521a218e5fcdac42a5b3f375"
+    }
+  ]
+}
