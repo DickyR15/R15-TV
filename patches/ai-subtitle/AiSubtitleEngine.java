@@ -209,74 +209,86 @@ public final class AiSubtitleEngine {
             postStatus("正在載入「" + languageLabel(language) + "」模型（sherpa-onnx 1.13.8）…");
             long loadStarted = SystemClock.elapsedRealtime();
 
+            FeatureConfig featureConfig = new FeatureConfig();
+            featureConfig.setSampleRate(SAMPLE_RATE);
+            featureConfig.setFeatureDim(80);
+            featureConfig.setDither(0.0f);
+
             if ("online-transducer".equals(engineType)) {
-                OnlineTransducerModelConfig transducer = OnlineTransducerModelConfig.builder()
-                        .setEncoder(path("encoder.onnx"))
-                        .setDecoder(path("decoder.onnx"))
-                        .setJoiner(path("joiner.onnx"))
-                        .build();
-                OnlineModelConfig model = OnlineModelConfig.builder()
-                        .setTransducer(transducer)
-                        .setTokens(path("tokens.txt"))
-                        .setNumThreads(inferenceThreads())
-                        .setProvider("cpu")
-                        .setDebug(false)
-                        .build();
-                OnlineRecognizerConfig config = OnlineRecognizerConfig.builder()
-                        .setFeatureConfig(FeatureConfig.builder()
-                                .setSampleRate(SAMPLE_RATE)
-                                .setFeatureDim(80)
-                                .setDither(0.0f)
-                                .build())
-                        .setOnlineModelConfig(model)
-                        .setEnableEndpoint(true)
-                        .setDecodingMethod("greedy_search")
-                        .setMaxActivePaths(4)
-                        .build();
-                online = new OnlineRecognizer(config);
-                onlineStream = online.createStream();
+                OnlineTransducerModelConfig transducer = new OnlineTransducerModelConfig();
+                transducer.setEncoder(path("encoder.onnx"));
+                transducer.setDecoder(path("decoder.onnx"));
+                transducer.setJoiner(path("joiner.onnx"));
+
+                OnlineModelConfig model = new OnlineModelConfig();
+                model.setTransducer(transducer);
+                model.setTokens(path("tokens.txt"));
+                model.setNumThreads(inferenceThreads());
+                model.setProvider("cpu");
+                model.setDebug(false);
+                model.setModelType("zipformer2");
+
+                OnlineRecognizerConfig config = new OnlineRecognizerConfig();
+                config.setFeatConfig(featureConfig);
+                config.setModelConfig(model);
+                config.setEnableEndpoint(true);
+                config.setDecodingMethod("greedy_search");
+                config.setMaxActivePaths(4);
+
+                // The downloaded model files are stored in the app's private filesystem,
+                // so pass null to use sherpa-onnx's newFromFile path instead of APK assets.
+                online = new OnlineRecognizer(null, config);
+                onlineStream = online.createStream("");
             } else {
-                OfflineModelConfig.Builder model = OfflineModelConfig.builder()
-                        .setTokens(path("tokens.txt"))
-                        .setNumThreads(inferenceThreads())
-                        .setProvider("cpu")
-                        .setDebug(false);
+                OfflineModelConfig model = new OfflineModelConfig();
+                model.setTokens(path("tokens.txt"));
+                model.setNumThreads(inferenceThreads());
+                model.setProvider("cpu");
+                model.setDebug(false);
+
                 switch (engineType) {
-                    case "offline-wenet-ctc":
-                        model.setWenetCtc(OfflineWenetCtcModelConfig.builder()
-                                .setModel(path("model.int8.onnx")).build());
+                    case "offline-wenet-ctc": {
+                        OfflineWenetCtcModelConfig sub = new OfflineWenetCtcModelConfig();
+                        sub.setModel(path("model.int8.onnx"));
+                        model.setWenetCtc(sub);
+                        model.setModelType("wenet_ctc");
                         break;
-                    case "offline-zipformer-ctc":
-                        model.setZipformerCtc(OfflineZipformerCtcModelConfig.builder()
-                                .setModel(path("model.int8.onnx")).build());
+                    }
+                    case "offline-zipformer-ctc": {
+                        OfflineZipformerCtcModelConfig sub = new OfflineZipformerCtcModelConfig();
+                        sub.setModel(path("model.int8.onnx"));
+                        model.setZipformerCtc(sub);
+                        model.setModelType("zipformer");
                         break;
-                    case "offline-moonshine":
-                        model.setMoonshine(OfflineMoonshineModelConfig.builder()
-                                .setEncoder(path("encoder_model.ort"))
-                                .setMergedDecoder(path("decoder_model_merged.ort"))
-                                .build());
+                    }
+                    case "offline-moonshine": {
+                        OfflineMoonshineModelConfig sub = new OfflineMoonshineModelConfig();
+                        sub.setEncoder(path("encoder_model.ort"));
+                        sub.setMergedDecoder(path("decoder_model_merged.ort"));
+                        model.setMoonshine(sub);
+                        model.setModelType("moonshine");
                         break;
-                    case "offline-sensevoice":
-                        model.setSenseVoice(OfflineSenseVoiceModelConfig.builder()
-                                .setModel(path("model.int8.onnx"))
-                                .setLanguage(language)
-                                .setInverseTextNormalization(true)
-                                .build());
+                    }
+                    case "offline-sensevoice": {
+                        OfflineSenseVoiceModelConfig sub = new OfflineSenseVoiceModelConfig();
+                        sub.setModel(path("model.int8.onnx"));
+                        sub.setLanguage(language);
+                        sub.setUseInverseTextNormalization(true);
+                        model.setSenseVoice(sub);
+                        model.setModelType("sense_voice");
                         break;
+                    }
                     default:
                         throw new IllegalStateException("不支援的語音引擎：" + engineType);
                 }
-                OfflineRecognizerConfig config = OfflineRecognizerConfig.builder()
-                        .setFeatureConfig(FeatureConfig.builder()
-                                .setSampleRate(SAMPLE_RATE)
-                                .setFeatureDim(80)
-                                .setDither(0.0f)
-                                .build())
-                        .setOfflineModelConfig(model.build())
-                        .setDecodingMethod("greedy_search")
-                        .setMaxActivePaths(4)
-                        .build();
-                offline = new OfflineRecognizer(config);
+
+                OfflineRecognizerConfig config = new OfflineRecognizerConfig();
+                config.setFeatConfig(featureConfig);
+                config.setModelConfig(model);
+                config.setDecodingMethod("greedy_search");
+                config.setMaxActivePaths(4);
+                // As above, all model paths refer to downloaded files rather than APK assets.
+                offline = new OfflineRecognizer(null, config);
             }
 
             postStatus("本機語音辨識已就緒 · " + languageLabel(language)
