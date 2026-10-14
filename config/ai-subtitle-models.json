@@ -191,7 +191,7 @@
         {
           "name": "tokens.txt",
           "sizeBytes": 549350,
-          "sha256": "2870d843e14c1e187bf191f18a521562a63b53933814bd7f2145120468f494a049",
+          "sha256": "2870d843e14c1e187bf1913a521562a63b53933814bd7f2145120468f494a049",
           "url": "https://static.iptvorg.cc/asr-models-hosting/asr-models/japanese-moonshine-tiny/tokens.txt"
         }
       ]
@@ -233,7 +233,7 @@
         {
           "name": "tokens.txt",
           "sizeBytes": 315894,
-          "sha256": "f449eb28dc567533d7fa6f3fce34e2abca8784f771850c78a47fb731a31429a1dc",
+          "sha256": "f449eb28dc567533d7fa59be34e2abca8784f771850c78a47fb731a31429a1dc",
           "url": "https://huggingface.co/csukuangfj/sherpa-onnx-sense-voice-zh-en-ja-ko-yue-int8-2025-09-09/resolve/main/tokens.txt"
         }
       ]
