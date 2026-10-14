@@ -228,11 +228,20 @@ def main() -> None:
 
     converter = OpenCC("s2twp")
     merged = merge_cn_fallbacks(cn_dir, tw_dir)
+    # Also merge any flavor-specific Chinese resources if the upstream adds them later.
+    for flavor in ("leanback", "mobile"):
+        flavor_res = tv / f"app/src/{flavor}/res"
+        flavor_cn = flavor_res / "values-zh-rCN"
+        flavor_tw = flavor_res / "values-zh-rTW"
+        if flavor_cn.exists():
+            merged += merge_cn_fallbacks(flavor_cn, flavor_tw)
+
     converted = 0
     # Normalize Simplified Chinese locale resources, Taiwan locale resources and
-    # hard-coded Chinese labels inside layouts, so a locale fallback cannot show CN text.
-    for path in res.rglob("*.xml"):
-        relative = path.relative_to(res).as_posix()
+    # hard-coded Chinese labels inside every player flavor's layouts.
+    src_root = tv / "app/src"
+    for path in src_root.rglob("*.xml"):
+        relative = path.relative_to(src_root).as_posix()
         if not ("zh-rCN" in relative or "zh-rTW" in relative or "/layout" in f"/{relative}"):
             continue
         tree = parse(path)
