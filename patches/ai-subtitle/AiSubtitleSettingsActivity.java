@@ -383,8 +383,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
                     @Override public void onTranslatedSubtitle(String source, String translated) {
                         if (isFinishing()) return;
                         long elapsed = SystemClock.elapsedRealtime() - translationTestStartMs;
-                        mBinding.translationTestStatus.setText("測試成功（" + elapsed + " ms）：
-" + translated);
+                        mBinding.translationTestStatus.setText("測試成功（" + elapsed + " ms）：\\n" + translated);
                         finishTranslationTest();
                     }
                 });
