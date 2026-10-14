@@ -115,6 +115,104 @@ def force_zh_tw(app_java: Path) -> bool:
     return True
 
 
+def write_flavor_localizations(tv: Path) -> int:
+    """Translate flavor-only Leanback and mobile strings that have no zh-CN fallback."""
+    namespaces = {"xliff": "http://schemas.android.com/apk/res-auto"}
+    for prefix, uri in namespaces.items():
+        ET.register_namespace(prefix, uri)
+
+    flavor_strings = {
+        "leanback": {
+            "home_vod": "點播",
+            "home_live": "直播",
+            "home_search": "搜尋",
+            "home_keep": "收藏",
+            "home_push": "投放",
+            "home_setting": "設定",
+            "home_history": "播放紀錄",
+            "home_recommend": "推薦",
+            "collect_result": "「%s」的搜尋結果",
+            "push_clip": "投放剪貼簿內容",
+            "push_info": "掃描 QR Code，或在瀏覽器輸入網址\\n%s",
+        },
+        "mobile": {
+            "app_keep": "收藏",
+            "app_history": "播放紀錄",
+            "nav_vod": "點播",
+            "nav_live": "直播",
+            "nav_setting": "設定",
+            "menu_sync": "同步",
+            "menu_delete": "刪除",
+            "menu_search": "搜尋",
+            "menu_site": "來源",
+            "menu_reset": "重設",
+            "vod_home": "首頁",
+            "detail_flag": "線路",
+            "detail_episode": "集數",
+            "detail_quality": "畫質",
+            "detail_content": "簡介",
+            "detail_search": "搜尋中：%s",
+            "device_select": "選擇裝置",
+            "device_offline": "裝置離線",
+            "device_scan": "請掃描 QR Code 進行綁定",
+            "control_speed": "速度",
+            "control_scale": "畫面比例",
+            "control_track": "軌道",
+            "control_other": "其他",
+            "dialog_delete_record": "確定要刪除所有紀錄嗎？",
+            "dialog_delete_keep": "所有收藏紀錄都會被移除。",
+            "dialog_delete_history": "所有播放紀錄都會被移除。",
+            "timer_5": "5 分鐘",
+            "timer_15": "15 分鐘",
+            "timer_30": "30 分鐘",
+            "timer_60": "1 小時",
+            "timer_delay": "延長 5 分鐘",
+            "timer_cancel": "取消定時",
+            "shortcut": "已新增捷徑。",
+        },
+    }
+    arrays = {
+        "mobile": {
+            "select_background": ["關閉", "開啟", "子母畫面"],
+        },
+    }
+
+    changed_files = 0
+    for flavor, values in flavor_strings.items():
+        folder = tv / f"app/src/{flavor}/res/values-zh-rTW"
+        folder.mkdir(parents=True, exist_ok=True)
+        path = folder / "strings.xml"
+        if path.exists():
+            tree = parse(path)
+            root = tree.getroot()
+        else:
+            root = ET.Element("resources", {"xmlns:xliff": namespaces["xliff"]})
+            tree = ET.ElementTree(root)
+        existing = {
+            (local_name(child.tag), child.attrib.get("name")): child
+            for child in list(root)
+            if child.attrib.get("name")
+        }
+        for name, text in values.items():
+            child = existing.get(("string", name))
+            if child is None:
+                child = ET.SubElement(root, "string", {"name": name})
+                existing[("string", name)] = child
+            child.text = text
+        for name, items in arrays.get(flavor, {}).items():
+            child = existing.get(("string-array", name))
+            if child is None:
+                child = ET.SubElement(root, "string-array", {"name": name})
+                existing[("string-array", name)] = child
+            for item in list(child):
+                child.remove(item)
+            for value in items:
+                ET.SubElement(child, "item").text = value
+        write(path, tree)
+        changed_files += 1
+    return changed_files
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
@@ -146,10 +244,12 @@ def main() -> None:
             converted += 1
 
     app_names = set_app_name(tv / "app/src/main")
+    flavor_localized = write_flavor_localizations(tv)
     locale_changed = force_zh_tw(app_java)
     print(
         f"R15 TV localization applied: {merged} CN fallback resources merged; "
         f"{converted} XML files normalized with OpenCC s2twp; "
+        f"{flavor_localized} flavor string files localized to Taiwan wording; "
         f"{app_names} XML files set app_name=R15 TV; "
         f"app locale {'updated to zh-TW' if locale_changed else 'already zh-TW'}."
     )
