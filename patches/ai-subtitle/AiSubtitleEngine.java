@@ -16,6 +16,7 @@ import com.k2fsa.sherpa.onnx.OfflineRecognizerConfig;
 import com.k2fsa.sherpa.onnx.OfflineRecognizerResult;
 import com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineStream;
+import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineWenetCtcModelConfig;
 import com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig;
 import com.k2fsa.sherpa.onnx.OnlineModelConfig;
