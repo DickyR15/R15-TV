@@ -96,16 +96,35 @@ jobs:
           set -euo pipefail
           repo=$(jq -r '.source.repository' config/media3-android-artifacts.json)
           commit=$(jq -r '.source.commit' config/media3-android-artifacts.json)
-          base_url="https://raw.githubusercontent.com/${repo}/${commit}/app/libs"
+          base_url="https://raw.githubusercontent.com/$repo/$commit/app/libs"
           libs_dir="sources/TV/app/libs"
-          mkdir -p "$libs_dir"
-          while IFS=        uses: actions/setup-java@v4
+          mkdir -p "$libs_dir" build
+          jq -r '.artifacts[] | [.name, (.size|tostring), .gitBlobSha1] | @tsv' config/media3-android-artifacts.json > build/media3-artifacts.tsv
+          while IFS="$(printf '\\t')" read -r name expected_size expected_blob; do
+            target="$libs_dir/$name"
+            curl -fL --retry 3 --retry-all-errors "$base_url/$name" -o "$target"
+            actual_size=$(wc -c < "$target" | tr -d ' ')
+            actual_blob=$(git hash-object "$target")
+            if [[ "$actual_size" != "$expected_size" || "$actual_blob" != "$expected_blob" ]]; then
+              echo "Integrity check failed for $name (size=$actual_size blob=$actual_blob)." >&2
+              exit 1
+            fi
+            sha256=$(sha256sum "$target" | awk '{print $1}')
+            echo "Verified $name (size=$actual_size git-blob=$actual_blob sha256=$sha256)"
+            echo "- $name: $sha256" >> "$GITHUB_STEP_SUMMARY"
+          done < build/media3-artifacts.tsv
+          for required in media3-common.aar media3-exoplayer.aar media3-ui.aar media3-ui-danmaku.aar media3-mpvplayer.aar mpv-android.jar; do
+            test -s "$libs_dir/$required"
+          done
+          echo "Pinned player dependencies are ready for Gradle compilation."
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "21"
           cache: gradle
           cache-dependency-path: sources/TV/**/*.gradle*
-
       - name: Set up Python for Chaquopy build
         uses: actions/setup-python@v5
         with:
