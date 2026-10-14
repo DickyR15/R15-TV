@@ -262,7 +262,10 @@ jobs:
             test -s "sources/TV/app/src/main/jniLibs/$abi/libsherpa-onnx-jni.so"
             test -s "sources/TV/app/src/main/jniLibs/$abi/libr15opencc.so"
           done
-          echo "Staged sherpa-onnx 1.13.8 and R15 ASR source for both supported Android ABIs."
+
+          python3 -m py_compile scripts/apply-ai-subtitle.py
+          python3 scripts/apply-ai-subtitle.py --tv-dir sources/TV --patch-dir patches/ai-subtitle
+          echo "Staged sherpa-onnx, official OpenCC, eight-language AI subtitle UI, and player capture hooks for both ABIs."
       - name: Configure signing and local.properties
         id: signing
         working-directory: sources/TV
