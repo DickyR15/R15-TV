@@ -24,7 +24,11 @@ concurrency:
 env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
-  NDK_VERSION: 28.2.13676358
+  NDK_VERSION: 29.0.14206865
+  SOURCE_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
+  MEDIA_REPOSITORY: FongMi/media
+  MEDIA_BRANCH: release-1.11.0-fongmi
+  MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   OPENCC_VERSION: 1.4.2
   OPENCC_COMMIT: 025f371dc76b598d77384fbdab90c937471844d8
   SHERPA_VERSION: 1.13.8
@@ -41,58 +45,49 @@ jobs:
         with:
           fetch-depth: 1
 
-      - name: Resolve public source revision (no source token)
+      - name: Resolve pinned public source revision
         id: sources
+        env:
+          PINNED_SOURCE_SHA: ${{ env.SOURCE_SHA }}
         run: |
           set -euo pipefail
-          mkdir -p build
-          sha=$(git ls-remote "https://github.com/${SOURCE_REPOSITORY}.git" "refs/heads/${SOURCE_BRANCH}" | awk 'NR == 1 {print $1}')
-          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
-            echo "Unable to resolve public source ${SOURCE_REPOSITORY}:${SOURCE_BRANCH}" >&2
+          if [[ ! "$PINNED_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "Invalid pinned public source SHA: $PINNED_SOURCE_SHA" >&2
             exit 1
           fi
-          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$sha" \
+          mkdir -p build
+          echo "tv_sha=$PINNED_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$PINNED_SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
-          echo "tv_sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "Resolved public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${sha}"
+          echo "Pinned public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${PINNED_SOURCE_SHA}"
+          echo "Reason: use the TV revision compatible with FongMi's pinned Media3/libass source."
 
       - name: Fetch public FongMi/TV source without credentials
         env:
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
         run: |
+          set -euo pipefail
           mkdir -p sources/TV
           git -C sources/TV init
           git -C sources/TV remote add origin https://github.com/FongMi/TV.git
           git -C sources/TV fetch --depth=1 origin "$SOURCE_SHA"
           git -C sources/TV checkout --detach FETCH_HEAD
 
-      - name: Fetch and verify pinned Media3 and MPV companion artifacts
-        shell: bash
+      - name: Fetch pinned FongMi Media3 and MPV source
+        env:
+          MEDIA_SHA: ${{ env.MEDIA_SHA }}
         run: |
           set -euo pipefail
-          repo=$(jq -r '.source.repository' config/media3-android-artifacts.json)
-          commit=$(jq -r '.source.commit' config/media3-android-artifacts.json)
-          base_url="https://raw.githubusercontent.com/$repo/$commit/app/libs"
-          libs_dir="sources/TV/app/libs"
-          mkdir -p "$libs_dir" build
-          jq -r '.artifacts[] | [.name, (.size|tostring), .gitBlobSha1] | join("|")' config/media3-android-artifacts.json > build/media3-artifacts.txt
-          while IFS='|' read -r name expected_size expected_blob; do
-            target="$libs_dir/$name"
-            curl -fL --retry 3 --retry-all-errors "$base_url/$name" -o "$target"
-            actual_size=$(wc -c < "$target" | tr -d ' ')
-            actual_blob=$(git hash-object "$target")
-            if [[ "$actual_size" != "$expected_size" || "$actual_blob" != "$expected_blob" ]]; then
-              echo "Integrity check failed for $name (size=$actual_size blob=$actual_blob)." >&2
-              exit 1
-            fi
-            sha256=$(sha256sum "$target" | awk '{print $1}')
-            echo "Verified $name (size=$actual_size git-blob=$actual_blob sha256=$sha256)"
-            echo "- $name: $sha256" >> "$GITHUB_STEP_SUMMARY"
-          done < build/media3-artifacts.txt
-          for required in media3-common.aar media3-exoplayer.aar media3-ui.aar media3-ui-danmaku.aar media3-mpvplayer.aar mpv-android.jar; do
-            test -s "$libs_dir/$required"
-          done
-          echo "Pinned player dependencies are ready for Gradle compilation."
+          mkdir -p sources/media
+          git -C sources/media init
+          git -C sources/media remote add origin https://github.com/FongMi/media.git
+          git -C sources/media fetch --depth=1 origin "$MEDIA_SHA"
+          git -C sources/media checkout --detach FETCH_HEAD
+          actual_sha=$(git -C sources/media rev-parse HEAD)
+          test "$actual_sha" = "$MEDIA_SHA"
+          test -f sources/media/build-logic-settings/src/main/kotlin/gradlebuild.media3-settings-logic.settings.gradle.kts
+          test -f sources/media/libraries/mpvplayer/src/main/java/androidx/media3/mpvplayer/MpvPlayer.java
+          echo "Pinned FongMi Media3/MPV source: $actual_sha"
 
       - name: Verify checkout and required public dependencies
         env:
@@ -152,6 +147,63 @@ jobs:
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
             "ndk;${NDK_VERSION}"
+
+      - name: Build official FongMi Media3 and MPV AAR dependencies
+        working-directory: sources/media
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+            :lib-common:assembleRelease \
+            :lib-container:assembleRelease \
+            :lib-database:assembleRelease \
+            :lib-datasource:assembleRelease \
+            :lib-datasource-okhttp:assembleRelease \
+            :lib-datasource-rtmp:assembleRelease \
+            :lib-decoder:assembleRelease \
+            :lib-decoder-ffmpeg:assembleRelease \
+            :lib-decoder-mpegh:assembleRelease \
+            :lib-effect:assembleRelease \
+            :lib-exoplayer:assembleRelease \
+            :lib-exoplayer-dash:assembleRelease \
+            :lib-exoplayer-hls:assembleRelease \
+            :lib-exoplayer-rtsp:assembleRelease \
+            :lib-exoplayer-smoothstreaming:assembleRelease \
+            :lib-extractor:assembleRelease \
+            :lib-mpvplayer:assembleRelease \
+            :lib-session:assembleRelease \
+            :lib-ui:assembleRelease \
+            :lib-ui-danmaku:assembleRelease
+
+          target="$GITHUB_WORKSPACE/sources/TV/app/libs"
+          mkdir -p "$target"
+          copied=0
+          while IFS= read -r aar_name; do
+            [[ -n "$aar_name" ]] || continue
+            module="${aar_name#lib-}"
+            module="${module%-release.aar}"
+            module_dir="${module//-/_}"
+            aar_path="libraries/$module_dir/buildout/outputs/aar/$aar_name"
+            if [[ ! -f "$aar_path" ]]; then
+              aar_path=$(find libraries -type f -name "$aar_name" -print -quit)
+            fi
+            if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
+              echo "Missing expected AAR: $aar_name" >&2
+              exit 1
+            fi
+            cp "$aar_path" "$target/$aar_name"
+            copied=$((copied + 1))
+          done < move.txt
+
+          if [[ "$copied" -ne 20 ]]; then
+            echo "Expected 20 Media3/MPV AARs, copied $copied." >&2
+            exit 1
+          fi
+          echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
+          ls -lh "$target"/lib-*-release.aar
+          sha256sum "$target"/lib-*-release.aar
 
       - name: Fetch official OpenCC 1.4.2 source
         env:
