@@ -248,6 +248,7 @@ public final class AiSubtitleTranslationEngine implements AutoCloseable {
     private static String translateBing(
             String text, String sourceLanguage, String baseUrl, String apiKey, String region) throws Exception {
         require(apiKey, "Bing 翻譯需要 API 金鑰");
+        require(region, "Bing 翻譯需要服務區域");
         String host = normalizeBaseUrl(baseUrl, "https://api.cognitive.microsofttranslator.com");
         String target = "zh-Hant";
         String url = host + "/translate?api-version=3.0&from=" + encode(sourceLanguage) + "&to=" + target;
