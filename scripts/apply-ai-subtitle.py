@@ -110,7 +110,7 @@ def patch_tv_settings_activity(path: Path) -> None:
 
 
 def patch_live_settings_layout(tv: Path) -> None:
-    """Group VOD and wallpaper entries into a shared section without breaking bindings."""
+    """Group the existing VOD and wallpaper controls, and relabel live setup."""
     import xml.etree.ElementTree as ET
 
     layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
@@ -121,50 +121,61 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # Avoid risky view-binding changes: put the existing VOD and wall rows inside
-    # a common vertical grouping container. Their own clickable rows and shortcut
-    # ImageViews are preserved, with the live configuration row kept between them.
-    container = root.find(".//androidx.appcompat.widget.LinearLayoutCompat")
+    # Select the settings content root rather than a nested row.
+    containers = [node for node in root.iter()
+                  if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
+                  and node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "vertical"
+                  and any(child.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat" for child in list(node))]
+    container = next((node for node in containers if any(
+        any(desc.attrib.get(aid) == "@+id/vod" for desc in child.iter()) for child in list(node))), None)
     if container is None:
         raise SystemExit("Could not find settings content container.")
-    rows = list(container)
 
     def row_for(target_id: str):
-        for row in rows:
-            if any(node.attrib.get(aid) == f"@+id/{target_id}" for node in row.iter()):
-                return row
+        for child in list(container):
+            if any(desc.attrib.get(aid) == f"@+id/{target_id}" for desc in child.iter()):
+                return child
         return None
 
-    vod_row, live_row, wall_row = row_for("vod"), row_for("live"), row_for("wall")
-    if vod_row is None or live_row is None or wall_row is None:
-        raise SystemExit("Could not find VOD/live/wall setting rows.")
-
-    # Wrap VOD and wallpaper rows in one shared section directly in the settings
-    # hierarchy; retain both rows internally, since each row has its own actions.
-    if not any(node.attrib.get(aid) == "@+id/vodAndWall" for node in container.iter()):
+    vod_row, wall_row = row_for("vod"), row_for("wall")
+    if vod_row is None or wall_row is None:
+        raise SystemExit("Could not find VOD/wall setting rows.")
+    # Use a horizontal group: the user asked to place VOD and wallpaper together.
+    # The clickable VOD and wallpaper items, plus their existing shortcuts, stay intact.
+    if vod_row is not wall_row:
         parent_map = {child: parent for parent in root.iter() for child in parent}
-        vod_parent = parent_map.get(vod_row)
-        wall_parent = parent_map.get(wall_row)
-        if vod_parent is not container or wall_parent is not container:
-            raise SystemExit("VOD/wall layout structure differs from expected upstream.")
-        vod_idx, wall_idx = list(container).index(vod_row), list(container).index(wall_row)
-        section = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
-            aid: "@+id/vodAndWall",
-            "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
-            "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
-            "{http://schemas.android.com/apk/res/android}orientation": "vertical",
-        })
-        # Replacing just the VOD row with the wrapper keeps ordering; move the wall
-        # row into the wrapper too. Internal rows keep their IDs for view binding.
-        container.remove(vod_row)
-        container.insert(vod_idx, section)
-        section.append(vod_row)
-        container.remove(wall_row)
-        section.append(wall_row)
+        if parent_map.get(vod_row) is not container or parent_map.get(wall_row) is not container:
+            raise SystemExit("VOD/wall settings rows are not direct children of the settings container.")
+        section = next((node for node in list(container)
+                        if node.attrib.get(aid) == "@+id/vodAndWall"), None)
+        if section is None:
+            section = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
+                aid: "@+id/vodAndWall",
+                "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
+                "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
+                "{http://schemas.android.com/apk/res/android}orientation": "horizontal",
+                "{http://schemas.android.com/apk/res/android}gravity": "center_vertical",
+                "{http://schemas.android.com/apk/res/android}layout_marginTop": "0dp",
+            })
+            vod_index = list(container).index(vod_row)
+            container.remove(vod_row)
+            container.insert(vod_index, section)
+            section.append(vod_row)
+        if wall_row in list(container):
+            container.remove(wall_row)
+        if wall_row not in list(section):
+            section.append(wall_row)
+        # Each original row is now a half-width item; keep all view-binding IDs.
+        for row in (vod_row, wall_row):
+            row.set("{http://schemas.android.com/apk/res/android}layout_width", "0dp")
+            row.set("{http://schemas.android.com/apk/res/android}layout_weight", "1")
+            row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "0dp")
+            row.set("{http://schemas.android.com/apk/res/android}layout_marginEnd", "12dp" if row is vod_row else "0dp")
         ET.indent(tree, space="    ")
         tree.write(layout, encoding="utf-8", xml_declaration=True)
 
-    # Add a clear Taiwan Traditional Chinese label for this existing entry.
+    # Add a Taiwan Traditional Chinese label and apply it only to the existing
+    # live setting row. Its click handler and view ID remain unchanged.
     labels = (
         (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播配置"),
         (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播配置"),
@@ -187,7 +198,6 @@ def patch_live_settings_layout(tv: Path) -> None:
         ET.indent(stree, space="    ")
         stree.write(resource, encoding="utf-8", xml_declaration=True)
 
-    # Change only the label value, preserving its original click action.
     xml = layout.read_text(encoding="utf-8")
     if 'android:id="@+id/live"' not in xml:
         raise SystemExit("Live setting entry was lost.")
