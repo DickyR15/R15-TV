@@ -32,239 +32,47 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p build/reference build/targets
-          curl -fL --retry 3 --retry-delay 2 \
-            "https://github.com/iptvorganization/TV-AutoBuild/releases/download/autobuild-170/TV-leanback-armeabi-v7a.apk" \
-            -o build/reference/TV-leanback-armeabi-v7a.apk
+          curl -fL --retry 3 --retry-delay 2 "https://github.com/iptvorganization/TV-AutoBuild/releases/download/autobuild-170/TV-leanback-armeabi-v7a.apk" -o build/reference/TV-leanback-armeabi-v7a.apk
           echo "836fec0255d7f9860ef3d48b4680a26ee14301167e54c289346a551bb970da41  build/reference/TV-leanback-armeabi-v7a.apk" | sha256sum -c -
-          ls -lh build/reference/TV-leanback-armeabi-v7a.apk
 
-      - name: Install apktool
+      - name: Install apktool and decompile
         shell: bash
         run: |
           set -euo pipefail
           URL="$(curl -fsSL https://api.github.com/repos/iBotPeaches/Apktool/releases/latest | jq -er '[.assets[] | select(.name | test("^apktool_.*\\.jar$"))][0].browser_download_url')"
           curl -fL --retry 3 "$URL" -o build/apktool.jar
-          java -jar build/apktool.jar --version
-
-      - name: Decompile APK resources and smali
-        shell: bash
-        run: |
-          set -euo pipefail
-          java -jar build/apktool.jar d -f \
-            build/reference/TV-leanback-armeabi-v7a.apk \
-            -o build/upstream-170
+          java -jar build/apktool.jar d -f build/reference/TV-leanback-armeabi-v7a.apk -o build/upstream-170
           test -d build/upstream-170/res
-          find build/upstream-170 -maxdepth 2 -type d -name 'smali*' -print
 
-      - name: Decompile classes with JADX and inspect exact live configuration screens
+      - name: Inspect original layouts, activities, and phone-push references
         shell: bash
         run: |
           set -euo pipefail
-          URL="$(curl -fsSL https://api.github.com/repos/skylot/jadx/releases/latest | jq -er '[.assets[] | select(.name | test("^jadx-[^/]+\\.zip$"))][0].browser_download_url')"
-          curl -fL --retry 3 "$URL" -o build/jadx.zip
-          mkdir -p build/jadx-tool
-          unzip -q build/jadx.zip -d build/jadx-tool
-          JADX="$(find build/jadx-tool -type f -path '*/bin/jadx' | head -n 1)"
-          test -n "$JADX"
-          chmod +x "$JADX"
-          "$JADX" --version
-          "$JADX" -d build/jadx-source --show-bad-code --threads-count 2 build/reference/TV-leanback-armeabi-v7a.apk
-
-          {
-            echo "===== MANIFEST: relevant activity and service declarations ====="
-            grep -nE 'android:name=.*(Live|Setting|Config|Push|Server)|activity_live_config' build/upstream-170/AndroidManifest.xml | head -n 100 || true
-            echo "===== RESOURCES: activity_setting.xml ====="
-            sed -n '1,260p' build/upstream-170/res/layout/activity_setting.xml
-            echo "===== RESOURCES: activity_live_config.xml ====="
-            sed -n '1,300p' build/upstream-170/res/layout/activity_live_config.xml
-            echo "===== RESOURCES: activity_live_config_edit.xml ====="
-            sed -n '1,340p' build/upstream-170/res/layout/activity_live_config_edit.xml
-            echo "===== RESOURCES: adapter_live_config_source.xml ====="
-            sed -n '1,260p' build/upstream-170/res/layout/adapter_live_config_source.xml
-            echo "===== STRINGS: live config, QR, and settings labels ====="
-            grep -nE 'live_config|config.*(live|source)|source.*(live|url)|push_info|QR|新增直播源|直播源|節目表|节目表|重新整理配置|刷新配置|設定點播|setting_(vod|wall|live)' build/upstream-170/res/values-zh-rTW/strings.xml | head -n 220 || true
-            echo "===== JADX: candidate Java source files ====="
-            find build/jadx-source/sources -type f -name '*.java' | grep -Ei '/[^/]*(Live.*Config|Live.*Activity|SettingActivity|ConfigDialog|ServerEvent|QRCode|Nano|Action|Push).*\\.java        shell: bash
-        run: |
-          set -euo pipefail
           DECODED=build/upstream-170
           TARGETS=build/targets
           REPORT=build/upstream-170-decompile-report.txt
           : > "$REPORT"
           {
-            echo "TV-AutoBuild autobuild-170 decompile report"
-            echo "Reference: TV-leanback-armeabi-v7a.apk"
-            echo
-            echo "== App metadata =="
-            grep -nE 'package=|versionCode=|versionName=|android:label=' "$DECODED/AndroidManifest.xml" | head -n 40 || true
-            echo
-            echo "== Candidate live/config/settings layouts =="
-            find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Resource XML strings matching live source / phone push =="
-            grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Smali class candidates =="
-            grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 | tee -a "$REPORT" || true
-          } | tee -a "$REPORT"
-
-          while IFS= read -r f; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done < <(find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' || true)
-
-          while IFS= read -r f; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done < <(grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" || true)
-
-          mapfile -t MATCHED < <(grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 || true)
-          for f in "\${MATCHED[@]}"; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done
-
-          {
-            echo
-            echo "== Matched smali constants with context =="
-            grep -RIn -B 8 -A 18 --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 500 || true
-            echo
-            echo "== Copied reference files =="
-            find "$TARGETS" -type f | sort
-          } | tee -a "$REPORT"
-
-          {
-            echo "## TV-AutoBuild 170 APK decompile"
-            echo
-            echo "Official APK checksum verified; decoded resources and smali with apktool."
-            echo
-            echo "Report begins below:"
-            head -n 220 "$REPORT"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          zip -qr build/upstream-170-decompiled-reference.zip build/targets
-          test -s build/upstream-170-decompiled-reference.zip
-          test -s "$REPORT"
-
-      - name: Upload decompiled reference artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: upstream-170-decompiled-reference
-          path: |
-            build/upstream-170-decompile-report.txt
-            build/upstream-170-decompiled-reference.zip
-          if-no-files-found: error
-          retention-days: 14
- | head -n 100 || true
-            echo "===== JADX: Java files that reference the live configuration layouts ====="
-            grep -RIl -E 'activity_live_config_edit|activity_live_config|adapter_live_config_source' build/jadx-source/sources 2>/dev/null | head -n 60 || true
-            echo "===== JADX: likely activity implementations ====="
-            for f in $(find build/jadx-source/sources -type f -name '*.java' | grep -Ei '/[^/]*(Live.*Config|Live.*Activity|SettingActivity|ConfigDialog|ServerEvent|QRCode|Nano|Action|Push).*\\.java        shell: bash
-        run: |
-          set -euo pipefail
-          DECODED=build/upstream-170
-          TARGETS=build/targets
-          REPORT=build/upstream-170-decompile-report.txt
-          : > "$REPORT"
-          {
-            echo "TV-AutoBuild autobuild-170 decompile report"
-            echo "Reference: TV-leanback-armeabi-v7a.apk"
-            echo
-            echo "== App metadata =="
-            grep -nE 'package=|versionCode=|versionName=|android:label=' "$DECODED/AndroidManifest.xml" | head -n 40 || true
-            echo
-            echo "== Candidate live/config/settings layouts =="
-            find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Resource XML strings matching live source / phone push =="
-            grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Smali class candidates =="
-            grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 | tee -a "$REPORT" || true
-          } | tee -a "$REPORT"
-
-          while IFS= read -r f; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done < <(find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' || true)
-
-          while IFS= read -r f; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done < <(grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" || true)
-
-          mapfile -t MATCHED < <(grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 || true)
-          for f in "\${MATCHED[@]}"; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done
-
-          {
-            echo
-            echo "== Matched smali constants with context =="
-            grep -RIn -B 8 -A 18 --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 500 || true
-            echo
-            echo "== Copied reference files =="
-            find "$TARGETS" -type f | sort
-          } | tee -a "$REPORT"
-
-          {
-            echo "## TV-AutoBuild 170 APK decompile"
-            echo
-            echo "Official APK checksum verified; decoded resources and smali with apktool."
-            echo
-            echo "Report begins below:"
-            head -n 220 "$REPORT"
-          } >> "$GITHUB_STEP_SUMMARY"
-
-          zip -qr build/upstream-170-decompiled-reference.zip build/targets
-          test -s build/upstream-170-decompiled-reference.zip
-          test -s "$REPORT"
-
-      - name: Upload decompiled reference artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: upstream-170-decompiled-reference
-          path: |
-            build/upstream-170-decompile-report.txt
-            build/upstream-170-decompiled-reference.zip
-          if-no-files-found: error
-          retention-days: 14
- | head -n 16); do
-              echo "===== JAVA FILE: $f ====="
-              sed -n '1,300p' "$f"
+            echo "AUTO-BUILD 170 APK DECOMPILE REPORT"
+            echo "APK: TV-leanback-armeabi-v7a.apk"
+            echo "== App identity =="
+            grep -nE '<manifest|android:label=|android:versionName=|android:versionCode=' "$DECODED/AndroidManifest.xml" | head -n 40 || true
+            echo "== Relevant activity declarations =="
+            grep -nE '<activity|android:name=.*(Live|Setting|Config|Push|Server)' "$DECODED/AndroidManifest.xml" | head -n 120 || true
+            echo "== Exact layout resource names =="
+            find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' | sort || true
+            for f in activity_setting.xml activity_live_config.xml activity_live_config_edit.xml adapter_live_config_source.xml dialog_config.xml; do
+              if [ -f "$DECODED/res/layout/$f" ]; then
+                echo "===== RESOURCE FILE: $f ====="
+                sed -n '1,360p' "$DECODED/res/layout/$f"
+              fi
             done
-          } | tee build/upstream-170-ui-inspection.txt
-
-      - name: Extract original live UI and QR push references
-        shell: bash
-        run: |
-          set -euo pipefail
-          DECODED=build/upstream-170
-          TARGETS=build/targets
-          REPORT=build/upstream-170-decompile-report.txt
-          : > "$REPORT"
-          {
-            echo "TV-AutoBuild autobuild-170 decompile report"
-            echo "Reference: TV-leanback-armeabi-v7a.apk"
-            echo
-            echo "== App metadata =="
-            grep -nE 'package=|versionCode=|versionName=|android:label=' "$DECODED/AndroidManifest.xml" | head -n 40 || true
-            echo
-            echo "== Candidate live/config/settings layouts =="
-            find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Resource XML strings matching live source / phone push =="
-            grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" | sort | tee -a "$REPORT" || true
-            echo
-            echo "== Smali class candidates =="
-            grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 | tee -a "$REPORT" || true
+            echo "== Traditional Chinese labels used by the source/config screens =="
+            grep -nE 'live_config|config.*(live|source)|source.*(live|url)|push_info|新增直播源|直播源|節目表|节目表|重新整理配置|刷新配置|setting_(vod|wall|live)|setting_live|setting_wall|setting_vod' "$DECODED/res/values-zh-rTW/strings.xml" | head -n 260 || true
+            echo "== Candidate smali classes by original class names =="
+            find "$DECODED"/smali* -type f -name '*.smali' | grep -Ei '/[^/]*(Live.*Config|Live.*Activity|SettingActivity|ConfigDialog|ServerEvent|QRCode|Nano|Action|Push).*\.smali$' | head -n 100 || true
+            echo "== Smali references to configuration layout IDs and phone push routes =="
+            grep -RIn -m 5 -E 'activity_live_config_edit|activity_live_config|adapter_live_config_source|ServerEvent;->setting|/action\?do=setting|/config' "$DECODED"/smali* 2>/dev/null | head -n 360 || true
           } | tee -a "$REPORT"
 
           while IFS= read -r f; do
@@ -272,43 +80,24 @@ jobs:
             mkdir -p "$TARGETS/$(dirname "$f")"
             cp "$f" "$TARGETS/$f"
           done < <(find "$DECODED/res" -type f -path '*/layout*/*.xml' | grep -Ei '/[^/]*(live|config|setting|source|vod|wall|push)[^/]*\.xml$' || true)
-
+          for f in "$DECODED/res/values/strings.xml" "$DECODED/res/values-zh-rCN/strings.xml" "$DECODED/res/values-zh-rTW/strings.xml"; do
+            if [ -f "$f" ]; then mkdir -p "$TARGETS/$(dirname "$f")"; cp "$f" "$TARGETS/$f"; fi
+          done
           while IFS= read -r f; do
             [ -f "$f" ] || continue
             mkdir -p "$TARGETS/$(dirname "$f")"
             cp "$f" "$TARGETS/$f"
-          done < <(grep -RIl --include='strings.xml' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|配置.*推送|掃描.*推送' "$DECODED/res" || true)
-
-          mapfile -t MATCHED < <(grep -RIl --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 100 || true)
-          for f in "\${MATCHED[@]}"; do
-            [ -f "$f" ] || continue
-            mkdir -p "$TARGETS/$(dirname "$f")"
-            cp "$f" "$TARGETS/$f"
-          done
-
+          done < <(find "$DECODED"/smali* -type f -name '*.smali' | grep -Ei '/[^/]*(Live.*Config|Live.*Activity|SettingActivity|ConfigDialog|ServerEvent|QRCode|Nano|Action|Push).*\.smali$' | head -n 100 || true)
           {
-            echo
-            echo "== Matched smali constants with context =="
-            grep -RIn -B 8 -A 18 --include='*.smali' -E '新增直播源|直播源配置|直播源订阅|節目表位址|节目表地址|自動重新整理配置|自动重新整理配置|手機掃描|手机扫描|ServerEvent;->setting|/action\?do=setting' "$DECODED"/smali* 2>/dev/null | head -n 500 || true
-            echo
-            echo "== Copied reference files =="
+            echo "== Decompiled reference files packaged =="
             find "$TARGETS" -type f | sort
           } | tee -a "$REPORT"
-
-          {
-            echo "## TV-AutoBuild 170 APK decompile"
-            echo
-            echo "Official APK checksum verified; decoded resources and smali with apktool."
-            echo
-            echo "Report begins below:"
-            head -n 220 "$REPORT"
-          } >> "$GITHUB_STEP_SUMMARY"
-
           zip -qr build/upstream-170-decompiled-reference.zip build/targets
-          test -s build/upstream-170-decompiled-reference.zip
           test -s "$REPORT"
+          test -s build/upstream-170-decompiled-reference.zip
+          { echo "## AutoBuild 170 APK decompile report"; echo; head -n 260 "$REPORT"; } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload decompiled reference artifact
+      - name: Upload decompiled reference
         uses: actions/upload-artifact@v4
         with:
           name: upstream-170-decompiled-reference
