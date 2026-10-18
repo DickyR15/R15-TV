@@ -119,6 +119,110 @@ jobs:
           java-version: "21"
           cache: gradle
           cache-dependency-path: sources/TV/**/*.gradle*
+      - name: Reverse engineer official TV-AutoBuild 170 reference APK
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          mkdir -p build/autobuild170
+          apk="build/autobuild170/TV-leanback-armeabi-v7a.apk"
+          curl -fL --retry 3 --retry-delay 2 \
+            "https://github.com/iptvorganization/TV-AutoBuild/releases/download/autobuild-170/TV-leanback-armeabi-v7a.apk" \
+            -o "$apk"
+          echo "836fec0255d7f9860ef3d48b4680a26ee14301167e54c289346a551bb970da41  $apk" | sha256sum -c -
+          curl -fL --retry 3 \
+            "https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar" \
+            -o build/autobuild170/apktool.jar
+          curl -fL --retry 3 \
+            "https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip" \
+            -o build/autobuild170/jadx.zip
+          unzip -q build/autobuild170/jadx.zip -d build/autobuild170/jadx-dist
+          java -jar build/autobuild170/apktool.jar d -f -s "$apk" -o build/autobuild170/resources
+          build/autobuild170/jadx-dist/jadx/bin/jadx --show-bad-code \
+            -d build/autobuild170/sources "$apk"
+          python3 - <<'PY'
+          from pathlib import Path
+          import xml.etree.ElementTree as ET
+
+          root = Path("build/autobuild170")
+          resource_root = root / "resources"
+          source_root = root / "sources"
+          report = []
+          report.append("TV-AutoBuild autobuild-170 APK reverse-engineering report")
+          report.append("APK: TV-leanback-armeabi-v7a.apk")
+          report.append("")
+          manifest = resource_root / "AndroidManifest.xml"
+          if manifest.exists():
+              report.append("=== Relevant manifest activities ===")
+              try:
+                  doc = ET.parse(manifest).getroot()
+                  android = "{http://schemas.android.com/apk/res/android}"
+                  for node in doc.iter():
+                      if node.tag.endswith("activity"):
+                          name = node.attrib.get(android + "name", "")
+                          if any(k in name.lower() for k in ("live", "config", "setting", "wall", "vod")):
+                              report.append(f"activity name={name} label={node.attrib.get(android + 'label', '')}")
+              except Exception as exc:
+                  report.append(f"Manifest parse warning: {exc}")
+              report.append("")
+          layouts = sorted((resource_root / "res").glob("layout*/*.xml"))
+          interesting_layouts = [p for p in layouts if any(k in p.name.lower() for k in ("live", "config", "setting", "source", "wall", "vod"))]
+          report.append("=== Relevant layout resources ===")
+          for p in interesting_layouts:
+              report.append(f"--- {p.relative_to(resource_root)} ---")
+              try:
+                  lines = p.read_text(errors="replace").splitlines()
+                  report.extend(lines[:180])
+                  if len(lines) > 180:
+                      report.append(f"... omitted {len(lines)-180} lines")
+              except Exception as exc:
+                  report.append(f"read error: {exc}")
+              report.append("")
+          java_files = sorted(source_root.rglob("*.java"))
+          exact_terms = (
+              "Server.get().getAddress", "QRCode.getBitmap", "ServerEvent.setting",
+              "自動重新整理配置", "新增直播源配置", "直播配置", "節目表位址",
+              "push_info", "ConfigDialog", "LiveSourcesActivity", "vodAndWall"
+          )
+          selected = []
+          for p in java_files:
+              text = p.read_text(errors="replace")
+              hits = [term for term in exact_terms if term.lower() in text.lower()]
+              named = any(k in p.name.lower() for k in ("live", "configdialog", "settingactivity", "qrcode", "serverevent", "vodwall"))
+              if hits or named:
+                  selected.append((p, text, hits))
+          report.append("=== Decompiled Java/Kotlin candidate files ===")
+          for p, text, hits in selected:
+              report.append(f"{p.relative_to(source_root)} | hits={', '.join(hits) if hits else '(filename match)'}")
+          report.append("")
+          report.append("=== Decompiled source excerpts (full candidate files capped at 700 lines each) ===")
+          for p, text, hits in selected:
+              lines = text.splitlines()
+              if len(lines) > 700:
+                  report.append(f"--- {p.relative_to(source_root)} ---")
+                  report.append(f"Large file ({len(lines)} lines); excerpts follow.")
+                  anchors = [i for i, line in enumerate(lines) if any(term.lower() in line.lower() for term in exact_terms)]
+                  ranges = []
+                  for i in anchors:
+                      lo, hi = max(0, i-22), min(len(lines), i+36)
+                      if ranges and lo <= ranges[-1][1]:
+                          ranges[-1] = (ranges[-1][0], max(ranges[-1][1], hi))
+                      else:
+                          ranges.append((lo, hi))
+                  for lo, hi in ranges[:8]:
+                      report.extend(f"{i+1}: {lines[i]}" for i in range(lo, hi))
+              else:
+                  report.append(f"--- {p.relative_to(source_root)} ---")
+                  report.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
+              report.append("")
+          full = "\n".join(report)
+          (root / "reverse-engineering-report.txt").write_text(full, encoding="utf-8")
+          # A bounded report in logs is retained for inspection even if artifact retrieval is unavailable.
+          print("=== AUTOBUILD170_REVERSE_REPORT_BEGIN ===")
+          print(full[:55000])
+          print("=== AUTOBUILD170_REVERSE_REPORT_END ===")
+          PY
+          echo "Decompilation report saved to build/autobuild170/reverse-engineering-report.txt"
+
       - name: Set up Python for Chaquopy build
         uses: actions/setup-python@v5
         with:
