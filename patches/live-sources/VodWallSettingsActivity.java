@@ -56,68 +56,90 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
 
     private void render() {
         root.removeAllViews();
-        LinearLayout header = new LinearLayout(this);
-        header.setOrientation(LinearLayout.HORIZONTAL);
-        header.setGravity(Gravity.CENTER_VERTICAL);
-        Button back = button("返回", false);
-        back.setOnClickListener(v -> finish());
-        header.addView(back, new LinearLayout.LayoutParams(dp(110), dp(48)));
-        TextView title = text("點播和桌布", 25);
-        title.setGravity(Gravity.CENTER);
-        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
-        View spacer = new View(this);
-        header.addView(spacer, new LinearLayout.LayoutParams(dp(110), dp(1)));
-        root.addView(header, new LinearLayout.LayoutParams(-1, dp(60)));
+        root.setPadding(0, 0, 0, dp(20));
+
+        TextView title = text("點播和桌布", 24);
+        title.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
+        titleParams.setMargins(dp(20), dp(16), dp(20), 0);
+        root.addView(title, titleParams);
 
         ScrollView scroll = new ScrollView(this);
+        scroll.setFillViewport(false);
+        scroll.setClipToPadding(false);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(0, dp(16), 0, dp(24));
+        body.setPadding(dp(20), dp(8), dp(20), dp(24));
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        addCard(body, "點播來源", VodConfig.getDesc(),
-                new String[]{"設定點播來源", "首頁／站源", "播放紀錄"},
-                new Runnable[]{
-                        () -> editConfig(0),
-                        () -> Toast.makeText(this, "請先設定點播來源，再返回首頁選擇站源", Toast.LENGTH_LONG).show(),
-                        () -> HistoryDialog.create().vod().show(this)
-                });
+        addMediaCard(body, "點播", VodConfig.getDesc(), "設定來源", "首頁／站源", "播放紀錄",
+                () -> editConfig(0),
+                () -> com.fongmi.android.tv.ui.dialog.SiteDialog.create().action().show(this),
+                () -> HistoryDialog.create().vod().show(this), true);
 
-        addCard(body, "桌布來源", WallConfig.getDesc(),
-                new String[]{"設定桌布來源", "切換桌布", "重新整理桌布"},
-                new Runnable[]{
-                        () -> editConfig(2),
-                        this::setWallDefault,
-                        this::setWallRefresh
-                });
+        addMediaCard(body, "桌布", WallConfig.getDesc(), "設定來源", "切換桌布", "重新整理",
+                () -> editConfig(2), this::setWallDefault, this::setWallRefresh, false);
     }
 
-    private void addCard(LinearLayout body, String titleText, String description, String[] labels, Runnable[] actions) {
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(dp(18), dp(16), dp(18), dp(16));
-        card.setBackground(cardDrawable());
-        TextView title = text(titleText, 22);
-        card.addView(title, new LinearLayout.LayoutParams(-1, -2));
-        TextView desc = text(description == null || description.isEmpty() ? "尚未設定" : description, 15);
-        desc.setPadding(0, dp(6), 0, dp(10));
-        card.addView(desc, new LinearLayout.LayoutParams(-1, -2));
+    private void addMediaCard(LinearLayout body, String titleText, String description,
+                              String primaryLabel, String secondaryLabel, String thirdLabel,
+                              Runnable primaryAction, Runnable secondaryAction, Runnable thirdAction,
+                              boolean vod) {
+        com.google.android.material.card.MaterialCardView card =
+                new com.google.android.material.card.MaterialCardView(this);
+        card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
+        card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
+        card.setStrokeWidth(dp(1));
+        card.setRadius(dp(18));
+        card.setCardElevation(0);
+        card.setUseCompatPadding(false);
 
-        LinearLayout row = new LinearLayout(this);
-        row.setOrientation(LinearLayout.HORIZONTAL);
-        for (int i = 0; i < labels.length; i++) {
-            final Runnable action = actions[i];
-            Button item = button(labels[i], i == 0);
-            item.setOnClickListener(v -> action.run());
-            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, dp(50), 1f);
-            if (i < labels.length - 1) lp.setMarginEnd(dp(8));
-            row.addView(item, lp);
-        }
-        card.addView(row, new LinearLayout.LayoutParams(-1, -2));
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.bottomMargin = dp(16);
-        body.addView(card, cp);
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setPadding(dp(16), dp(16), dp(16), dp(16));
+        card.addView(content, new com.google.android.material.card.MaterialCardView.LayoutParams(-1, -2));
+
+        TextView name = text(titleText, 18);
+        name.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        content.addView(name, new LinearLayout.LayoutParams(-1, -2));
+
+        TextView url = text(TextUtils.isEmpty(description) ? "尚未設定來源" : description, 14);
+        url.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+        url.setMaxLines(1);
+        url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+        LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
+        urlParams.topMargin = dp(6);
+        content.addView(url, urlParams);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setGravity(Gravity.CENTER_VERTICAL);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
+        actionsParams.topMargin = dp(16);
+        content.addView(actions, actionsParams);
+
+        Button primary = button(primaryLabel, true);
+        primary.setOnClickListener(v -> primaryAction.run());
+        actions.addView(primary, new LinearLayout.LayoutParams(0, dp(48), 1f));
+
+        Button secondary = button(secondaryLabel, false);
+        secondary.setOnClickListener(v -> secondaryAction.run());
+        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        secondaryParams.setMarginStart(dp(8));
+        actions.addView(secondary, secondaryParams);
+
+        Button third = button(thirdLabel, false);
+        third.setOnClickListener(v -> thirdAction.run());
+        LinearLayout.LayoutParams thirdParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
+        thirdParams.setMarginStart(dp(8));
+        actions.addView(third, thirdParams);
+
+        LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+        cardParams.topMargin = dp(vod ? 16 : 16);
+        body.addView(card, cardParams);
     }
 
     private void editConfig(int type) {
