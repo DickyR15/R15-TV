@@ -435,8 +435,6 @@ public final class LiveSourcesActivity extends BaseActivity {
         field.setPlaceholderText(hint);
         field.setHelperText("按確認鍵可直接輸入，也可以在 " + Server.get().getAddress()
                 + " 的「配置」頁面推送");
-        field.setHelperTextTextColor(android.content.res.ColorStateList.valueOf(
-                0xFFBDBDBD));
 
         com.google.android.material.textfield.TextInputEditText input =
                 new com.google.android.material.textfield.TextInputEditText(this);
