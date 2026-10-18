@@ -57,7 +57,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         root.setPadding(0, 0, 0, dp(20));
 
         TextView title = text("點播和桌布", 24);
-        title.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        title.setTextColor(WHITE);
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.setMargins(dp(20), dp(16), dp(20), 0);
@@ -90,8 +90,8 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
                              boolean vod) {
         com.google.android.material.card.MaterialCardView card =
                 new com.google.android.material.card.MaterialCardView(this);
-        card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
-        card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
+        card.setCardBackgroundColor(0xFF242424);
+        card.setStrokeColor(0xFF555555);
         card.setStrokeWidth(dp(1));
         card.setRadius(dp(18));
         card.setCardElevation(0);
@@ -117,12 +117,12 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         });
 
         TextView name = text(label, 18);
-        name.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        name.setTextColor(WHITE);
         name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         item.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         TextView url = text(TextUtils.isEmpty(description) ? "尚未設定來源" : description, 14);
-        url.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+        url.setTextColor(0xFFBDBDBD);
         url.setMaxLines(1);
         url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
@@ -154,7 +154,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
     private AppCompatImageButton iconButton(int icon, String description) {
         AppCompatImageButton button = new AppCompatImageButton(this);
         button.setImageResource(icon);
-        button.setColorFilter(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        button.setColorFilter(WHITE);
         button.setContentDescription(description);
         button.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
         button.setPadding(dp(14), dp(14), dp(14), dp(14));
