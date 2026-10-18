@@ -5,6 +5,7 @@ import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -231,15 +232,26 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
     }
 
     private Button button(String label, boolean primary) {
-        Button button = new Button(this);
+        com.google.android.material.button.MaterialButton button =
+                new com.google.android.material.button.MaterialButton(this);
         button.setText(label);
-        button.setTextSize(16);
+        button.setTextSize(13);
         button.setAllCaps(false);
-        button.setTextColor(primary ? PURPLE : WHITE);
-        button.setPadding(dp(10), dp(4), dp(10), dp(4));
-        button.setBackground(buttonDrawable(primary, false));
+        button.setMinHeight(dp(44));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setCornerRadius(dp(22));
+        int surface = colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF292929);
+        int primaryColor = colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE);
+        int onPrimary = colorAttr(com.google.android.material.R.attr.colorOnPrimary, Color.WHITE);
+        int onSurface = colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE);
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary ? primaryColor : surface));
+        button.setTextColor(primary ? onPrimary : onSurface);
+        button.setStrokeWidth(dp(1));
+        button.setStrokeColor(android.content.res.ColorStateList.valueOf(
+                colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF666666)));
         button.setFocusable(true);
-        button.setOnFocusChangeListener((v, focused) -> v.setBackground(buttonDrawable(primary, focused)));
+        button.setOnFocusChangeListener((view, focused) -> button.setStrokeWidth(dp(focused ? 2 : 1)));
         return button;
     }
 
@@ -267,6 +279,18 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         drawable.setColor(0x55303F24);
         drawable.setStroke(dp(1), 0x55FFFFFF);
         return drawable;
+    }
+
+    private int colorAttr(int attribute, int fallback) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        if (!getTheme().resolveAttribute(attribute, value, true)) return fallback;
+        if (value.resourceId != 0) {
+            try {
+                return androidx.core.content.ContextCompat.getColor(this, value.resourceId);
+            } catch (Exception ignored) {
+            }
+        }
+        return value.data != 0 ? value.data : fallback;
     }
 
     private int dp(int value) {
