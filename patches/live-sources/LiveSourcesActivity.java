@@ -250,7 +250,7 @@ public final class LiveSourcesActivity extends BaseActivity {
             firstParams.topMargin = dp(12);
             content.addView(firstActions, firstParams);
 
-            Button pass = button("密碼分組", false);
+            Button pass = button("自動重新整理", false);
             pass.setTextSize(13);
             pass.setMinHeight(dp(42));
             pass.setOnClickListener(v -> {
