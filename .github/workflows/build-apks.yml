@@ -26,7 +26,7 @@ concurrency:
   # Keep the build queue isolated by ref so an orphaned runner on a prior
   # workflow revision cannot block repaired builds indefinitely.
   group: r15tv-public-build-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 env:
   SOURCE_REPOSITORY: FongMi/TV
