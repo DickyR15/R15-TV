@@ -26,7 +26,6 @@ import com.fongmi.android.tv.impl.ConfigListener;
 import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
-import com.fongmi.android.tv.ui.dialog.ConfigDialog;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
 import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.Notify;
@@ -81,7 +80,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         addCard(body, "點播來源", VodConfig.getDesc(),
                 new String[]{"設定點播來源", "首頁／站源", "播放紀錄"},
                 new Runnable[]{
-                        () -> ConfigDialog.create().vod().show(this),
+                        () -> SettingActivity.start(this),
                         () -> SiteDialog.create().action().show(this),
                         () -> HistoryDialog.create().vod().show(this)
                 });
@@ -89,7 +88,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         addCard(body, "桌布來源", WallConfig.getDesc(),
                 new String[]{"設定桌布來源", "切換桌布", "重新整理桌布"},
                 new Runnable[]{
-                        () -> ConfigDialog.create().wall().show(this),
+                        () -> SettingActivity.start(this),
                         this::setWallDefault,
                         this::setWallRefresh
                 });
