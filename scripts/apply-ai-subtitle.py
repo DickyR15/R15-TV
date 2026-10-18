@@ -122,24 +122,20 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # In the upstream layout the VOD, live and wallpaper rows are siblings
-    # within the top-level vertical LinearLayoutCompat. Find that real container
-    # by requiring a vertical orientation and direct child rows for each ID.
+    # Find the container which directly owns the VOD, live and wallpaper rows.
     candidates = []
     for node in root.iter():
         if node.tag.rsplit("}", 1)[-1] != "LinearLayoutCompat":
             continue
-        if node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") != "vertical":
-            continue
-        direct_ids = {
-            desc.attrib.get(aid)
-            for child in list(node)
-            for desc in child.iter()
-            if desc.attrib.get(aid)
-        }
-        if all(f"@+id/{target}" in direct_ids for target in ("vod", "live", "wall")):
+        direct_child_ids = set()
+        for child in list(node):
+            for desc in child.iter():
+                value = desc.attrib.get(aid)
+                if value:
+                    direct_child_ids.add(value)
+        if all(f"@+id/{target}" in direct_child_ids for target in ("vod", "live", "wall")):
             candidates.append(node)
-    container = candidates[0] if candidates else None
+    container = min(candidates, key=lambda node: sum(1 for _ in node.iter())) if candidates else None
     if container is None:
         raise SystemExit("Could not find settings content container holding the VOD/live/wall rows.")
 
