@@ -151,7 +151,7 @@ public final class LiveSourcesActivity extends BaseActivity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setPadding(dp(20), dp(16), dp(20), 0);
-        TextView title = text("直播配置", 24, colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        TextView title = text("直播配置", 24, colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
         Button add = button("新增直播源", true);
@@ -170,7 +170,7 @@ public final class LiveSourcesActivity extends BaseActivity {
 
         if (sources.isEmpty()) {
             TextView empty = text("尚未新增直播源，點擊「新增直播源」開始配置", 16,
-                    colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+                    colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
             empty.setGravity(Gravity.CENTER);
             empty.setPadding(dp(24), dp(40), dp(24), dp(40));
             body.addView(empty, new LinearLayout.LayoutParams(-1, 0, 1f));
@@ -184,8 +184,8 @@ public final class LiveSourcesActivity extends BaseActivity {
             boolean current = source.url.equals(activeUrl);
             com.google.android.material.card.MaterialCardView card =
                     new com.google.android.material.card.MaterialCardView(this);
-            card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
-            card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
+            card.setCardBackgroundColor(colorAttr(com.fongmi.android.tv.R.attr.colorSurfaceContainer, 0xFF242424));
+            card.setStrokeColor(colorAttr(com.fongmi.android.tv.R.attr.colorOutlineVariant, 0xFF555555));
             card.setStrokeWidth(dp(1));
             card.setRadius(dp(18));
             card.setCardElevation(0);
@@ -200,23 +200,23 @@ public final class LiveSourcesActivity extends BaseActivity {
             titleRow.setGravity(Gravity.CENTER_VERTICAL);
             titleRow.setOrientation(LinearLayout.HORIZONTAL);
             TextView name = text(TextUtils.isEmpty(source.name) ? "未命名直播源" : source.name, 18,
-                    colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+                    colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
             name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
             name.setMaxLines(1);
             name.setEllipsize(android.text.TextUtils.TruncateAt.END);
             titleRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
             if (current) {
                 TextView badge = text("目前使用", 12,
-                        colorAttr(com.google.android.material.R.attr.colorOnPrimary, WHITE));
+                        colorAttr(com.fongmi.android.tv.R.attr.colorOnPrimary, WHITE));
                 badge.setPadding(dp(10), dp(4), dp(10), dp(4));
                 badge.setBackground(roundDrawable(
-                        colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE), dp(16)));
+                        colorAttr(com.fongmi.android.tv.R.attr.colorPrimary, PURPLE), dp(16)));
                 titleRow.addView(badge, new LinearLayout.LayoutParams(-2, -2));
             }
             content.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
 
             TextView url = text(source.url, 14,
-                    colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+                    colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
             url.setMaxLines(1);
             url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
             LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
@@ -236,7 +236,7 @@ public final class LiveSourcesActivity extends BaseActivity {
             if (!TextUtils.isEmpty(source.headers) || !TextUtils.isEmpty(source.referer)) summaryText.append(" · 自訂 Header");
             if (summaryText.length() > 0) {
                 TextView summary = text(summaryText.toString(), 13,
-                        colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+                        colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
                 summary.setMaxLines(2);
                 LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(-1, -2);
                 summaryParams.topMargin = dp(4);
@@ -314,7 +314,7 @@ public final class LiveSourcesActivity extends BaseActivity {
         cancel.setOnClickListener(v -> showList());
         header.addView(cancel, new LinearLayout.LayoutParams(dp(92), dp(44)));
         TextView title = text(editingIndex < 0 ? "新增直播源配置" : "編輯直播源配置", 24,
-                colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         title.setGravity(Gravity.CENTER);
         title.setMaxLines(1);
         title.setEllipsize(android.text.TextUtils.TruncateAt.END);
@@ -347,7 +347,7 @@ public final class LiveSourcesActivity extends BaseActivity {
 
         autoSortSwitch = new com.google.android.material.materialswitch.MaterialSwitch(this);
         autoSortSwitch.setText("自動重新整理配置");
-        autoSortSwitch.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        autoSortSwitch.setTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         autoSortSwitch.setTextSize(16);
         autoSortSwitch.setChecked(editingSource.autoSort);
         autoSortSwitch.setPadding(0, dp(8), 0, dp(8));
@@ -363,7 +363,7 @@ public final class LiveSourcesActivity extends BaseActivity {
         body.addView(interval, intervalParams);
 
         View divider = new View(this);
-        divider.setBackgroundColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0x66555555));
+        divider.setBackgroundColor(colorAttr(com.fongmi.android.tv.R.attr.colorOutlineVariant, 0x66555555));
         body.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
 
         Button advanced = button("進階  ﹀", false);
@@ -404,13 +404,13 @@ public final class LiveSourcesActivity extends BaseActivity {
         content.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
 
         TextView address = text(Server.get().getAddress(), 14,
-                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
         address.setGravity(Gravity.CENTER);
         address.setPadding(0, dp(10), 0, dp(8));
         content.addView(address, new LinearLayout.LayoutParams(-1, -2));
 
         TextView message = text("手機掃描後，在「配置」頁面輸入直播源名稱與網址並推送；回到電視後會自動填入，再按儲存。",
-                14, colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+                14, colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         message.setGravity(Gravity.CENTER);
         content.addView(message, new LinearLayout.LayoutParams(-1, -2));
 
@@ -426,17 +426,17 @@ public final class LiveSourcesActivity extends BaseActivity {
                 new com.google.android.material.textfield.TextInputLayout(this);
         field.setHint(label);
         field.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
-        field.setBoxStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF888888));
+        field.setBoxStrokeColor(colorAttr(com.fongmi.android.tv.R.attr.colorOutline, 0xFF888888));
         field.setBoxStrokeWidth(dp(1));
         field.setBoxStrokeWidthFocused(dp(2));
         field.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
         field.setDefaultHintTextColor(android.content.res.ColorStateList.valueOf(
-                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
         field.setPlaceholderText(hint);
         field.setHelperText("按確認鍵可直接輸入，也可以在 " + Server.get().getAddress()
                 + " 的「配置」頁面推送");
         field.setHelperTextTextColor(android.content.res.ColorStateList.valueOf(
-                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
 
         com.google.android.material.textfield.TextInputEditText input =
                 new com.google.android.material.textfield.TextInputEditText(this);
@@ -444,8 +444,8 @@ public final class LiveSourcesActivity extends BaseActivity {
         input.setMinLines(multiline ? 3 : 1);
         input.setMaxLines(multiline ? 5 : 1);
         input.setTextSize(18);
-        input.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
-        input.setHintTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+        input.setTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
+        input.setHintTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
         input.setText(safe(initial));
         input.setSelectAllOnFocus(false);
         input.setInputType(multiline
@@ -622,15 +622,15 @@ public final class LiveSourcesActivity extends BaseActivity {
         button.setInsetTop(0);
         button.setInsetBottom(0);
         button.setCornerRadius(dp(22));
-        int surface = colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF292929);
-        int primaryColor = colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE);
-        int onPrimary = colorAttr(com.google.android.material.R.attr.colorOnPrimary, Color.WHITE);
-        int onSurface = colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE);
+        int surface = colorAttr(com.fongmi.android.tv.R.attr.colorSurfaceContainer, 0xFF292929);
+        int primaryColor = colorAttr(com.fongmi.android.tv.R.attr.colorPrimary, PURPLE);
+        int onPrimary = colorAttr(com.fongmi.android.tv.R.attr.colorOnPrimary, Color.WHITE);
+        int onSurface = colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary ? primaryColor : surface));
         button.setTextColor(primary ? onPrimary : onSurface);
         button.setStrokeWidth(dp(1));
         button.setStrokeColor(android.content.res.ColorStateList.valueOf(
-                colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF666666)));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOutline, 0xFF666666)));
         button.setFocusable(true);
         button.setOnFocusChangeListener((view, focused) -> button.setStrokeWidth(dp(focused ? 2 : 1)));
         return button;
