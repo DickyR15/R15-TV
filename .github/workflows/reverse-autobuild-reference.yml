@@ -53,78 +53,112 @@ jobs:
           root = Path("build/autobuild170")
           resource_root = root / "resources"
           source_root = root / "sources"
-          report = [
+
+          resource_report = [
               "TV-AutoBuild autobuild-170 APK reverse-engineering report",
-              "Reference: official TV-leanback-armeabi-v7a.apk",
+              "Reference APK: official TV-leanback-armeabi-v7a.apk",
               ""
           ]
           manifest = resource_root / "AndroidManifest.xml"
           if manifest.exists():
-              report.append("=== Activities relevant to Live / Config / Settings ===")
+              resource_report.append("=== Activities relevant to Live / Config / Settings ===")
               try:
                   doc = ET.parse(manifest).getroot()
                   android = "{http://schemas.android.com/apk/res/android}"
                   for node in doc.iter():
                       if node.tag.endswith("activity"):
                           name = node.attrib.get(android + "name", "")
-                          if any(k in name.lower() for k in ("live", "config", "setting", "wall", "vod")):
-                              report.append(f"{name} | label={node.attrib.get(android + 'label', '')}")
+                          if any(k in name.lower() for k in ("live", "config", "setting", "wall", "vod", "media")):
+                              resource_report.append(f"{name} | label={node.attrib.get(android + 'label', '')}")
               except Exception as exc:
-                  report.append(f"Manifest parse warning: {exc}")
-              report.append("")
+                  resource_report.append(f"Manifest parse warning: {exc}")
+              resource_report.append("")
 
-          report.append("=== Relevant XML layouts ===")
-          layouts = sorted((resource_root / "res").glob("layout*/*.xml"))
-          for path in layouts:
-              if not any(k in path.name.lower() for k in ("live", "config", "setting", "source", "wall", "vod")):
+          resource_report.append("=== Exact target XML layouts ===")
+          layout_names = (
+              "activity_setting.xml",
+              "activity_live_config.xml",
+              "activity_live_config_edit.xml",
+              "activity_media_config.xml",
+              "adapter_live_config_source.xml",
+              "dialog_config.xml"
+          )
+          for name in layout_names:
+              matches = sorted(resource_root.rglob(name))
+              for path in matches:
+                  lines = path.read_text(errors="replace").splitlines()
+                  resource_report.append(f"--- {path.relative_to(resource_root)} ({len(lines)} lines) ---")
+                  resource_report.extend(lines[:220])
+                  if len(lines) > 220:
+                      resource_report.append(f"... omitted {len(lines)-220} lines")
+                  resource_report.append("")
+
+          resource_report.append("=== Original Taiwan-Chinese strings for Live / Media settings and phone push ===")
+          for path in sorted(resource_root.rglob("strings.xml")):
+              if not any(k in str(path).lower() for k in ("zh-rtw", "values/strings")):
                   continue
-              lines = path.read_text(errors="replace").splitlines()
-              report.append(f"--- {path.relative_to(resource_root)} ({len(lines)} lines) ---")
-              report.extend(lines[:180])
-              if len(lines) > 180:
-                  report.append(f"... omitted {len(lines)-180} lines")
-              report.append("")
+              for line in path.read_text(errors="replace").splitlines():
+                  if any(k in line.lower() for k in (
+                      "live_config_", "setting_live", "setting_media_config",
+                      "setting_vod", "setting_wall", "push_info", "setting_promotion"
+                  )):
+                      resource_report.append(f"{path.relative_to(resource_root)}: {line.strip()}")
+          resource_report.append("")
 
-          terms = (
-              "Server.get().getAddress", "QRCode.getBitmap", "ServerEvent.setting",
-              "自動重新整理配置", "新增直播源配置", "直播配置", "節目表位址",
-              "push_info", "LiveSourcesActivity", "ConfigDialog", "vodAndWall",
-              "User-Agent", "Referer"
+          focus_names = {
+              "liveconfigactivity.java", "liveconfigeditactivity.java",
+              "mediaconfigactivity.java", "settingactivity.java",
+              "action.java", "serverevent.java", "server.java",
+              "nano.java", "qrcode.java", "pushactivity.java",
+              "configdialog.java"
+          }
+          focus_terms = (
+              "LiveConfigActivity", "LiveConfigEditActivity", "MediaConfigActivity",
+              "setting_media_config", "live_config_remote_helper",
+              "ServerEvent.setting", "Server.get().getAddress",
+              "QRCode.getBitmap", "/action?do=setting"
           )
           candidates = []
           for path in sorted(source_root.rglob("*.java")):
               body = path.read_text(errors="replace")
-              hits = [term for term in terms if term.lower() in body.lower()]
-              named = any(term in path.name.lower() for term in ("live", "configdialog", "settingactivity", "qrcode", "serverevent", "vodwall"))
-              if hits or named:
+              hits = [term for term in focus_terms if term.lower() in body.lower()]
+              if path.name.lower() in focus_names or hits:
                   candidates.append((path, body, hits))
-          report.append("=== Candidate decompiled classes ===")
+
+          source_report = ["=== Decompiled source candidates (JADX may skip unsupported third-party classes) ==="]
           for path, body, hits in candidates:
-              report.append(f"{path.relative_to(source_root)} | hits={', '.join(hits) if hits else '(filename match)'}")
-          report.append("")
-          report.append("=== Candidate class code ===")
+              source_report.append(f"{path.relative_to(source_root)} | hits={', '.join(hits) if hits else '(target class name)'}")
+          source_report.append("")
+          source_report.append("=== Decompiled source for target classes ===")
           for path, body, hits in candidates:
               lines = body.splitlines()
-              report.append(f"--- {path.relative_to(source_root)} ({len(lines)} lines) ---")
-              if len(lines) <= 700:
-                  report.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
+              source_report.append(f"--- {path.relative_to(source_root)} ({len(lines)} lines) ---")
+              if len(lines) <= 520:
+                  source_report.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
               else:
-                  indexes = [i for i, line in enumerate(lines) if any(t.lower() in line.lower() for t in terms)]
+                  anchors = [i for i, line in enumerate(lines) if any(term.lower() in line.lower() for term in focus_terms)]
                   ranges = []
-                  for i in indexes:
-                      lo, hi = max(0, i-35), min(len(lines), i+70)
+                  for i in anchors:
+                      lo, hi = max(0, i-30), min(len(lines), i+65)
                       if ranges and lo <= ranges[-1][1]:
                           ranges[-1] = (ranges[-1][0], max(ranges[-1][1], hi))
                       else:
                           ranges.append((lo, hi))
-                  for lo, hi in ranges[:10]:
-                      report.extend(f"{i+1}: {lines[i]}" for i in range(lo, hi))
-              report.append("")
-          full = "\\n".join(report)
-          (root / "reverse-engineering-report.txt").write_text(full, encoding="utf-8")
-          print("=== AUTOBUILD170_REPORT_BEGIN ===")
-          print(full[:60000])
-          print("=== AUTOBUILD170_REPORT_END ===")
+                  for lo, hi in ranges[:8]:
+                      source_report.extend(f"{i+1}: {lines[i]}" for i in range(lo, hi))
+              source_report.append("")
+
+          resource_text = "\\n".join(resource_report)
+          source_text = "\\n".join(source_report)
+          (root / "reverse-engineering-report.txt").write_text(
+              resource_text + "\\n\\n" + source_text, encoding="utf-8"
+          )
+          print("=== AUTOBUILD170_RESOURCE_REPORT_BEGIN ===")
+          print(resource_text[:36000])
+          print("=== AUTOBUILD170_RESOURCE_REPORT_END ===")
+          print("=== AUTOBUILD170_SOURCE_REPORT_BEGIN ===")
+          print(source_text[:48000])
+          print("=== AUTOBUILD170_SOURCE_REPORT_END ===")
           PY
 
       - name: Upload decompilation report
