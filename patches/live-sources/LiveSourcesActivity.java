@@ -252,15 +252,8 @@ public final class LiveSourcesActivity extends BaseActivity {
             firstParams.topMargin = dp(12);
             content.addView(firstActions, firstParams);
 
-            Button pass = button("自動重新整理", false);
-            pass.setTextSize(13);
-            pass.setMinHeight(dp(42));
-            pass.setOnClickListener(v -> {
-                source.autoSort = !source.autoSort;
-                saveSources();
-                showList();
-            });
-            firstActions.addView(pass, new LinearLayout.LayoutParams(-2, dp(42)));
+            // Auto-refresh belongs in the source editor; do not duplicate it as a
+            // separate button on every source card.
             firstActions.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
             Button use = button(current ? "目前使用" : "啟用", false);
             use.setOnClickListener(v -> activate(source));
@@ -456,7 +449,6 @@ public final class LiveSourcesActivity extends BaseActivity {
         field.setBoxStrokeWidthFocused(dp(2));
         field.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
         field.setPlaceholderText(hint);
-        field.setHelperText("手機遠端輸入：" + Server.get().getAddress());
 
         com.google.android.material.textfield.TextInputEditText input =
                 new com.google.android.material.textfield.TextInputEditText(this);
