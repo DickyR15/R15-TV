@@ -77,7 +77,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
 
         addMediaCard(body, "點播", VodConfig.getDesc(), "設定來源", "首頁／站源", "播放紀錄",
                 () -> editConfig(0),
-                () -> com.fongmi.android.tv.ui.dialog.SiteDialog.create().action().show(this),
+                () -> Toast.makeText(this, "請返回主設定頁選擇站源，或先設定點播來源", Toast.LENGTH_LONG).show(),
                 () -> HistoryDialog.create().vod().show(this), true);
 
         addMediaCard(body, "桌布", WallConfig.getDesc(), "設定來源", "切換桌布", "重新整理",
