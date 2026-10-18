@@ -121,20 +121,16 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # In upstream's structure the settings column is the vertical LinearLayoutCompat
-    # directly under NestedScrollView, which also contains the VOD and live rows.
-    scroll = root
-    settings_column = next((node for node in scroll.iter()
+    # Find the shallowest LinearLayoutCompat that contains all three
+    # settings IDs. Avoid depending on orientation/attributes that localization
+    # tools may rewrite while preserving the layout's semantic structure.
+    candidates = [
+        node for node in root.iter()
         if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
-        and node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "vertical"
-        and any(desc.attrib.get(aid) == "@+id/vod" for desc in node.iter())
-        and any(child.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat" for child in list(node))), None)
-    if settings_column is None:
-        # Less restrictive fallback: find the vertical container that contains all three IDs.
-        settings_column = next((node for node in root.iter()
-            if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
-            and node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "vertical"
-            and all(any(desc.attrib.get(aid) == f"@+id/{x}" for desc in node.iter()) for x in ("vod","live","wall"))), None)
+        and all(any(desc.attrib.get(aid) == f"@+id/{target}" for desc in node.iter())
+                for target in ("vod", "live", "wall"))
+    ]
+    settings_column = min(candidates, key=lambda node: sum(1 for _ in node.iter())) if candidates else None
     if settings_column is None:
         raise SystemExit("Could not find settings content container.")
 
