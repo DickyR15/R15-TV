@@ -110,72 +110,82 @@ def patch_tv_settings_activity(path: Path) -> None:
 
 
 def patch_live_settings_layout(tv: Path) -> None:
-    """Group VOD and wallpaper setup in one row, without moving their action shortcuts."""
-    layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
-    for resource in (layout,):
-        if not resource.is_file():
-            raise SystemExit(f"Missing Leanback layout: {resource}")
+    """Put VOD and wallpaper entries on one row while preserving all action IDs."""
     import xml.etree.ElementTree as ET
+
+    layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
+    if not layout.is_file():
+        raise SystemExit(f"Missing Leanback layout: {layout}")
+
+    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    ET.register_namespace("tools", "http://schemas.android.com/tools")
     tree = ET.parse(layout)
     root = tree.getroot()
-    # Locate direct rows by the descendant IDs that belong to each row.
-    direct_rows = list(root.find(".//androidx.appcompat.widget.LinearLayoutCompat"))
-    def find_row(target_id: str):
-        for row in direct_rows:
-            if row.find(f".//*[@android:id='@+id/{target_id}']", {"android":"http://schemas.android.com/apk/res/android"}) is not None:
-                return row
-            if any(el.attrib.get("{http://schemas.android.com/apk/res/android}id") == f"@+id/{target_id}" for el in row.iter()):
+    android_id = "{http://schemas.android.com/apk/res/android}id"
+
+    # The NestedScrollView directly contains the vertical settings container.
+    container = root.find(".//androidx.appcompat.widget.LinearLayoutCompat")
+    if container is None:
+        raise SystemExit("Could not find settings content container.")
+    rows = list(container)
+
+    def row_for(target_id: str):
+        for row in rows:
+            if any(node.attrib.get(android_id) == f"@+id/{target_id}" for node in row.iter()):
                 return row
         return None
-    vod_row = find_row("vod")
-    live_row = find_row("live")
-    wall_row = find_row("wall")
+
+    vod_row = row_for("vod")
+    live_row = row_for("live")
+    wall_row = row_for("wall")
     if vod_row is None or live_row is None or wall_row is None:
         raise SystemExit("Could not find VOD/live/wall setting rows.")
+    # Only combine the rows; leave the actual VOD/wall clickable elements and
+    # their shortcut children untouched. This keeps view-binding IDs and actions.
     if vod_row is not wall_row:
-        # Keep child order as in the reference concept: VOD and wallpaper controls
-        # share one horizontal row. The original clickable containers and shortcut
-        # IDs are retained, so all existing operations still work.
-        vod_row.append(wall_row)
-        parent_map = {child: parent for parent in root.iter() for child in parent}
-        wall_parent = parent_map.get(wall_row)
-        if wall_parent is not None:
-            wall_parent.remove(wall_row)
-        vod_row.set("android:layout_marginTop", "0dp")
-        vod_row.set("android:layout_height", "wrap_content")
-        ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
-        ET.register_namespace("tools", "http://schemas.android.com/tools")
+        vod_index = rows.index(vod_row)
+        wall_index = rows.index(wall_row)
+        vod_row.set(android_id, None) if android_id in vod_row.attrib else None
+        for child in list(wall_row):
+            vod_row.append(child)
+        container.remove(wall_row)
+        # A horizontal container may now contain both clickable VOD and wall
+        # entries; preserve a consistent row layout for the remote-control UI.
+        vod_row.set("{http://schemas.android.com/apk/res/android}orientation", "horizontal")
+        vod_row.set("{http://schemas.android.com/apk/res/android}gravity", "center_vertical")
+        vod_row.set("{http://schemas.android.com/apk/res/android}layout_height", "wrap_content")
         ET.indent(tree, space="    ")
         tree.write(layout, encoding="utf-8", xml_declaration=True)
 
-    # Label the live configuration entry in Taiwan Traditional Chinese.
-    strings_tw = tv / "app/src/leanback/res/values-zh-rTW/strings.xml"
-    strings_cn = tv / "app/src/leanback/res/values-zh-rCN/strings.xml"
-    strings_en = tv / "app/src/leanback/res/values/strings.xml"
-    for resource, value in (
-        (strings_tw, "直播配置"),
-        (strings_cn, "直播配置"),
-        (strings_en, "Live configuration"),
-    ):
+    # Use a dedicated resource label rather than changing the click handler.
+    labels = (
+        (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播配置"),
+        (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播配置"),
+        (tv / "app/src/leanback/res/values/strings.xml", "Live configuration"),
+    )
+    for resource, label in labels:
         if not resource.exists():
             continue
-        tree = ET.parse(resource)
-        rroot = tree.getroot()
-        existing = next((el for el in list(rroot) if el.tag.rsplit("}", 1)[-1] == "string" and el.attrib.get("name") == "setting_live_sources"), None)
-        if existing is None:
-            existing = ET.SubElement(rroot, "string", {"name": "setting_live_sources"})
-        existing.clear()
-        existing.set("name", "setting_live_sources")
-        existing.text = value
+        string_tree = ET.parse(resource)
+        string_root = string_tree.getroot()
+        element = next((item for item in list(string_root)
+                        if item.tag.rsplit("}", 1)[-1] == "string"
+                        and item.attrib.get("name") == "setting_live_sources"), None)
+        if element is None:
+            element = ET.SubElement(string_root, "string", {"name": "setting_live_sources"})
+        for child in list(element):
+            element.remove(child)
+        element.text = label
         ET.register_namespace("xliff", "urn:oasis:names:tc:xliff:document:1.2")
-        ET.indent(tree, space="    ")
-        tree.write(resource, encoding="utf-8", xml_declaration=True)
-    layout_text = layout.read_text(encoding="utf-8")
-    if 'android:id="@+id/live"' not in layout_text:
+        ET.indent(string_tree, space="    ")
+        string_tree.write(resource, encoding="utf-8", xml_declaration=True)
+
+    xml = layout.read_text(encoding="utf-8")
+    if 'android:id="@+id/live"' not in xml:
         raise SystemExit("Live setting entry was lost.")
-    if 'android:text="@string/setting_live_sources"' not in layout_text:
-        layout_text = layout_text.replace('android:text="@string/setting_live"', 'android:text="@string/setting_live_sources"', 1)
-        layout.write_text(layout_text, encoding="utf-8")
+    if 'android:text="@string/setting_live_sources"' not in xml:
+        xml = xml.replace('android:text="@string/setting_live"', 'android:text="@string/setting_live_sources"', 1)
+        layout.write_text(xml, encoding="utf-8")
 
 
 
