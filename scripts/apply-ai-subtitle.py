@@ -122,21 +122,34 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # Locate the existing vertical settings column by checking its subtree
-    # (the rows themselves may be nested in layout wrappers).
-    container = next((
-        node for node in root.iter()
-        if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
-        and node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "vertical"
-        and all(any(desc.attrib.get(aid) == f"@+id/{target}" for desc in node.iter())
-                for target in ("vod", "live", "wall"))
-    ), None)
+    # The upstream activity_setting layout contains rows inside wrappers, so
+    # locate each row by its own ID first, then find their nearest shared parent.
+    rows = {}
+    for target in ("vod", "live", "wall"):
+        found = next((node for node in root.iter()
+                      if node.attrib.get(aid) == f"@+id/{target}"), None)
+        if found is None:
+            raise SystemExit(f"Could not find @{target} in settings layout.")
+        rows[target] = found
+
+    parents = {child: parent for parent in root.iter() for child in parent}
+    ancestors = []
+    current = rows["vod"]
+    while current in parents:
+        current = parents[current]
+        ancestors.append(current)
+    container = next((node for node in ancestors
+        if all(node is rows[target] or any(desc is rows[target] for desc in node.iter())
+               for target in ("vod", "live", "wall"))
+        and node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"), None)
     if container is None:
-        raise SystemExit("Could not find settings content container holding the VOD/live/wall rows.")
+        raise SystemExit("Could not find a common settings container for VOD/live/wall.")
 
     def direct_row(target_id: str):
-        return next((child for child in list(container)
-                     if any(desc.attrib.get(aid) == f"@+id/{target_id}" for desc in child.iter())), None)
+        child = rows[target_id]
+        while parents.get(child) is not container and child in parents:
+            child = parents[child]
+        return child if parents.get(child) is container else None
 
     vod_row, wall_row = direct_row("vod"), direct_row("wall")
     if vod_row is None or wall_row is None:
