@@ -387,6 +387,25 @@ public final class LiveSourcesActivity extends BaseActivity {
         addField(advancedFields, "自訂 Header", "Header-Name=HeaderValue，多個請換行輸入", "headers", editingSource.headers, true);
     }
 
+    private Bitmap createQrBitmap(String content, int sizeDp) {
+        try {
+            int size = dp(sizeDp);
+            Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
+            hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
+            hints.put(EncodeHintType.MARGIN, 1);
+            BitMatrix matrix = new MultiFormatWriter().encode(content, BarcodeFormat.QR_CODE, size, size, hints);
+            Bitmap bitmap = Bitmap.createBitmap(matrix.getWidth(), matrix.getHeight(), Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < matrix.getHeight(); y++) {
+                for (int x = 0; x < matrix.getWidth(); x++) {
+                    bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+                }
+            }
+            return bitmap;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
     private void showPhoneQrDialog() {
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
@@ -398,7 +417,7 @@ public final class LiveSourcesActivity extends BaseActivity {
         qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
         qr.setBackgroundColor(Color.WHITE);
         try {
-            qr.setImageBitmap(com.fongmi.android.tv.utils.QRCode.getBitmap(Server.get().getAddress(4), dp(220), 0));
+            qr.setImageBitmap(createQrBitmap(Server.get().getAddress(4), 220));
         } catch (Exception ignored) {
         }
         content.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
