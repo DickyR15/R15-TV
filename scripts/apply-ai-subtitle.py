@@ -110,20 +110,20 @@ def patch_tv_settings_activity(path: Path) -> None:
 
 
 def patch_live_settings_layout(tv: Path) -> None:
-    """Put VOD and wallpaper entries on one row while preserving all action IDs."""
+    """Group VOD and wallpaper entries into a shared section without breaking bindings."""
     import xml.etree.ElementTree as ET
 
     layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
     if not layout.is_file():
         raise SystemExit(f"Missing Leanback layout: {layout}")
-
     ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
     ET.register_namespace("tools", "http://schemas.android.com/tools")
     tree = ET.parse(layout)
     root = tree.getroot()
-    android_id = "{http://schemas.android.com/apk/res/android}id"
-
-    # The NestedScrollView directly contains the vertical settings container.
+    aid = "{http://schemas.android.com/apk/res/android}id"
+    # Avoid risky view-binding changes: put the existing VOD and wall rows inside
+    # a common vertical grouping container. Their own clickable rows and shortcut
+    # ImageViews are preserved, with the live configuration row kept between them.
     container = root.find(".//androidx.appcompat.widget.LinearLayoutCompat")
     if container is None:
         raise SystemExit("Could not find settings content container.")
@@ -131,32 +131,40 @@ def patch_live_settings_layout(tv: Path) -> None:
 
     def row_for(target_id: str):
         for row in rows:
-            if any(node.attrib.get(android_id) == f"@+id/{target_id}" for node in row.iter()):
+            if any(node.attrib.get(aid) == f"@+id/{target_id}" for node in row.iter()):
                 return row
         return None
 
-    vod_row = row_for("vod")
-    live_row = row_for("live")
-    wall_row = row_for("wall")
+    vod_row, live_row, wall_row = row_for("vod"), row_for("live"), row_for("wall")
     if vod_row is None or live_row is None or wall_row is None:
         raise SystemExit("Could not find VOD/live/wall setting rows.")
-    # Only combine the rows; leave the actual VOD/wall clickable elements and
-    # their shortcut children untouched. This keeps view-binding IDs and actions.
-    if vod_row is not wall_row:
-        vod_index = rows.index(vod_row)
-        wall_index = rows.index(wall_row)
-        for child in list(wall_row):
-            vod_row.append(child)
+
+    # Wrap VOD and wallpaper rows in one shared section directly in the settings
+    # hierarchy; retain both rows internally, since each row has its own actions.
+    if not any(node.attrib.get(aid) == "@+id/vodAndWall" for node in container.iter()):
+        parent_map = {child: parent for parent in root.iter() for child in parent}
+        vod_parent = parent_map.get(vod_row)
+        wall_parent = parent_map.get(wall_row)
+        if vod_parent is not container or wall_parent is not container:
+            raise SystemExit("VOD/wall layout structure differs from expected upstream.")
+        vod_idx, wall_idx = list(container).index(vod_row), list(container).index(wall_row)
+        section = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
+            aid: "@+id/vodAndWall",
+            "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
+            "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
+            "{http://schemas.android.com/apk/res/android}orientation": "vertical",
+        })
+        # Replacing just the VOD row with the wrapper keeps ordering; move the wall
+        # row into the wrapper too. Internal rows keep their IDs for view binding.
+        container.remove(vod_row)
+        container.insert(vod_idx, section)
+        section.append(vod_row)
         container.remove(wall_row)
-        # A horizontal container may now contain both clickable VOD and wall
-        # entries; preserve a consistent row layout for the remote-control UI.
-        vod_row.set("{http://schemas.android.com/apk/res/android}orientation", "horizontal")
-        vod_row.set("{http://schemas.android.com/apk/res/android}gravity", "center_vertical")
-        vod_row.set("{http://schemas.android.com/apk/res/android}layout_height", "wrap_content")
+        section.append(wall_row)
         ET.indent(tree, space="    ")
         tree.write(layout, encoding="utf-8", xml_declaration=True)
 
-    # Use a dedicated resource label rather than changing the click handler.
+    # Add a clear Taiwan Traditional Chinese label for this existing entry.
     labels = (
         (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播配置"),
         (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播配置"),
@@ -165,20 +173,21 @@ def patch_live_settings_layout(tv: Path) -> None:
     for resource, label in labels:
         if not resource.exists():
             continue
-        string_tree = ET.parse(resource)
-        string_root = string_tree.getroot()
-        element = next((item for item in list(string_root)
+        stree = ET.parse(resource)
+        sroot = stree.getroot()
+        element = next((item for item in list(sroot)
                         if item.tag.rsplit("}", 1)[-1] == "string"
                         and item.attrib.get("name") == "setting_live_sources"), None)
         if element is None:
-            element = ET.SubElement(string_root, "string", {"name": "setting_live_sources"})
+            element = ET.SubElement(sroot, "string", {"name": "setting_live_sources"})
         for child in list(element):
             element.remove(child)
         element.text = label
         ET.register_namespace("xliff", "urn:oasis:names:tc:xliff:document:1.2")
-        ET.indent(string_tree, space="    ")
-        string_tree.write(resource, encoding="utf-8", xml_declaration=True)
+        ET.indent(stree, space="    ")
+        stree.write(resource, encoding="utf-8", xml_declaration=True)
 
+    # Change only the label value, preserving its original click action.
     xml = layout.read_text(encoding="utf-8")
     if 'android:id="@+id/live"' not in xml:
         raise SystemExit("Live setting entry was lost.")
