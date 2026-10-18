@@ -142,22 +142,37 @@ public final class LiveSourcesActivity extends BaseActivity {
 
     private void showList() {
         editing = false;
+        fields.clear();
         root.removeAllViews();
-        root.addView(makeHeader("直播配置", "新增直播源", this::newSource), new LinearLayout.LayoutParams(-1, dp(60)));
+        root.setPadding(0, 0, 0, dp(16));
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(20), dp(16), dp(20), 0);
+        TextView title = text("直播配置", 24, colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        Button add = button("新增直播源", true);
+        add.setOnClickListener(v -> newSource());
+        header.addView(add, new LinearLayout.LayoutParams(-2, dp(48)));
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         ScrollView scroll = new ScrollView(this);
         scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(0, dp(20), 0, dp(16));
+        body.setPadding(dp(20), dp(12), dp(20), dp(24));
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
         if (sources.isEmpty()) {
-            TextView empty = text("尚未新增直播源，點擊「新增直播源」開始配置", 20, WHITE);
+            TextView empty = text("尚未新增直播源，點擊「新增直播源」開始配置", 16,
+                    colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
             empty.setGravity(Gravity.CENTER);
-            empty.setPadding(dp(20), dp(60), dp(20), dp(60));
-            body.addView(empty, new LinearLayout.LayoutParams(-1, -2));
+            empty.setPadding(dp(24), dp(40), dp(24), dp(40));
+            body.addView(empty, new LinearLayout.LayoutParams(-1, 0, 1f));
             return;
         }
 
@@ -165,50 +180,106 @@ public final class LiveSourcesActivity extends BaseActivity {
         for (int i = 0; i < sources.size(); i++) {
             final int index = i;
             Source source = sources.get(i);
-            LinearLayout card = new LinearLayout(this);
-            card.setOrientation(LinearLayout.VERTICAL);
-            card.setPadding(dp(18), dp(14), dp(18), dp(14));
-            card.setBackground(cardDrawable(false));
-            card.setFocusable(true);
-            card.setClickable(true);
-            card.setOnFocusChangeListener((v, focused) -> v.setBackground(cardDrawable(focused)));
-            card.setOnClickListener(v -> activate(source));
-            TextView title = text(TextUtils.isEmpty(source.name) ? "未命名直播源" : source.name, 21, WHITE);
-            title.setFocusable(false);
-            card.addView(title, new LinearLayout.LayoutParams(-1, -2));
-            TextView url = text(source.url, 15, 0xFFEAEAEA);
-            url.setFocusable(false);
-            url.setPadding(0, dp(6), 0, 0);
-            card.addView(url, new LinearLayout.LayoutParams(-1, -2));
-            if (!TextUtils.isEmpty(source.epg)) {
-                TextView epg = text("節目表：" + source.epg, 14, 0xFFD7D7D7);
-                epg.setFocusable(false);
-                epg.setPadding(0, dp(4), 0, 0);
-                card.addView(epg, new LinearLayout.LayoutParams(-1, -2));
+            boolean current = source.url.equals(activeUrl);
+            com.google.android.material.card.MaterialCardView card =
+                    new com.google.android.material.card.MaterialCardView(this);
+            card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
+            card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
+            card.setStrokeWidth(dp(1));
+            card.setRadius(dp(18));
+            card.setCardElevation(0);
+            card.setUseCompatPadding(false);
+
+            LinearLayout content = new LinearLayout(this);
+            content.setOrientation(LinearLayout.VERTICAL);
+            content.setPadding(dp(16), dp(14), dp(16), dp(14));
+            card.addView(content, new com.google.android.material.card.MaterialCardView.LayoutParams(-1, -2));
+
+            LinearLayout titleRow = new LinearLayout(this);
+            titleRow.setGravity(Gravity.CENTER_VERTICAL);
+            titleRow.setOrientation(LinearLayout.HORIZONTAL);
+            TextView name = text(TextUtils.isEmpty(source.name) ? "未命名直播源" : source.name, 18,
+                    colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+            name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
+            name.setMaxLines(1);
+            name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            titleRow.addView(name, new LinearLayout.LayoutParams(0, -2, 1f));
+            if (current) {
+                TextView badge = text("目前使用", 12,
+                        colorAttr(com.google.android.material.R.attr.colorOnPrimary, WHITE));
+                badge.setPadding(dp(10), dp(4), dp(10), dp(4));
+                badge.setBackground(roundDrawable(
+                        colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE), dp(16)));
+                titleRow.addView(badge, new LinearLayout.LayoutParams(-2, -2));
             }
-            if (source.url.equals(activeUrl)) {
-                TextView current = text("目前使用中", 14, 0xFFFFE0A6);
-                current.setPadding(0, dp(4), 0, 0);
-                current.setFocusable(false);
-                card.addView(current, new LinearLayout.LayoutParams(-1, -2));
+            content.addView(titleRow, new LinearLayout.LayoutParams(-1, -2));
+
+            TextView url = text(source.url, 14,
+                    colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+            url.setMaxLines(1);
+            url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
+            urlParams.topMargin = dp(6);
+            content.addView(url, urlParams);
+
+            StringBuilder summaryText = new StringBuilder();
+            if (!TextUtils.isEmpty(source.epg)) summaryText.append("EPG");
+            if (source.autoSort) {
+                if (summaryText.length() > 0) summaryText.append(" · ");
+                summaryText.append("自動重新整理 ").append(source.refreshHours).append(" 小時");
+            } else {
+                if (summaryText.length() > 0) summaryText.append(" · ");
+                summaryText.append("手動重新整理");
             }
-            LinearLayout actions = new LinearLayout(this);
-            actions.setOrientation(LinearLayout.HORIZONTAL);
-            actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
-            actions.setPadding(0, dp(10), 0, 0);
-            Button use = button("啟用", true);
+            if (!TextUtils.isEmpty(source.userAgent)) summaryText.append(" · 自訂 UA");
+            if (!TextUtils.isEmpty(source.headers) || !TextUtils.isEmpty(source.referer)) summaryText.append(" · 自訂 Header");
+            if (summaryText.length() > 0) {
+                TextView summary = text(summaryText.toString(), 13,
+                        colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+                summary.setMaxLines(2);
+                LinearLayout.LayoutParams summaryParams = new LinearLayout.LayoutParams(-1, -2);
+                summaryParams.topMargin = dp(4);
+                content.addView(summary, summaryParams);
+            }
+
+            LinearLayout firstActions = new LinearLayout(this);
+            firstActions.setOrientation(LinearLayout.HORIZONTAL);
+            firstActions.setGravity(Gravity.CENTER_VERTICAL);
+            LinearLayout.LayoutParams firstParams = new LinearLayout.LayoutParams(-1, -2);
+            firstParams.topMargin = dp(12);
+            content.addView(firstActions, firstParams);
+
+            Button pass = button("密碼分組", false);
+            pass.setTextSize(13);
+            pass.setMinHeight(dp(42));
+            pass.setOnClickListener(v -> {
+                source.autoSort = !source.autoSort;
+                saveSources();
+                showList();
+            });
+            firstActions.addView(pass, new LinearLayout.LayoutParams(-2, dp(42)));
+            firstActions.addView(new View(this), new LinearLayout.LayoutParams(0, 1, 1f));
+            Button use = button(current ? "目前使用" : "啟用", false);
             use.setOnClickListener(v -> activate(source));
+            firstActions.addView(use, new LinearLayout.LayoutParams(-2, dp(42)));
+
+            LinearLayout secondActions = new LinearLayout(this);
+            secondActions.setOrientation(LinearLayout.HORIZONTAL);
+            LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(-1, -2);
+            secondParams.topMargin = dp(8);
+            content.addView(secondActions, secondParams);
             Button edit = button("編輯", false);
             edit.setOnClickListener(v -> editSource(index));
+            secondActions.addView(edit, new LinearLayout.LayoutParams(0, dp(44), 1f));
             Button delete = button("刪除", false);
             delete.setOnClickListener(v -> confirmDelete(index));
-            actions.addView(use, weightParams(0, 48, 1f, dp(8)));
-            actions.addView(edit, weightParams(0, 48, 1f, dp(8)));
-            actions.addView(delete, weightParams(0, 48, 1f, 0));
-            card.addView(actions, new LinearLayout.LayoutParams(-1, -2));
-            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-            cp.bottomMargin = dp(14);
-            body.addView(card, cp);
+            LinearLayout.LayoutParams deleteParams = new LinearLayout.LayoutParams(0, dp(44), 1f);
+            deleteParams.setMarginStart(dp(8));
+            secondActions.addView(delete, deleteParams);
+
+            LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
+            cardParams.bottomMargin = dp(12);
+            body.addView(card, cardParams);
         }
     }
 
