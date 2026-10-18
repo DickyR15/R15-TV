@@ -171,8 +171,9 @@ def patch_live_settings_layout(tv: Path) -> None:
         index = list(container).index(vod_row)
         container.remove(vod_row)
         container.insert(index, group)
-        group.append(vod_row)
         container.remove(wall_row)
+        # Insert the VOD and wallpaper rows inside the shared group once each.
+        group.append(vod_row)
         group.append(wall_row)
         for row, end_margin in ((vod_row, "12dp"), (wall_row, "0dp")):
             row.set("{http://schemas.android.com/apk/res/android}layout_width", "0dp")
