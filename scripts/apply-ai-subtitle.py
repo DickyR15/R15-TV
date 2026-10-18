@@ -348,7 +348,6 @@ def main() -> None:
     patch_tv_settings_activity(tv_settings)
     patch_tv_settings_layout(tv_settings_layout)
     patch_live_settings_layout(tv)
-    patch_live_settings_layout(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
