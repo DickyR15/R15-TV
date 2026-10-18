@@ -108,9 +108,7 @@ jobs:
           focus_names = {
               "liveconfigactivity.java", "liveconfigeditactivity.java",
               "mediaconfigactivity.java", "settingactivity.java",
-              "action.java", "serverevent.java", "server.java",
-              "nano.java", "qrcode.java", "pushactivity.java",
-              "configdialog.java"
+              "pushactivity.java"
           }
           focus_terms = (
               "LiveConfigActivity", "LiveConfigEditActivity", "MediaConfigActivity",
@@ -122,7 +120,7 @@ jobs:
           for path in sorted(source_root.rglob("*.java")):
               body = path.read_text(errors="replace")
               hits = [term for term in focus_terms if term.lower() in body.lower()]
-              if path.name.lower() in focus_names or hits:
+              if path.name.lower() in focus_names:
                   candidates.append((path, body, hits))
 
           source_report = ["=== Decompiled source candidates (JADX may skip unsupported third-party classes) ==="]
@@ -133,7 +131,7 @@ jobs:
           for path, body, hits in candidates:
               lines = body.splitlines()
               source_report.append(f"--- {path.relative_to(source_root)} ({len(lines)} lines) ---")
-              if len(lines) <= 520:
+              if len(lines) <= 750:
                   source_report.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
               else:
                   anchors = [i for i, line in enumerate(lines) if any(term.lower() in line.lower() for term in focus_terms)]
@@ -148,10 +146,10 @@ jobs:
                       source_report.extend(f"{i+1}: {lines[i]}" for i in range(lo, hi))
               source_report.append("")
 
-          resource_text = "\\n".join(resource_report)
-          source_text = "\\n".join(source_report)
+          resource_text = "\n".join(resource_report)
+          source_text = "\n".join(source_report)
           (root / "reverse-engineering-report.txt").write_text(
-              resource_text + "\\n\\n" + source_text, encoding="utf-8"
+              resource_text + "\n\n" + source_text, encoding="utf-8"
           )
           print("=== AUTOBUILD170_RESOURCE_REPORT_BEGIN ===")
           print(resource_text[:36000])
