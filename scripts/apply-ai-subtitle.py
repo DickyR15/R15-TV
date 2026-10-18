@@ -194,7 +194,28 @@ def patch_live_settings_layout(tv: Path) -> None:
         })
         content.insert(list(content).index(live_row) + 1, group)
 
-    # The existing live row is now the first interactive source entry.
+    # Keep the live entry first and ensure the combined VOD/Wall entry is present.
+    group = find_id("vodAndWall")
+    if group is None:
+        group = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
+            android + "id": "@+id/vodAndWall",
+            android + "layout_width": "match_parent",
+            android + "layout_height": "wrap_content",
+            android + "layout_marginTop": "16dp",
+            android + "background": "@drawable/selector_item",
+            android + "focusable": "true",
+            android + "focusableInTouchMode": "true",
+            android + "orientation": "horizontal",
+            android + "padding": "16dp",
+        })
+        label = ET.SubElement(group, "com.google.android.material.textview.MaterialTextView", {
+            android + "layout_width": "match_parent",
+            android + "layout_height": "wrap_content",
+            android + "text": "點播和桌布",
+            android + "textColor": "@color/white",
+            android + "textSize": "18sp",
+        })
+        content.insert(list(content).index(live_row) + 1, group)
     live_row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "8dp")
     ET.indent(tree, space="    ")
     tree.write(layout, encoding="utf-8", xml_declaration=True)
