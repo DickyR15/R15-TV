@@ -27,7 +27,6 @@ import com.fongmi.android.tv.impl.SiteListener;
 import com.fongmi.android.tv.setting.Setting;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.ui.dialog.HistoryDialog;
-import com.fongmi.android.tv.ui.dialog.SiteDialog;
 import com.fongmi.android.tv.utils.Notify;
 import com.fongmi.android.tv.utils.PermissionUtil;
 
@@ -80,15 +79,15 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         addCard(body, "點播來源", VodConfig.getDesc(),
                 new String[]{"設定點播來源", "首頁／站源", "播放紀錄"},
                 new Runnable[]{
-                        () -> SettingActivity.start(this),
-                        () -> SiteDialog.create().action().show(this),
+                        () -> editConfig(0),
+                        () -> Toast.makeText(this, "請先設定點播來源，再返回首頁選擇站源", Toast.LENGTH_LONG).show(),
                         () -> HistoryDialog.create().vod().show(this)
                 });
 
         addCard(body, "桌布來源", WallConfig.getDesc(),
                 new String[]{"設定桌布來源", "切換桌布", "重新整理桌布"},
                 new Runnable[]{
-                        () -> SettingActivity.start(this),
+                        () -> editConfig(2),
                         this::setWallDefault,
                         this::setWallRefresh
                 });
@@ -119,6 +118,37 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
         cp.bottomMargin = dp(16);
         body.addView(card, cp);
+    }
+
+    private void editConfig(int type) {
+        new android.app.AlertDialog.Builder(this)
+                .setTitle(type == 0 ? "設定點播來源" : "設定桌布來源")
+                .setMessage("請輸入來源網址。若要使用檔案或進階來源，請返回主設定頁進行設定。")
+                .setView(createSourceInput())
+                .setNegativeButton("取消", null)
+                .setPositiveButton("儲存", (dialog, which) -> {
+                    android.widget.EditText input = (android.widget.EditText) ((android.app.AlertDialog) dialog).findViewById(android.R.id.edit);
+                    if (input == null) {
+                        Toast.makeText(this, "請從主設定頁設定來源", Toast.LENGTH_SHORT).show();
+                        return;
+                    }
+                    String url = input.getText().toString().trim();
+                    if (url.isEmpty()) return;
+                    Config config = Config.find(url, type);
+                    config.url(url).type(type).save();
+                    load(config);
+                }).show();
+    }
+
+    private android.widget.EditText createSourceInput() {
+        android.widget.EditText input = new android.widget.EditText(this);
+        input.setId(android.R.id.edit);
+        input.setHint("https://");
+        input.setSingleLine(true);
+        input.setTextColor(WHITE);
+        input.setHintTextColor(0xCCFFFFFF);
+        input.setPadding(dp(18), dp(12), dp(18), dp(12));
+        return input;
     }
 
     @Override
