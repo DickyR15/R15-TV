@@ -122,38 +122,24 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # The upstream activity_setting layout contains rows inside wrappers, so
-    # locate each row by its own ID first, then find their nearest shared parent.
+    # The original page intentionally keeps every source as a full-width row.
+    # Group the VOD and wallpaper controls visually as adjacent columns, while
+    # preserving their IDs and click handlers used by SettingActivity.
     rows = {}
-    for target in ("vod", "live", "wall"):
+    for target in ("vod", "wall"):
         found = next((node for node in root.iter()
                       if node.attrib.get(aid) == f"@+id/{target}"), None)
         if found is None:
             raise SystemExit(f"Could not find @{target} in settings layout.")
         rows[target] = found
-
     parents = {child: parent for parent in root.iter() for child in parent}
-    ancestors = []
-    current = rows["vod"]
-    while current in parents:
-        current = parents[current]
-        ancestors.append(current)
-    container = next((node for node in ancestors
-        if all(node is rows[target] or any(desc is rows[target] for desc in node.iter())
-               for target in ("vod", "live", "wall"))
-        and node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"), None)
-    if container is None:
-        raise SystemExit("Could not find a common settings container for VOD/live/wall.")
-
-    def direct_row(target_id: str):
-        child = rows[target_id]
-        while parents.get(child) is not container and child in parents:
-            child = parents[child]
-        return child if parents.get(child) is container else None
-
-    vod_row, wall_row = direct_row("vod"), direct_row("wall")
-    if vod_row is None or wall_row is None:
-        raise SystemExit("Could not find VOD and wallpaper rows.")
+    vod_row, wall_row = rows["vod"], rows["wall"]
+    vod_container, wall_container = parents.get(vod_row), parents.get(wall_row)
+    if vod_container is None or wall_container is None:
+        raise SystemExit("Could not locate VOD/wall setting rows' parents.")
+    if vod_container is not wall_container:
+        raise SystemExit("VOD/wall setting rows are not siblings; refusing unsafe layout rewrite.")
+    container = vod_container
 
     parent_map = {child: parent for parent in root.iter() for child in parent}
     existing_group = next((node for node in container.iter()
