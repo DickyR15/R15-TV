@@ -3,6 +3,7 @@ package com.fongmi.android.tv.ui.activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
@@ -12,6 +13,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.EditText;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.Switch;
@@ -22,15 +24,24 @@ import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.api.config.LiveConfig;
 import com.fongmi.android.tv.bean.Config;
+import com.fongmi.android.tv.event.ServerEvent;
 import com.fongmi.android.tv.impl.Callback;
+import com.fongmi.android.tv.server.Server;
 import com.fongmi.android.tv.ui.base.BaseActivity;
 import com.fongmi.android.tv.utils.Notify;
+import com.google.zxing.BarcodeFormat;
+import com.google.zxing.EncodeHintType;
+import com.google.zxing.MultiFormatWriter;
+import com.google.zxing.common.BitMatrix;
 
+import org.greenrobot.eventbus.Subscribe;
+import org.greenrobot.eventbus.ThreadMode;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.util.ArrayList;
+import java.util.EnumMap;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
@@ -231,6 +242,8 @@ public final class LiveSourcesActivity extends BaseActivity {
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
+        addPhonePushGuide(body);
+
         // Match the reference AutoBuild editor: spacious outlined fields,
         // a full-width refresh row, and a collapsible advanced section.
         addField(body, "直播源名稱", "請輸入直播源名稱（可選）", "name", editingSource.name, false);
@@ -279,6 +292,75 @@ public final class LiveSourcesActivity extends BaseActivity {
         addField(advancedFields, "自訂 Header", "每行一組標頭，例如 Authorization: Bearer …", "headers", editingSource.headers, true);
     }
 
+    private void addPhonePushGuide(LinearLayout body) {
+        LinearLayout guide = new LinearLayout(this);
+        guide.setOrientation(LinearLayout.HORIZONTAL);
+        guide.setGravity(Gravity.CENTER_VERTICAL);
+        guide.setPadding(dp(12), dp(12), dp(12), dp(12));
+        guide.setBackground(cardDrawable(false));
+
+        ImageView qr = new ImageView(this);
+        qr.setContentDescription("手機掃描以開啟直播配置頁");
+        qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
+        qr.setBackgroundColor(Color.WHITE);
+        Bitmap bitmap = createQrBitmap(Server.get().getAddress(4), 132);
+        if (bitmap != null) qr.setImageBitmap(bitmap);
+        guide.addView(qr, new LinearLayout.LayoutParams(dp(132), dp(132)));
+
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        details.setPadding(dp(14), 0, 0, 0);
+        TextView title = text("手機掃描 QR Code", 19, WHITE);
+        details.addView(title, new LinearLayout.LayoutParams(-1, -2));
+        TextView description = text(
+                "掃描後開啟「配置」頁面，再把直播源推送到電視。也可在手機瀏覽器開啟：\n"
+                        + Server.get().getAddress(),
+                14, 0xFFEAEAEA);
+        description.setPadding(0, dp(6), 0, 0);
+        details.addView(description, new LinearLayout.LayoutParams(-1, -2));
+        guide.addView(details, new LinearLayout.LayoutParams(0, -2, 1f));
+
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.bottomMargin = dp(12);
+        body.addView(guide, params);
+    }
+
+    private Bitmap createQrBitmap(String content, int sizeDp) {
+        try {
+            int size = dp(sizeDp);
+            Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
+            hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
+            hints.put(EncodeHintType.MARGIN, 1);
+            BitMatrix matrix = new MultiFormatWriter().encode(
+                    content, BarcodeFormat.QR_CODE, size, size, hints);
+            Bitmap bitmap = Bitmap.createBitmap(matrix.getWidth(), matrix.getHeight(), Bitmap.Config.ARGB_8888);
+            for (int y = 0; y < matrix.getHeight(); y++) {
+                for (int x = 0; x < matrix.getWidth(); x++) {
+                    bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
+                }
+            }
+            return bitmap;
+        } catch (Exception ignored) {
+            return null;
+        }
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onServerEvent(ServerEvent event) {
+        if (!editing || event.type() != ServerEvent.Type.SETTING) return;
+        EditText nameInput = fields.get("name");
+        EditText urlInput = fields.get("url");
+        if (urlInput == null) return;
+
+        if (nameInput != null) {
+            nameInput.setText(safe(event.name()));
+            nameInput.setSelection(nameInput.getText().length());
+        }
+        urlInput.setText(safe(event.text()));
+        urlInput.setSelection(urlInput.getText().length());
+        Toast.makeText(this, "已接收手機推送的直播源，確認後請按儲存", Toast.LENGTH_LONG).show();
+    }
+
     private void addField(LinearLayout container, String label, String hint, String key, String initial, boolean multiline) {
         com.google.android.material.textfield.TextInputLayout field = new com.google.android.material.textfield.TextInputLayout(this);
         field.setHint(label);
@@ -304,7 +386,7 @@ public final class LiveSourcesActivity extends BaseActivity {
         input.setText(safe(initial));
         input.setSelectAllOnFocus(false);
         fields.put(key, input);
-        field.addView(input, new android.view.ViewGroup.LayoutParams(-1, multiline ? dp(82) : dp(54)));
+        field.addView(input, new LinearLayout.LayoutParams(-1, multiline ? dp(82) : dp(54)));
 
         LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-1, -2);
         ip.topMargin = dp(8);
