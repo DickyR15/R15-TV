@@ -109,6 +109,94 @@ def patch_tv_settings_activity(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def patch_live_settings_layout(tv: Path) -> None:
+    """Align the TV settings screen with the AutoBuild-style live-source layout."""
+    layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
+    source = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java"
+    if not layout.is_file() or not source.is_file():
+        raise SystemExit("Missing Leanback settings screen required for the live-source layout patch.")
+
+    xml = layout.read_text(encoding="utf-8")
+    # Put VOD and wallpaper setup on the same horizontal row. Both original IDs,
+    # handlers and binding fields are retained, so existing actions remain intact.
+    vod_start = xml.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/vod"')
+    live_start = xml.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/live"', vod_start)
+    wall_start = xml.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/wall"', live_start)
+    if min(vod_start, live_start, wall_start) < 0:
+        raise SystemExit("Could not find the VOD/live/wall rows in activity_setting.xml.")
+    vod_row_start = xml.rfind('<androidx.appcompat.widget.LinearLayoutCompat', 0, vod_start)
+    wall_row_start = xml.rfind('<androidx.appcompat.widget.LinearLayoutCompat', 0, wall_start)
+    vod_row_end = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', vod_start)
+    vod_row_end = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', vod_row_end + 1) + len('</androidx.appcompat.widget.LinearLayoutCompat>')
+    wall_row_end = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', wall_start)
+    wall_row_end = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', wall_row_end + 1) + len('</androidx.appcompat.widget.LinearLayoutCompat>')
+    if min(vod_row_start, wall_row_start, vod_row_end, wall_row_end) < 0:
+        raise SystemExit("Could not determine complete VOD/wall row boundaries.")
+    vod_row = xml[vod_row_start:vod_row_end]
+    wall_row = xml[wall_row_start:wall_row_end]
+    # Guard against repeat runs after the rows have already been combined.
+    if 'android:id="@+id/vod"' in xml and 'android:id="@+id/wall"' in xml and xml.count('android:id="@+id/wall"') == 1:
+        vod_open = xml.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/vod"')
+        first_row_open = xml.rfind('<androidx.appcompat.widget.LinearLayoutCompat', 0, vod_open)
+        first_row_close = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', vod_open)
+        first_row_close = xml.find('</androidx.appcompat.widget.LinearLayoutCompat>', first_row_close + 1)
+        between = xml[first_row_close:wall_row_start] if first_row_close >= 0 else ""
+        if 'android:id="@+id/wall"' not in between:
+            # Flatten one container level and place the wall control beside VOD.
+            vod_content_start = vod_row.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/vod"')
+            vod_content_end = vod_row.find('</androidx.appcompat.widget.LinearLayoutCompat>', vod_content_start)
+            vod_content_end = vod_row.find('</androidx.appcompat.widget.LinearLayoutCompat>', vod_content_end + 1)
+            wall_content_start = wall_row.find('<androidx.appcompat.widget.LinearLayoutCompat\n                android:id="@+id/wall"')
+            wall_content_end = wall_row.find('</androidx.appcompat.widget.LinearLayoutCompat>', wall_content_start)
+            wall_content_end = wall_row.find('</androidx.appcompat.widget.LinearLayoutCompat>', wall_content_end + 1)
+            if min(vod_content_start, vod_content_end, wall_content_start, wall_content_end) >= 0:
+                vod_item = vod_row[vod_content_start:vod_content_end]
+                wall_item = wall_row[wall_content_start:wall_content_end]
+                vod_item = vod_item.replace('android:layout_marginEnd="16dp"', 'android:layout_marginEnd="16dp"', 1)
+                wall_item = wall_item.replace('android:layout_marginEnd="16dp"', 'android:layout_marginEnd="16dp"', 1)
+                joined = '''<androidx.appcompat.widget.LinearLayoutCompat
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            ''' + vod_item + '''
+
+            ''' + wall_item + '''
+
+        </androidx.appcompat.widget.LinearLayoutCompat>'''
+                # Keep the existing VOD home/history controls and wallpaper shortcut/refresh
+                # controls in their own accessible row, without duplicating binding IDs.
+                xml = xml[:vod_row_start] + joined + xml[vod_row_end:wall_row_start] + xml[wall_row_end:]
+                layout.write_text(xml, encoding="utf-8")
+    # The live row remains the existing single focusable entry but is relabelled
+    # to make clear that it opens the source subscription/configuration screen.
+    xml = layout.read_text(encoding="utf-8")
+    if 'android:id="@+id/live"' not in xml:
+        raise SystemExit("Live settings entry vanished while applying row layout.")
+    live_text = 'android:text="@string/setting_live"'
+    xml = xml.replace(live_text, 'android:text="@string/setting_live_sources"', 1)
+    layout.write_text(xml, encoding="utf-8")
+
+    # Add the Taiwan label in all locale fallbacks. Android can resolve it without
+    # depending on the device's previous locale.
+    for resource in (
+        tv / "app/src/leanback/res/values-zh-rTW/strings.xml",
+        tv / "app/src/leanback/res/values-zh-rCN/strings.xml",
+        tv / "app/src/leanback/res/values/strings.xml",
+    ):
+        if not resource.exists():
+            continue
+        contents = resource.read_text(encoding="utf-8")
+        if 'name="setting_live_sources"' not in contents:
+            value = "直播配置" if "values-zh-" in resource.parent.name else "Live sources"
+            insert_before = "</resources>"
+            if insert_before not in contents:
+                raise SystemExit(f"Invalid Android string resource: {resource}")
+            contents = contents.replace(insert_before, f'    <string name="setting_live_sources">{value}</string>\n</resources>', 1)
+            resource.write_text(contents, encoding="utf-8")
+
+
 def patch_tv_settings_layout(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     row = '''        
@@ -256,6 +344,7 @@ def main() -> None:
         patch_player_activity(path)
     patch_tv_settings_activity(tv_settings)
     patch_tv_settings_layout(tv_settings_layout)
+    patch_live_settings_layout(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
