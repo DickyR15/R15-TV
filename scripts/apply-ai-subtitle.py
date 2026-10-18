@@ -110,7 +110,7 @@ def patch_tv_settings_activity(path: Path) -> None:
 
 
 def patch_live_settings_layout(tv: Path) -> None:
-    """Group VOD and wallpaper configuration side-by-side without changing behavior."""
+    """Make the outer settings page match the two-entry TV layout."""
     import xml.etree.ElementTree as ET
 
     layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
@@ -118,206 +118,86 @@ def patch_live_settings_layout(tv: Path) -> None:
         raise SystemExit(f"Missing Leanback layout: {layout}")
 
     ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    ET.register_namespace("app", "http://schemas.android.com/apk/res-auto")
     ET.register_namespace("tools", "http://schemas.android.com/tools")
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # The original XML uses direct source rows with internal wrapper layouts.
-    # Locate the nearest ancestor that contains both controls, then group their
-    # immediate row containers without changing view IDs or click handlers.
-    rows = {}
-    for target in ("vod", "wall"):
-        found = next((node for node in root.iter()
-                      if node.attrib.get(aid) == f"@+id/{target}"), None)
-        if found is None:
-            raise SystemExit(f"Could not find @{target} in settings layout.")
-        rows[target] = found
+    vis = "{http://schemas.android.com/apk/res/android}visibility"
+    content = list(root)[0]
     parents = {child: parent for parent in root.iter() for child in parent}
-    ancestors = []
-    node = rows["vod"]
-    while node in parents:
-        node = parents[node]
-        ancestors.append(node)
-    container = next((candidate for candidate in ancestors
-                      if any(desc is rows["wall"] for desc in candidate.iter())
-                      and candidate.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"), None)
-    if container is None:
-        raise SystemExit("Could not locate shared parent for VOD and wallpaper controls.")
 
-    def top_row(target: str):
-        node = rows[target]
-        while parents.get(node) is not container and node in parents:
-            node = parents[node]
-        return node if parents.get(node) is container else None
+    def find_id(name: str):
+        return next((n for n in root.iter() if n.attrib.get(aid) == f"@+id/{name}"), None)
 
-    vod_row, wall_row = top_row("vod"), top_row("wall")
-    if vod_row is None or wall_row is None:
-        raise SystemExit("Could not find VOD/wall rows under their shared settings parent.")
-
-    parent_map = {child: parent for parent in root.iter() for child in parent}
-    existing_group = next((node for node in container.iter()
-                           if node.attrib.get(aid) == "@+id/vodAndWall"), None)
-    if existing_group is None and vod_row is not wall_row:
-        if parent_map.get(vod_row) is not container or parent_map.get(wall_row) is not container:
-            raise SystemExit("VOD and wallpaper rows must be direct children of the settings container.")
-
-        group = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
-            aid: "@+id/vodAndWall",
-            "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
-            "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
-            "{http://schemas.android.com/apk/res/android}orientation": "horizontal",
-            "{http://schemas.android.com/apk/res/android}gravity": "center_vertical",
-        })
-        index = list(container).index(vod_row)
-        container.remove(vod_row)
-        container.insert(index, group)
-        container.remove(wall_row)
-        # Insert the VOD and wallpaper rows inside the shared group once each.
-        group.append(vod_row)
-        group.append(wall_row)
-        for row, end_margin in ((vod_row, "12dp"), (wall_row, "0dp")):
-            row.set("{http://schemas.android.com/apk/res/android}layout_width", "0dp")
-            row.set("{http://schemas.android.com/apk/res/android}layout_weight", "1")
-            row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "0dp")
-            row.set("{http://schemas.android.com/apk/res/android}layout_marginEnd", end_margin)
-        ET.indent(tree, space="    ")
-        tree.write(layout, encoding="utf-8", xml_declaration=True)
-
-    # Use a clear Taiwan Traditional Chinese label for the existing live-source control.
-    labels = [
-        (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播源設定"),
-        (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播源設定"),
-        (tv / "app/src/leanback/res/values/strings.xml", "Live source settings"),
-    ]
-    for resource, label in labels:
-        if not resource.is_file():
-            continue
-        stree = ET.parse(resource)
-        sroot = stree.getroot()
-        node = next((item for item in list(sroot)
-                     if item.tag.rsplit("}", 1)[-1] == "string"
-                     and item.attrib.get("name") == "setting_live_sources"), None)
+    def top_row(node, target: str):
         if node is None:
-            node = ET.SubElement(sroot, "string", {"name": "setting_live_sources"})
-        for child in list(node):
-            node.remove(child)
-        node.text = label
-        ET.indent(stree, space="    ")
-        stree.write(resource, encoding="utf-8", xml_declaration=True)
-
-    text = layout.read_text(encoding="utf-8")
-    if 'android:text="@string/setting_live_sources"' not in text:
-        if 'android:text="@string/setting_live"' not in text:
-            raise SystemExit("Could not locate the live settings label.")
-        text = text.replace('android:text="@string/setting_live"',
-                            'android:text="@string/setting_live_sources"', 1)
-        layout.write_text(text, encoding="utf-8")
-
-
-def patch_live_settings_layout(tv: Path) -> None:
-    """Group VOD and wallpaper configuration side-by-side without changing behavior."""
-    import xml.etree.ElementTree as ET
-
-    layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
-    if not layout.is_file():
-        raise SystemExit(f"Missing Leanback layout: {layout}")
-
-    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
-    ET.register_namespace("tools", "http://schemas.android.com/tools")
-    tree = ET.parse(layout)
-    root = tree.getroot()
-    aid = "{http://schemas.android.com/apk/res/android}id"
-    # The original XML uses direct source rows with internal wrapper layouts.
-    # Locate the nearest ancestor that contains both controls, then group their
-    # immediate row containers without changing view IDs or click handlers.
-    rows = {}
-    for target in ("vod", "wall"):
-        found = next((node for node in root.iter()
-                      if node.attrib.get(aid) == f"@+id/{target}"), None)
-        if found is None:
             raise SystemExit(f"Could not find @{target} in settings layout.")
-        rows[target] = found
-    parents = {child: parent for parent in root.iter() for child in parent}
-    ancestors = []
-    node = rows["vod"]
-    while node in parents:
-        node = parents[node]
-        ancestors.append(node)
-    container = next((candidate for candidate in ancestors
-                      if any(desc is rows["wall"] for desc in candidate.iter())
-                      and candidate.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"), None)
-    if container is None:
-        raise SystemExit("Could not locate shared parent for VOD and wallpaper controls.")
+        while parents.get(node) is not content:
+            node = parents.get(node)
+            if node is None:
+                raise SystemExit(f"Could not locate the parent row for @{target}.")
+        return node
 
-    def top_row(target: str):
-        node = rows[target]
-        while parents.get(node) is not container and node in parents:
-            node = parents[node]
-        return node if parents.get(node) is container else None
+    vod = find_id("vod")
+    live = find_id("live")
+    wall = find_id("wall")
+    vod_row = top_row(vod, "vod")
+    live_row = top_row(live, "live")
+    wall_row = top_row(wall, "wall")
 
-    vod_row, wall_row = top_row("vod"), top_row("wall")
-    if vod_row is None or wall_row is None:
-        raise SystemExit("Could not find VOD/wall rows under their shared settings parent.")
+    # Keep the original controls and their IDs for existing code, but hide the
+    # separate VOD and wallpaper rows from the outer screen.
+    vod_row.set(vis, "gone")
+    wall_row.set(vis, "gone")
 
-    parent_map = {child: parent for parent in root.iter() for child in parent}
-    existing_group = next((node for node in container.iter()
-                           if node.attrib.get(aid) == "@+id/vodAndWall"), None)
-    if existing_group is None and vod_row is not wall_row:
-        if parent_map.get(vod_row) is not container or parent_map.get(wall_row) is not container:
-            raise SystemExit("VOD and wallpaper rows must be direct children of the settings container.")
+    for name in ("liveUrl", "liveHome", "liveHistory"):
+        node = find_id(name)
+        if node is not None:
+            node.set(vis, "gone")
 
-        group = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
-            aid: "@+id/vodAndWall",
-            "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
-            "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
-            "{http://schemas.android.com/apk/res/android}orientation": "horizontal",
-            "{http://schemas.android.com/apk/res/android}gravity": "center_vertical",
+    android = "{http://schemas.android.com/apk/res/android}"
+    disclaimer_id = "@+id/r15Disclaimer"
+    if find_id("r15Disclaimer") is None:
+        disclaimer = ET.Element("com.google.android.material.textview.MaterialTextView", {
+            android + "id": disclaimer_id,
+            android + "layout_width": "match_parent",
+            android + "layout_height": "wrap_content",
+            android + "layout_marginTop": "8dp",
+            android + "layout_marginBottom": "16dp",
+            android + "padding": "14dp",
+            android + "background": "#66000000",
+            android + "text": "本 APP 為第三方改版，針對音訊／視訊解碼、AI 字幕及多直播源訂閱管理功能加強，不包含任何內建來源。",
+            android + "textColor": "@color/white",
+            android + "textSize": "16sp",
         })
-        index = list(container).index(vod_row)
-        container.remove(vod_row)
-        container.insert(index, group)
-        container.remove(wall_row)
-        # Insert the VOD and wallpaper rows inside the shared group once each.
-        group.append(vod_row)
-        group.append(wall_row)
-        for row, end_margin in ((vod_row, "12dp"), (wall_row, "0dp")):
-            row.set("{http://schemas.android.com/apk/res/android}layout_width", "0dp")
-            row.set("{http://schemas.android.com/apk/res/android}layout_weight", "1")
-            row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "0dp")
-            row.set("{http://schemas.android.com/apk/res/android}layout_marginEnd", end_margin)
-        ET.indent(tree, space="    ")
-        tree.write(layout, encoding="utf-8", xml_declaration=True)
+        content.insert(list(content).index(live_row), disclaimer)
 
-    # Use a clear Taiwan Traditional Chinese label for the existing live-source control.
-    labels = [
-        (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播源設定"),
-        (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播源設定"),
-        (tv / "app/src/leanback/res/values/strings.xml", "Live source settings"),
-    ]
-    for resource, label in labels:
-        if not resource.is_file():
-            continue
-        stree = ET.parse(resource)
-        sroot = stree.getroot()
-        node = next((item for item in list(sroot)
-                     if item.tag.rsplit("}", 1)[-1] == "string"
-                     and item.attrib.get("name") == "setting_live_sources"), None)
-        if node is None:
-            node = ET.SubElement(sroot, "string", {"name": "setting_live_sources"})
-        for child in list(node):
-            node.remove(child)
-        node.text = label
-        ET.indent(stree, space="    ")
-        stree.write(resource, encoding="utf-8", xml_declaration=True)
+    if find_id("vodAndWall") is None:
+        group = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
+            android + "id": "@+id/vodAndWall",
+            android + "layout_width": "match_parent",
+            android + "layout_height": "wrap_content",
+            android + "layout_marginTop": "16dp",
+            android + "background": "@drawable/selector_item",
+            android + "focusable": "true",
+            android + "focusableInTouchMode": "true",
+            android + "orientation": "horizontal",
+            android + "padding": "16dp",
+        })
+        label = ET.SubElement(group, "com.google.android.material.textview.MaterialTextView", {
+            android + "layout_width": "match_parent",
+            android + "layout_height": "wrap_content",
+            android + "text": "點播和桌布",
+            android + "textColor": "@color/white",
+            android + "textSize": "18sp",
+        })
+        content.insert(list(content).index(live_row) + 1, group)
 
-    text = layout.read_text(encoding="utf-8")
-    if 'android:text="@string/setting_live_sources"' not in text:
-        if 'android:text="@string/setting_live"' not in text:
-            raise SystemExit("Could not locate the live settings label.")
-        text = text.replace('android:text="@string/setting_live"',
-                            'android:text="@string/setting_live_sources"', 1)
-        layout.write_text(text, encoding="utf-8")
-
+    # The existing live row is now the first interactive source entry.
+    live_row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "8dp")
+    ET.indent(tree, space="    ")
+    tree.write(layout, encoding="utf-8", xml_declaration=True)
 
 
 def patch_tv_settings_layout(path: Path) -> None:
@@ -363,6 +243,64 @@ def patch_tv_settings_layout(path: Path) -> None:
 
 
 
+
+
+def patch_live_sources_ui(tv: Path) -> None:
+    """Install the R15 live-source manager and the combined VOD/wallpaper page."""
+    patch_root = Path(__file__).resolve().parent.parent / "patches/live-sources"
+    target = tv / "app/src/main/java/com/fongmi/android/tv/ui/activity"
+    target.mkdir(parents=True, exist_ok=True)
+    for name in ("LiveSourcesActivity.java", "VodWallSettingsActivity.java"):
+        source = patch_root / name
+        if not source.is_file():
+            raise SystemExit(f"Missing live-source UI patch: {source}")
+        shutil.copy2(source, target / name)
+
+    manifest = tv / "app/src/main/AndroidManifest.xml"
+    text = manifest.read_text(encoding="utf-8")
+    anchor = '<activity android:name=".ui.activity.AiSubtitleSettingsActivity" android:exported="false" />'
+    activities = [
+        '<activity android:name=".ui.activity.LiveSourcesActivity" android:exported="false" />',
+        '<activity android:name=".ui.activity.VodWallSettingsActivity" android:exported="false" />',
+    ]
+    for activity in activities:
+        if activity not in text:
+            if anchor not in text:
+                raise SystemExit("Cannot locate AI subtitle activity anchor in AndroidManifest.xml")
+            text = text.replace(anchor, anchor + "\n        " + activity, 1)
+    manifest.write_text(text, encoding="utf-8")
+
+    setting = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/SettingActivity.java"
+    source = setting.read_text(encoding="utf-8")
+    old_live = """    private void onLive(View view) {
+        ConfigDialog.create().live().show(this);
+    }"""
+    new_live = """    private void onLive(View view) {
+        LiveSourcesActivity.start(this);
+    }"""
+    if new_live not in source:
+        source = replace_once(source, old_live, new_live, setting)
+
+    focus_old = "        mBinding.vod.requestFocus();"
+    focus_new = "        mBinding.live.requestFocus();"
+    if focus_new not in source:
+        source = replace_once(source, focus_old, focus_new, setting)
+
+    live_listener = "        mBinding.live.setOnClickListener(this::onLive);\n"
+    combined_listener = live_listener + "        mBinding.vodAndWall.setOnClickListener(this::onVodWall);\n"
+    if combined_listener not in source:
+        source = replace_once(source, live_listener, combined_listener, setting)
+
+    method_anchor = "    private void onPlayer(View view) {\n"
+    method = """    private void onVodWall(View view) {
+        VodWallSettingsActivity.start(this);
+    }
+
+"""
+    if "private void onVodWall(View view)" not in source:
+        source = replace_once(source, method_anchor, method + method_anchor, setting)
+
+    setting.write_text(source, encoding="utf-8")
 
 
 def ensure_keep_rules(path: Path) -> None:
@@ -471,6 +409,7 @@ def main() -> None:
     patch_tv_settings_activity(tv_settings)
     patch_tv_settings_layout(tv_settings_layout)
     patch_live_settings_layout(tv)
+    patch_live_sources_ui(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
