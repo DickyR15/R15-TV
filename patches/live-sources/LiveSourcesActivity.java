@@ -231,7 +231,9 @@ public final class LiveSourcesActivity extends BaseActivity {
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        addField(body, "直播源名稱（可選）", "請輸入直播源名稱（可選）", "name", editingSource.name, false);
+        // Match the reference AutoBuild editor: spacious outlined fields,
+        // a full-width refresh row, and a collapsible advanced section.
+        addField(body, "直播源名稱", "請輸入直播源名稱（可選）", "name", editingSource.name, false);
         addField(body, "直播源訂閱", "請輸入直播源訂閱網址", "url", editingSource.url, false);
         addField(body, "節目表位址", "請輸入 XMLTV 節目表網址", "epg", editingSource.epg, false);
 
@@ -240,8 +242,9 @@ public final class LiveSourcesActivity extends BaseActivity {
         autoSortSwitch.setTextColor(WHITE);
         autoSortSwitch.setTextSize(18);
         autoSortSwitch.setChecked(editingSource.autoSort);
-        autoSortSwitch.setPadding(dp(2), dp(16), dp(2), dp(16));
-        body.addView(autoSortSwitch, new LinearLayout.LayoutParams(-1, -2));
+        autoSortSwitch.setPadding(dp(2), dp(12), dp(2), dp(12));
+        autoSortSwitch.setShowText(false);
+        body.addView(autoSortSwitch, new LinearLayout.LayoutParams(-1, dp(56)));
 
         Button interval = button("重新整理間隔：" + refreshHours + " 小時", false);
         interval.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
@@ -251,6 +254,10 @@ public final class LiveSourcesActivity extends BaseActivity {
         intervalParams.bottomMargin = dp(18);
         body.addView(interval, intervalParams);
 
+        View divider = new View(this);
+        divider.setBackgroundColor(0x66555555);
+        body.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
+
         Button advanced = button("進階  ▾", false);
         advanced.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         advanced.setOnClickListener(v -> {
@@ -259,6 +266,7 @@ public final class LiveSourcesActivity extends BaseActivity {
             advanced.setText(show ? "進階  ▴" : "進階  ▾");
         });
         LinearLayout.LayoutParams advParams = new LinearLayout.LayoutParams(-1, dp(54));
+        advParams.topMargin = dp(12);
         advParams.bottomMargin = dp(10);
         body.addView(advanced, advParams);
 
@@ -401,7 +409,7 @@ public final class LiveSourcesActivity extends BaseActivity {
             header.addView(left, new LinearLayout.LayoutParams(dp(112), dp(48)));
         } else {
             View spacer = new View(this);
-            header.addView(spacer, new LinearLayout.LayoutParams(dp(36), 1));
+            header.addView(spacer, new LinearLayout.LayoutParams(dp(12), 1));
         }
 
         TextView title = text(titleText, 25, WHITE);
