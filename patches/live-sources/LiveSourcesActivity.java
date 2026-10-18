@@ -474,18 +474,14 @@ public final class LiveSourcesActivity extends BaseActivity {
         String incomingText = safe(event.text()).trim();
         EditText nameInput = fields.get("name");
         EditText urlInput = fields.get("url");
+
         if (!incomingName.isEmpty() && nameInput != null) {
             nameInput.setText(incomingName);
             nameInput.setSelection(nameInput.getText().length());
         }
-        if (!incomingText.isEmpty()) {
-            EditText target = urlInput;
-            if (incomingName.isEmpty() && lastFocusedField != null) target = lastFocusedField;
-            if (target == null) target = urlInput;
-            if (target != null) {
-                target.setText(incomingText);
-                target.setSelection(target.getText().length());
-            }
+        if (!incomingText.isEmpty() && urlInput != null) {
+            urlInput.setText(incomingText);
+            urlInput.setSelection(urlInput.getText().length());
         }
         Toast.makeText(this, "已接收手機推送資料，確認欄位後請按儲存", Toast.LENGTH_LONG).show();
     }
