@@ -60,7 +60,7 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         root.setPadding(0, 0, 0, dp(20));
 
         TextView title = text("點播和桌布", 24);
-        title.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        title.setTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.setMargins(dp(20), dp(16), dp(20), 0);
@@ -90,8 +90,8 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
                               boolean vod) {
         com.google.android.material.card.MaterialCardView card =
                 new com.google.android.material.card.MaterialCardView(this);
-        card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
-        card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
+        card.setCardBackgroundColor(colorAttr(com.fongmi.android.tv.R.attr.colorSurfaceContainer, 0xFF242424));
+        card.setStrokeColor(colorAttr(com.fongmi.android.tv.R.attr.colorOutlineVariant, 0xFF555555));
         card.setStrokeWidth(dp(1));
         card.setRadius(dp(18));
         card.setCardElevation(0);
@@ -103,12 +103,12 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         card.addView(content, new com.google.android.material.card.MaterialCardView.LayoutParams(-1, -2));
 
         TextView name = text(titleText, 18);
-        name.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        name.setTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE));
         name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         content.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         TextView url = text(TextUtils.isEmpty(description) ? "尚未設定來源" : description, 14);
-        url.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+        url.setTextColor(colorAttr(com.fongmi.android.tv.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
         url.setMaxLines(1);
         url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
@@ -241,15 +241,15 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         button.setInsetTop(0);
         button.setInsetBottom(0);
         button.setCornerRadius(dp(22));
-        int surface = colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF292929);
-        int primaryColor = colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE);
-        int onPrimary = colorAttr(com.google.android.material.R.attr.colorOnPrimary, Color.WHITE);
-        int onSurface = colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE);
+        int surface = colorAttr(com.fongmi.android.tv.R.attr.colorSurfaceContainer, 0xFF292929);
+        int primaryColor = colorAttr(com.fongmi.android.tv.R.attr.colorPrimary, PURPLE);
+        int onPrimary = colorAttr(com.fongmi.android.tv.R.attr.colorOnPrimary, Color.WHITE);
+        int onSurface = colorAttr(com.fongmi.android.tv.R.attr.colorOnSurface, WHITE);
         button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary ? primaryColor : surface));
         button.setTextColor(primary ? onPrimary : onSurface);
         button.setStrokeWidth(dp(1));
         button.setStrokeColor(android.content.res.ColorStateList.valueOf(
-                colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF666666)));
+                colorAttr(com.fongmi.android.tv.R.attr.colorOutline, 0xFF666666)));
         button.setFocusable(true);
         button.setOnFocusChangeListener((view, focused) -> button.setStrokeWidth(dp(focused ? 2 : 1)));
         return button;
