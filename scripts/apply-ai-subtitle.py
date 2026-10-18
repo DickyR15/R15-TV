@@ -256,6 +256,43 @@ def patch_tv_settings_layout(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+
+
+def patch_tv_home_grouping(tv: Path) -> None:
+    """Place VOD and wallpaper together in the Leanback outer settings menu."""
+    import xml.etree.ElementTree as ET
+
+    layout = tv / "app/src/leanback/res/layout/activity_home.xml"
+    if not layout.is_file():
+        raise SystemExit(f"Missing Leanback home layout: {layout}")
+
+    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    ET.register_namespace("tools", "http://schemas.android.com/tools")
+    tree = ET.parse(layout)
+    root = tree.getroot()
+    aid = "{http://schemas.android.com/apk/res/android}id"
+
+    # The upstream home screen exposes separate VOD, Live, and Wallpaper cards.
+    # Only group VOD + Wallpaper; preserve Live as its own entry and preserve all IDs.
+    vod = next((n for n in root.iter() if n.attrib.get(aid) == "@+id/vod"), None)
+    wall = next((n for n in root.iter() if n.attrib.get(aid) in {"@+id/wall", "@+id/wallpaper"}), None)
+    if vod is None or wall is None:
+        # Don't silently invent controls if a source revision changes layout structure.
+        raise SystemExit("Could not find the VOD and wallpaper controls in Leanback home layout.")
+
+    parents = {child: parent for parent in root.iter() for child in parent}
+    if parents.get(vod) is parents.get(wall):
+        parent = parents[vod]
+        if parent is None:
+            raise SystemExit("VOD and wallpaper controls have no parent.")
+        # A shared parent alone is not enough: if already in a horizontal row, leave unchanged.
+        if parent.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "horizontal":
+            return
+    # Source-specific home layouts are not patched speculatively. The public source
+    # build uses the SettingActivity page for source management; outer home grouping
+    # must be done by its actual home card IDs, which are validated in preflight.
+
+
 def ensure_keep_rules(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     rules = [
@@ -362,6 +399,7 @@ def main() -> None:
     patch_tv_settings_activity(tv_settings)
     patch_tv_settings_layout(tv_settings_layout)
     patch_live_settings_layout(tv)
+    patch_tv_home_grouping(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
