@@ -280,11 +280,16 @@ public final class LiveSourcesActivity extends BaseActivity {
     }
 
     private void addField(LinearLayout container, String label, String hint, String key, String initial, boolean multiline) {
-        TextView caption = text(label, 17, WHITE);
-        LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(-1, -2);
-        cp.topMargin = dp(12);
-        cp.bottomMargin = dp(6);
-        container.addView(caption, cp);
+        com.google.android.material.textfield.TextInputLayout field = new com.google.android.material.textfield.TextInputLayout(this);
+        field.setHint(label);
+        field.setHintTextColor(android.content.res.ColorStateList.valueOf(0xDDFFFFFF));
+        field.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        field.setBoxStrokeColor(0xAAFFFFFF);
+        field.setBoxStrokeWidth(dp(1));
+        field.setBoxStrokeWidthFocused(dp(2));
+        field.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
+        field.setPadding(0, dp(8), 0, 0);
+        field.setDefaultHintTextColor(android.content.res.ColorStateList.valueOf(0xDDFFFFFF));
 
         EditText input = new EditText(this);
         input.setSingleLine(!multiline);
@@ -295,13 +300,16 @@ public final class LiveSourcesActivity extends BaseActivity {
         input.setHintTextColor(0xCCFFFFFF);
         input.setHint(hint);
         input.setPadding(dp(16), dp(12), dp(16), dp(12));
-        input.setBackground(fieldDrawable());
+        input.setBackgroundColor(Color.TRANSPARENT);
         input.setText(safe(initial));
         input.setSelectAllOnFocus(false);
         fields.put(key, input);
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-1, multiline ? dp(96) : dp(58));
+        field.addView(input, new android.view.ViewGroup.LayoutParams(-1, multiline ? dp(82) : dp(54)));
+
+        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-1, -2);
+        ip.topMargin = dp(8);
         ip.bottomMargin = dp(8);
-        container.addView(input, ip);
+        container.addView(field, ip);
     }
 
     private void chooseInterval(Button interval) {
