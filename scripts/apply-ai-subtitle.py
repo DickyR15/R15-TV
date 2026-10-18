@@ -145,7 +145,6 @@ def patch_live_settings_layout(tv: Path) -> None:
     if vod_row is not wall_row:
         vod_index = rows.index(vod_row)
         wall_index = rows.index(wall_row)
-        vod_row.set(android_id, None) if android_id in vod_row.attrib else None
         for child in list(wall_row):
             vod_row.append(child)
         container.remove(wall_row)
