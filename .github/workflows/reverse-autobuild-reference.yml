@@ -44,7 +44,8 @@ jobs:
           test -n "$jadx_bin"
           chmod +x "$jadx_bin"
           java -jar build/autobuild170/apktool.jar d -f -s "$apk" -o build/autobuild170/resources
-          "$jadx_bin" --show-bad-code -d build/autobuild170/sources "$apk"
+          # JADX may exit 3 after emitting usable sources if a few third-party classes fail to decompile.
+          "$jadx_bin" --show-bad-code -d build/autobuild170/sources "$apk" || echo "JADX reported some per-class decompilation errors; inspecting emitted source files."
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
