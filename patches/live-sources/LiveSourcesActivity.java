@@ -533,13 +533,28 @@ public final class LiveSourcesActivity extends BaseActivity {
         source.headers = value("headers").trim();
 
         Config config = Config.find(source.url, source.name, LIVE_TYPE);
-        config.url(source.url).type(LIVE_TYPE).name(source.name).save();
+        config.url(source.url).type(LIVE_TYPE).name(source.name).json(optionsJson(source).toString()).save();
 
         if (editingIndex < 0) sources.add(source);
         else sources.set(editingIndex, source);
         saveSources();
         Toast.makeText(this, "直播源設定已儲存", Toast.LENGTH_SHORT).show();
         showList();
+    }
+
+    private JSONObject optionsJson(Source source) {
+        JSONObject json = new JSONObject();
+        try {
+            json.put("r15SourceOptions", true);
+            json.put("epg", safe(source.epg));
+            json.put("autoRefresh", source.autoSort);
+            json.put("refreshMinutes", Math.max(1, source.refreshHours) * 60);
+            json.put("userAgent", safe(source.userAgent));
+            json.put("referer", safe(source.referer));
+            json.put("headersText", safe(source.headers));
+        } catch (JSONException ignored) {
+        }
+        return json;
     }
 
     private String value(String key) {
@@ -564,7 +579,7 @@ public final class LiveSourcesActivity extends BaseActivity {
     private void activate(Source source) {
         if (source == null || TextUtils.isEmpty(source.url)) return;
         Config config = Config.find(source.url, source.name, LIVE_TYPE);
-        config.url(source.url).type(LIVE_TYPE).name(source.name).save();
+        config.url(source.url).type(LIVE_TYPE).name(source.name).json(optionsJson(source).toString()).save();
         Notify.progress(this);
         LiveConfig.load(config, new Callback() {
             @Override
