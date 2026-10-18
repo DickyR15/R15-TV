@@ -301,135 +301,123 @@ public final class LiveSourcesActivity extends BaseActivity {
     private void showEditor() {
         editing = true;
         fields.clear();
+        lastFocusedField = null;
         root.removeAllViews();
-        root.addView(makeHeader(editingIndex < 0 ? "新增直播源配置" : "編輯直播源配置", "儲存", this::saveEditedSource, "取消", this::showList),
-                new LinearLayout.LayoutParams(-1, dp(60)));
+        root.setPadding(0, 0, 0, 0);
+
+        LinearLayout header = new LinearLayout(this);
+        header.setOrientation(LinearLayout.HORIZONTAL);
+        header.setGravity(Gravity.CENTER_VERTICAL);
+        header.setPadding(dp(16), dp(16), dp(16), 0);
+        Button cancel = button("取消", false);
+        cancel.setOnClickListener(v -> showList());
+        header.addView(cancel, new LinearLayout.LayoutParams(dp(92), dp(44)));
+        TextView title = text(editingIndex < 0 ? "新增直播源配置" : "編輯直播源配置", 24,
+                colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        title.setGravity(Gravity.CENTER);
+        title.setMaxLines(1);
+        title.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        header.addView(title, new LinearLayout.LayoutParams(0, -2, 1f));
+        Button save = button("儲存", true);
+        save.setOnClickListener(v -> saveEditedSource());
+        header.addView(save, new LinearLayout.LayoutParams(dp(92), dp(44)));
+        root.addView(header, new LinearLayout.LayoutParams(-1, -2));
 
         ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
+        scroll.setFillViewport(true);
+        scroll.setClipToPadding(false);
         LinearLayout body = new LinearLayout(this);
         body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(0, dp(12), 0, dp(30));
+        body.setPadding(dp(16), dp(12), dp(16), dp(36));
         scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
         root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
 
-        addPhonePushGuide(body);
-
-        // Match the reference AutoBuild editor: spacious outlined fields,
-        // a full-width refresh row, and a collapsible advanced section.
         addField(body, "直播源名稱", "請輸入直播源名稱（可選）", "name", editingSource.name, false);
-        addField(body, "直播源訂閱", "請輸入直播源訂閱網址", "url", editingSource.url, false);
-        addField(body, "節目表位址", "請輸入 XMLTV 節目表網址", "epg", editingSource.epg, false);
+        addField(body, "直播源訂閱", "支援 M3U、TXT 與 JSON 配置", "url", editingSource.url, false);
+        addField(body, "節目表位址", "XMLTV / EPG 網址", "epg", editingSource.epg, false);
 
-        autoSortSwitch = new Switch(this);
+        Button qrButton = button("手機掃描 QR Code 輸入直播源", false);
+        qrButton.setGravity(Gravity.CENTER);
+        qrButton.setOnClickListener(v -> showPhoneQrDialog());
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(-1, dp(48));
+        qrParams.topMargin = dp(4);
+        qrParams.bottomMargin = dp(8);
+        body.addView(qrButton, qrParams);
+
+        autoSortSwitch = new com.google.android.material.materialswitch.MaterialSwitch(this);
         autoSortSwitch.setText("自動重新整理配置");
-        autoSortSwitch.setTextColor(WHITE);
-        autoSortSwitch.setTextSize(18);
+        autoSortSwitch.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        autoSortSwitch.setTextSize(16);
         autoSortSwitch.setChecked(editingSource.autoSort);
-        autoSortSwitch.setPadding(dp(2), dp(12), dp(2), dp(12));
-        autoSortSwitch.setShowText(false);
-        body.addView(autoSortSwitch, new LinearLayout.LayoutParams(-1, dp(56)));
+        autoSortSwitch.setPadding(0, dp(8), 0, dp(8));
+        autoSortSwitch.setMinHeight(dp(52));
+        body.addView(autoSortSwitch, new LinearLayout.LayoutParams(-1, -2));
 
         Button interval = button("重新整理間隔：" + refreshHours + " 小時", false);
         interval.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         interval.setOnClickListener(v -> chooseInterval(interval));
-        LinearLayout.LayoutParams intervalParams = new LinearLayout.LayoutParams(-1, dp(54));
+        LinearLayout.LayoutParams intervalParams = new LinearLayout.LayoutParams(-1, dp(48));
         intervalParams.topMargin = dp(4);
         intervalParams.bottomMargin = dp(18);
         body.addView(interval, intervalParams);
 
         View divider = new View(this);
-        divider.setBackgroundColor(0x66555555);
+        divider.setBackgroundColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0x66555555));
         body.addView(divider, new LinearLayout.LayoutParams(-1, dp(1)));
 
-        Button advanced = button("進階  ▾", false);
+        Button advanced = button("進階  ﹀", false);
         advanced.setGravity(Gravity.CENTER_VERTICAL | Gravity.START);
         advanced.setOnClickListener(v -> {
             boolean show = advancedFields.getVisibility() != View.VISIBLE;
             advancedFields.setVisibility(show ? View.VISIBLE : View.GONE);
-            advanced.setText(show ? "進階  ▴" : "進階  ▾");
+            advanced.setText(show ? "進階  ︿" : "進階  ﹀");
         });
-        LinearLayout.LayoutParams advParams = new LinearLayout.LayoutParams(-1, dp(54));
-        advParams.topMargin = dp(12);
-        advParams.bottomMargin = dp(10);
+        LinearLayout.LayoutParams advParams = new LinearLayout.LayoutParams(-1, dp(48));
+        advParams.topMargin = dp(10);
+        advParams.bottomMargin = dp(6);
         body.addView(advanced, advParams);
 
         advancedFields = new LinearLayout(this);
         advancedFields.setOrientation(LinearLayout.VERTICAL);
         advancedFields.setVisibility(View.GONE);
         body.addView(advancedFields, new LinearLayout.LayoutParams(-1, -2));
-        addField(advancedFields, "User-Agent", "User-Agent", "userAgent", editingSource.userAgent, false);
-        addField(advancedFields, "Referer", "Referer", "referer", editingSource.referer, false);
-        addField(advancedFields, "自訂 Header", "每行一組標頭，例如 Authorization: Bearer …", "headers", editingSource.headers, true);
+        addField(advancedFields, "User-Agent", "自訂 User-Agent（選填）", "userAgent", editingSource.userAgent, false);
+        addField(advancedFields, "Referer", "自訂 Referer（選填）", "referer", editingSource.referer, false);
+        addField(advancedFields, "自訂 Header", "Header-Name=HeaderValue，多個請換行輸入", "headers", editingSource.headers, true);
     }
 
-    private void addPhonePushGuide(LinearLayout body) {
-        LinearLayout guide = new LinearLayout(this);
-        guide.setOrientation(LinearLayout.HORIZONTAL);
-        guide.setGravity(Gravity.CENTER_VERTICAL);
-        guide.setPadding(dp(12), dp(12), dp(12), dp(12));
-        guide.setBackground(cardDrawable(false));
+    private void showPhoneQrDialog() {
+        LinearLayout content = new LinearLayout(this);
+        content.setOrientation(LinearLayout.VERTICAL);
+        content.setGravity(Gravity.CENTER_HORIZONTAL);
+        content.setPadding(dp(20), dp(12), dp(20), dp(16));
 
         ImageView qr = new ImageView(this);
         qr.setContentDescription("手機掃描以開啟直播配置頁");
         qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
         qr.setBackgroundColor(Color.WHITE);
-        Bitmap bitmap = createQrBitmap(Server.get().getAddress(4), 132);
-        if (bitmap != null) qr.setImageBitmap(bitmap);
-        guide.addView(qr, new LinearLayout.LayoutParams(dp(132), dp(132)));
-
-        LinearLayout details = new LinearLayout(this);
-        details.setOrientation(LinearLayout.VERTICAL);
-        details.setPadding(dp(14), 0, 0, 0);
-        TextView title = text("手機掃描 QR Code", 19, WHITE);
-        details.addView(title, new LinearLayout.LayoutParams(-1, -2));
-        TextView description = text(
-                "掃描後開啟「配置」頁面，再把直播源推送到電視。也可在手機瀏覽器開啟：\n"
-                        + Server.get().getAddress(),
-                14, 0xFFEAEAEA);
-        description.setPadding(0, dp(6), 0, 0);
-        details.addView(description, new LinearLayout.LayoutParams(-1, -2));
-        guide.addView(details, new LinearLayout.LayoutParams(0, -2, 1f));
-
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
-        params.bottomMargin = dp(12);
-        body.addView(guide, params);
-    }
-
-    private Bitmap createQrBitmap(String content, int sizeDp) {
         try {
-            int size = dp(sizeDp);
-            Map<EncodeHintType, Object> hints = new EnumMap<>(EncodeHintType.class);
-            hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
-            hints.put(EncodeHintType.MARGIN, 1);
-            BitMatrix matrix = new MultiFormatWriter().encode(
-                    content, BarcodeFormat.QR_CODE, size, size, hints);
-            Bitmap bitmap = Bitmap.createBitmap(matrix.getWidth(), matrix.getHeight(), Bitmap.Config.ARGB_8888);
-            for (int y = 0; y < matrix.getHeight(); y++) {
-                for (int x = 0; x < matrix.getWidth(); x++) {
-                    bitmap.setPixel(x, y, matrix.get(x, y) ? Color.BLACK : Color.WHITE);
-                }
-            }
-            return bitmap;
+            qr.setImageBitmap(com.fongmi.android.tv.utils.QRCode.getBitmap(Server.get().getAddress(4), dp(220), 0));
         } catch (Exception ignored) {
-            return null;
         }
-    }
+        content.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
 
-    @Subscribe(threadMode = ThreadMode.MAIN)
-    public void onServerEvent(ServerEvent event) {
-        if (!editing || event.type() != ServerEvent.Type.SETTING) return;
-        EditText nameInput = fields.get("name");
-        EditText urlInput = fields.get("url");
-        if (urlInput == null) return;
+        TextView address = text(Server.get().getAddress(), 14,
+                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
+        address.setGravity(Gravity.CENTER);
+        address.setPadding(0, dp(10), 0, dp(8));
+        content.addView(address, new LinearLayout.LayoutParams(-1, -2));
 
-        if (nameInput != null) {
-            nameInput.setText(safe(event.name()));
-            nameInput.setSelection(nameInput.getText().length());
-        }
-        urlInput.setText(safe(event.text()));
-        urlInput.setSelection(urlInput.getText().length());
-        Toast.makeText(this, "已接收手機推送的直播源，確認後請按儲存", Toast.LENGTH_LONG).show();
+        TextView message = text("手機掃描後，在「配置」頁面輸入直播源名稱與網址並推送；回到電視後會自動填入，再按儲存。",
+                14, colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        message.setGravity(Gravity.CENTER);
+        content.addView(message, new LinearLayout.LayoutParams(-1, -2));
+
+        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("手機掃描 QR Code")
+                .setView(content)
+                .setPositiveButton("完成", null)
+                .show();
     }
 
     private void addField(LinearLayout container, String label, String hint, String key, String initial, boolean multiline) {
