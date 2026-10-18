@@ -67,6 +67,8 @@ public final class LiveSourcesActivity extends BaseActivity {
     private boolean editing;
     private com.google.android.material.materialswitch.MaterialSwitch autoSortSwitch;
     private EditText lastFocusedField;
+    private String remoteTarget;
+    private AlertDialog phoneDialog;
     private LinearLayout advancedFields;
 
     public static void start(Context context) {
@@ -337,14 +339,6 @@ public final class LiveSourcesActivity extends BaseActivity {
         addField(body, "直播源訂閱", "支援 M3U、TXT 與 JSON 配置", "url", editingSource.url, false);
         addField(body, "節目表位址", "XMLTV / EPG 網址", "epg", editingSource.epg, false);
 
-        Button qrButton = button("手機掃描 QR Code 輸入直播源", false);
-        qrButton.setGravity(Gravity.CENTER);
-        qrButton.setOnClickListener(v -> showPhoneQrDialog());
-        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(-1, dp(48));
-        qrParams.topMargin = dp(4);
-        qrParams.bottomMargin = dp(8);
-        body.addView(qrButton, qrParams);
-
         autoSortSwitch = new com.google.android.material.materialswitch.MaterialSwitch(this);
         autoSortSwitch.setText("自動重新整理配置");
         autoSortSwitch.setTextColor(WHITE);
@@ -406,35 +400,47 @@ public final class LiveSourcesActivity extends BaseActivity {
         }
     }
 
-    private void showPhoneQrDialog() {
+    private void showPhoneQrDialog(String target, String label, String currentValue) {
+        remoteTarget = target;
         LinearLayout content = new LinearLayout(this);
         content.setOrientation(LinearLayout.VERTICAL);
         content.setGravity(Gravity.CENTER_HORIZONTAL);
         content.setPadding(dp(20), dp(12), dp(20), dp(16));
 
         ImageView qr = new ImageView(this);
-        qr.setContentDescription("手機掃描以開啟直播配置頁");
+        qr.setContentDescription("手機掃描以輸入" + label);
         qr.setScaleType(ImageView.ScaleType.FIT_CENTER);
         qr.setBackgroundColor(Color.WHITE);
-        try {
-            qr.setImageBitmap(createQrBitmap(Server.get().getAddress(4), 220));
-        } catch (Exception ignored) {
-        }
+        Bitmap bitmap = createQrBitmap(Server.get().getAddress(4), 220);
+        if (bitmap != null) qr.setImageBitmap(bitmap);
         content.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
 
-        TextView address = text(Server.get().getAddress(), 14,
-                0xFFBDBDBD);
+        TextView address = text(Server.get().getAddress(), 14, 0xFFBDBDBD);
         address.setGravity(Gravity.CENTER);
         address.setPadding(0, dp(10), 0, dp(8));
         content.addView(address, new LinearLayout.LayoutParams(-1, -2));
 
-        TextView message = text("手機掃描後，在「配置」頁面輸入直播源名稱與網址並推送；回到電視後會自動填入，再按儲存。",
+        TextView targetLabel = text("目前欄位：" + label, 15, WHITE);
+        targetLabel.setGravity(Gravity.CENTER);
+        content.addView(targetLabel, new LinearLayout.LayoutParams(-1, -2));
+
+        if (!TextUtils.isEmpty(currentValue)) {
+            TextView current = text("目前內容：" + currentValue, 13, 0xFFBDBDBD);
+            current.setMaxLines(2);
+            current.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
+            current.setGravity(Gravity.CENTER);
+            current.setPadding(0, dp(6), 0, 0);
+            content.addView(current, new LinearLayout.LayoutParams(-1, -2));
+        }
+
+        TextView message = text("手機掃描後，在「配置」頁輸入此欄位的內容並推送；收到後會直接填入這個欄位。",
                 14, WHITE);
         message.setGravity(Gravity.CENTER);
+        message.setPadding(0, dp(10), 0, 0);
         content.addView(message, new LinearLayout.LayoutParams(-1, -2));
 
-        new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("手機掃描 QR Code")
+        phoneDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
+                .setTitle("手機遠端輸入")
                 .setView(content)
                 .setPositiveButton("完成", null)
                 .show();
@@ -445,15 +451,12 @@ public final class LiveSourcesActivity extends BaseActivity {
                 new com.google.android.material.textfield.TextInputLayout(this);
         field.setHint(label);
         field.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
-        field.setBoxStrokeColor(0xFF888888);
+        field.setBoxStrokeColor(0xFF777777);
         field.setBoxStrokeWidth(dp(1));
         field.setBoxStrokeWidthFocused(dp(2));
         field.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
-        field.setDefaultHintTextColor(android.content.res.ColorStateList.valueOf(
-                0xFFBDBDBD));
         field.setPlaceholderText(hint);
-        field.setHelperText("按確認鍵可直接輸入，也可以在 " + Server.get().getAddress()
-                + " 的「配置」頁面推送");
+        field.setHelperText("手機遠端輸入：" + Server.get().getAddress());
 
         com.google.android.material.textfield.TextInputEditText input =
                 new com.google.android.material.textfield.TextInputEditText(this);
@@ -462,20 +465,29 @@ public final class LiveSourcesActivity extends BaseActivity {
         input.setMaxLines(multiline ? 5 : 1);
         input.setTextSize(18);
         input.setTextColor(WHITE);
-        input.setHintTextColor(0xFFBDBDBD);
         input.setText(safe(initial));
         input.setSelectAllOnFocus(false);
         input.setInputType(multiline
                 ? android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
-                : (key.equals("url") || key.equals("epg") || key.equals("referer")
-                    ? android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI
-                    : android.text.InputType.TYPE_CLASS_TEXT));
-        input.setImeOptions(multiline ? android.view.inputmethod.EditorInfo.IME_ACTION_NONE
-                : android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+                : android.text.InputType.TYPE_CLASS_TEXT);
+        input.setRawInputType(0);
+        input.setShowSoftInputOnFocus(false);
+        input.setCursorVisible(false);
+        input.setFocusable(true);
+        input.setClickable(true);
         input.setOnFocusChangeListener((view, focused) -> {
             if (focused) lastFocusedField = input;
         });
-        input.setOnClickListener(view -> lastFocusedField = input);
+        input.setOnClickListener(view -> showPhoneQrDialog(key, label, safe(input.getText().toString())));
+        input.setOnKeyListener((view, keyCode, event) -> {
+            if (keyCode != android.view.KeyEvent.KEYCODE_DPAD_CENTER
+                    && keyCode != android.view.KeyEvent.KEYCODE_ENTER
+                    && keyCode != android.view.KeyEvent.KEYCODE_NUMPAD_ENTER) return false;
+            if (event.getAction() == android.view.KeyEvent.ACTION_UP && event.getRepeatCount() == 0) {
+                showPhoneQrDialog(key, label, safe(input.getText().toString()));
+            }
+            return true;
+        });
         fields.put(key, input);
         field.addView(input, new LinearLayout.LayoutParams(-1, multiline ? dp(86) : dp(56)));
 
@@ -488,21 +500,22 @@ public final class LiveSourcesActivity extends BaseActivity {
     @Subscribe(threadMode = ThreadMode.MAIN)
     public void onServerEvent(ServerEvent event) {
         if (!editing || event.type() != ServerEvent.Type.SETTING) return;
+        String targetKey = remoteTarget;
+        if (targetKey == null || targetKey.isEmpty()) return;
 
-        String incomingName = safe(event.name()).trim();
-        String incomingText = safe(event.text()).trim();
-        EditText nameInput = fields.get("name");
-        EditText urlInput = fields.get("url");
+        EditText input = fields.get(targetKey);
+        if (input == null) return;
 
-        if (!incomingName.isEmpty() && nameInput != null) {
-            nameInput.setText(incomingName);
-            nameInput.setSelection(nameInput.getText().length());
+        String value = safe(event.text());
+        if ("name".equals(targetKey) && !TextUtils.isEmpty(safe(event.name()))) {
+            value = safe(event.name());
         }
-        if (!incomingText.isEmpty() && urlInput != null) {
-            urlInput.setText(incomingText);
-            urlInput.setSelection(urlInput.getText().length());
-        }
-        Toast.makeText(this, "已接收手機推送資料，確認欄位後請按儲存", Toast.LENGTH_LONG).show();
+        input.setText(value);
+        input.setSelection(input.getText().length());
+        remoteTarget = null;
+
+        if (phoneDialog != null && phoneDialog.isShowing()) phoneDialog.dismiss();
+        Toast.makeText(this, "已接收手機推送資料", Toast.LENGTH_LONG).show();
     }
 
     private void chooseInterval(Button interval) {
