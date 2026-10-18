@@ -198,6 +198,12 @@ def write_flavor_localizations(tv: Path) -> int:
             if child is None:
                 child = ET.SubElement(root, "string", {"name": name})
                 existing[("string", name)] = child
+            else:
+                # This localized value replaces the whole message. Remove any
+                # inherited <xliff:g> nodes so their old format placeholders
+                # are not appended to the newly authored text.
+                for nested in list(child):
+                    child.remove(nested)
             child.text = text
         for name, items in arrays.get(flavor, {}).items():
             child = existing.get(("string-array", name))
