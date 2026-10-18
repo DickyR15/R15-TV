@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - "research/autobuild-170-port"
+    paths:
+      - ".github/workflows/build-apks.yml"
+      - "config/**"
+      - "patches/**"
+      - "scripts/**"
   workflow_dispatch:
     inputs:
       publish_release:
