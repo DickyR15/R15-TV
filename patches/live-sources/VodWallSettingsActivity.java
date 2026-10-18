@@ -9,17 +9,14 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.Button;
 import android.widget.LinearLayout;
-import android.widget.ScrollView;
 import android.widget.TextView;
-import android.widget.Toast;
 
+import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
-import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -60,118 +57,120 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         root.setPadding(0, 0, 0, dp(20));
 
         TextView title = text("點播和桌布", 24);
-        title.setTextColor(WHITE);
+        title.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
         title.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
         LinearLayout.LayoutParams titleParams = new LinearLayout.LayoutParams(-1, -2);
         titleParams.setMargins(dp(20), dp(16), dp(20), 0);
         root.addView(title, titleParams);
 
-        ScrollView scroll = new ScrollView(this);
-        scroll.setFillViewport(false);
-        scroll.setClipToPadding(false);
-        LinearLayout body = new LinearLayout(this);
-        body.setOrientation(LinearLayout.VERTICAL);
-        body.setPadding(dp(20), dp(8), dp(20), dp(24));
-        scroll.addView(body, new ScrollView.LayoutParams(-1, -2));
-        root.addView(scroll, new LinearLayout.LayoutParams(-1, 0, 1f));
+        addMediaRow(root, "點播", VodConfig.getDesc(),
+                com.fongmi.android.tv.R.drawable.ic_setting_home,
+                com.fongmi.android.tv.R.drawable.ic_setting_history,
+                "選擇站源", "播放紀錄",
+                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().vod().show(this),
+                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().vod().edit().show(this),
+                () -> com.fongmi.android.tv.ui.dialog.SiteDialog.create().show(this),
+                () -> HistoryDialog.create().vod().show(this),
+                true);
 
-        addMediaCard(body, "點播", VodConfig.getDesc(), "設定來源", "首頁／站源", "播放紀錄",
-                () -> editConfig(0),
-                () -> Toast.makeText(this, "請返回主設定頁選擇站源，或先設定點播來源", Toast.LENGTH_LONG).show(),
-                () -> HistoryDialog.create().vod().show(this), true);
-
-        addMediaCard(body, "桌布", WallConfig.getDesc(), "設定來源", "切換桌布", "重新整理",
-                () -> editConfig(2), this::setWallDefault, this::setWallRefresh, false);
+        addMediaRow(root, "桌布", WallConfig.getDesc(),
+                com.fongmi.android.tv.R.drawable.ic_setting_home,
+                com.fongmi.android.tv.R.drawable.ic_setting_refresh,
+                "切換桌布", "重新整理",
+                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().wall().show(this),
+                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().wall().edit().show(this),
+                this::setWallDefault,
+                this::setWallRefresh,
+                false);
     }
 
-    private void addMediaCard(LinearLayout body, String titleText, String description,
-                              String primaryLabel, String secondaryLabel, String thirdLabel,
-                              Runnable primaryAction, Runnable secondaryAction, Runnable thirdAction,
-                              boolean vod) {
+    private void addMediaRow(LinearLayout parent, String label, String description,
+                             int firstIcon, int secondIcon, String firstDescription, String secondDescription,
+                             Runnable openConfig, Runnable editConfig, Runnable firstAction, Runnable secondAction,
+                             boolean vod) {
         com.google.android.material.card.MaterialCardView card =
                 new com.google.android.material.card.MaterialCardView(this);
-        card.setCardBackgroundColor(0xFF242424);
-        card.setStrokeColor(0xFF555555);
+        card.setCardBackgroundColor(colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF242424));
+        card.setStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutlineVariant, 0xFF555555));
         card.setStrokeWidth(dp(1));
         card.setRadius(dp(18));
         card.setCardElevation(0);
         card.setUseCompatPadding(false);
 
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(16), dp(16), dp(16), dp(16));
-        card.addView(content, new com.google.android.material.card.MaterialCardView.LayoutParams(-1, -2));
+        LinearLayout row = new LinearLayout(this);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setPadding(dp(12), dp(12), dp(12), dp(12));
+        card.addView(row, new com.google.android.material.card.MaterialCardView.LayoutParams(-1, -2));
 
-        TextView name = text(titleText, 18);
-        name.setTextColor(WHITE);
+        LinearLayout item = new LinearLayout(this);
+        item.setOrientation(LinearLayout.VERTICAL);
+        item.setPadding(dp(12), dp(12), dp(8), dp(12));
+        item.setFocusable(true);
+        item.setClickable(true);
+        item.setMinimumHeight(dp(72));
+        setSelectableBackground(item, false);
+        item.setOnClickListener(v -> openConfig.run());
+        item.setOnLongClickListener(v -> {
+            editConfig.run();
+            return true;
+        });
+
+        TextView name = text(label, 18);
+        name.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
         name.setTypeface(android.graphics.Typeface.DEFAULT, android.graphics.Typeface.BOLD);
-        content.addView(name, new LinearLayout.LayoutParams(-1, -2));
+        item.addView(name, new LinearLayout.LayoutParams(-1, -2));
 
         TextView url = text(TextUtils.isEmpty(description) ? "尚未設定來源" : description, 14);
-        url.setTextColor(0xFFBDBDBD);
+        url.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
         url.setMaxLines(1);
         url.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
         LinearLayout.LayoutParams urlParams = new LinearLayout.LayoutParams(-1, -2);
         urlParams.topMargin = dp(6);
-        content.addView(url, urlParams);
+        item.addView(url, urlParams);
 
-        LinearLayout actions = new LinearLayout(this);
-        actions.setGravity(Gravity.CENTER_VERTICAL);
-        actions.setOrientation(LinearLayout.HORIZONTAL);
-        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
-        actionsParams.topMargin = dp(16);
-        content.addView(actions, actionsParams);
+        row.addView(item, new LinearLayout.LayoutParams(0, -2, 1f));
+        AppCompatImageButton first = iconButton(firstIcon, firstDescription);
+        first.setOnClickListener(v -> firstAction.run());
+        row.addView(first, new LinearLayout.LayoutParams(dp(56), dp(56)));
 
-        Button primary = button(primaryLabel, true);
-        primary.setOnClickListener(v -> primaryAction.run());
-        actions.addView(primary, new LinearLayout.LayoutParams(0, dp(48), 1f));
-
-        Button secondary = button(secondaryLabel, false);
-        secondary.setOnClickListener(v -> secondaryAction.run());
-        LinearLayout.LayoutParams secondaryParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        secondaryParams.setMarginStart(dp(8));
-        actions.addView(secondary, secondaryParams);
-
-        Button third = button(thirdLabel, false);
-        third.setOnClickListener(v -> thirdAction.run());
-        LinearLayout.LayoutParams thirdParams = new LinearLayout.LayoutParams(0, dp(48), 1f);
-        thirdParams.setMarginStart(dp(8));
-        actions.addView(third, thirdParams);
+        AppCompatImageButton second = iconButton(secondIcon, secondDescription);
+        second.setOnClickListener(v -> secondAction.run());
+        if (!vod) {
+            second.setOnLongClickListener(v -> {
+                HistoryDialog.create().wall().show(this);
+                return true;
+            });
+        }
+        LinearLayout.LayoutParams secondParams = new LinearLayout.LayoutParams(dp(56), dp(56));
+        secondParams.setMarginStart(dp(4));
+        row.addView(second, secondParams);
 
         LinearLayout.LayoutParams cardParams = new LinearLayout.LayoutParams(-1, -2);
-        cardParams.topMargin = dp(vod ? 16 : 16);
-        body.addView(card, cardParams);
+        cardParams.setMargins(dp(20), dp(vod ? 24 : 16), dp(20), 0);
+        parent.addView(card, cardParams);
     }
 
-    private void editConfig(int type) {
-        new android.app.AlertDialog.Builder(this)
-                .setTitle(type == 0 ? "設定點播來源" : "設定桌布來源")
-                .setMessage("請輸入來源網址。若要使用檔案或進階來源，請返回主設定頁進行設定。")
-                .setView(createSourceInput())
-                .setNegativeButton("取消", null)
-                .setPositiveButton("儲存", (dialog, which) -> {
-                    android.widget.EditText input = (android.widget.EditText) ((android.app.AlertDialog) dialog).findViewById(android.R.id.edit);
-                    if (input == null) {
-                        Toast.makeText(this, "請從主設定頁設定來源", Toast.LENGTH_SHORT).show();
-                        return;
-                    }
-                    String url = input.getText().toString().trim();
-                    if (url.isEmpty()) return;
-                    Config config = Config.find(url, type);
-                    config.url(url).type(type).save();
-                    load(config);
-                }).show();
+    private AppCompatImageButton iconButton(int icon, String description) {
+        AppCompatImageButton button = new AppCompatImageButton(this);
+        button.setImageResource(icon);
+        button.setColorFilter(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        button.setContentDescription(description);
+        button.setScaleType(android.widget.ImageView.ScaleType.CENTER_INSIDE);
+        button.setPadding(dp(14), dp(14), dp(14), dp(14));
+        button.setFocusable(true);
+        button.setClickable(true);
+        setSelectableBackground(button, true);
+        return button;
     }
 
-    private android.widget.EditText createSourceInput() {
-        android.widget.EditText input = new android.widget.EditText(this);
-        input.setId(android.R.id.edit);
-        input.setHint("https://");
-        input.setSingleLine(true);
-        input.setTextColor(WHITE);
-        input.setHintTextColor(0xCCFFFFFF);
-        input.setPadding(dp(18), dp(12), dp(18), dp(12));
-        return input;
+    private void setSelectableBackground(View view, boolean borderless) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        int attr = borderless ? android.R.attr.selectableItemBackgroundBorderless
+                              : android.R.attr.selectableItemBackground;
+        if (getTheme().resolveAttribute(attr, value, true) && value.resourceId != 0) {
+            view.setBackgroundResource(value.resourceId);
+        }
     }
 
     @Override
