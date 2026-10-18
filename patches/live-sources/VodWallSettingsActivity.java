@@ -9,14 +9,17 @@ import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import androidx.appcompat.widget.AppCompatImageButton;
 import androidx.viewbinding.ViewBinding;
 
 import com.fongmi.android.tv.api.config.VodConfig;
 import com.fongmi.android.tv.api.config.WallConfig;
+import com.fongmi.android.tv.bean.Config;
 import com.fongmi.android.tv.bean.Site;
 import com.fongmi.android.tv.event.ConfigEvent;
 import com.fongmi.android.tv.impl.Callback;
@@ -52,6 +55,34 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
         render();
     }
 
+    private void showConfigDialog(int type, boolean edit) {
+        com.fongmi.android.tv.ui.dialog.ConfigDialog dialog =
+                com.fongmi.android.tv.ui.dialog.ConfigDialog.create();
+        if (type == 0) dialog.vod();
+        else dialog.wall();
+        if (edit) dialog.edit();
+        // Use DialogFragment's common API so both Mobile and Leanback source sets work.
+        dialog.show(getSupportFragmentManager(), null);
+    }
+
+    private void showSitePicker() {
+        com.fongmi.android.tv.ui.dialog.SiteDialog dialog =
+                com.fongmi.android.tv.ui.dialog.SiteDialog.create();
+        try {
+            java.lang.reflect.Field listener = dialog.getClass().getDeclaredField("listener");
+            listener.setAccessible(true);
+            listener.set(dialog, this);
+        } catch (Exception ignored) {
+        }
+        // Leanback has the extra action mode; Mobile does not expose it.
+        try {
+            java.lang.reflect.Method action = dialog.getClass().getMethod("action");
+            action.invoke(dialog);
+        } catch (Exception ignored) {
+        }
+        dialog.show(getSupportFragmentManager(), null);
+    }
+
     private void render() {
         root.removeAllViews();
         root.setPadding(0, 0, 0, dp(20));
@@ -67,9 +98,9 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
                 com.fongmi.android.tv.R.drawable.ic_setting_home,
                 com.fongmi.android.tv.R.drawable.ic_setting_history,
                 "選擇站源", "播放紀錄",
-                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().vod().show(this),
-                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().vod().edit().show(this),
-                () -> com.fongmi.android.tv.ui.dialog.SiteDialog.create().show(this),
+                () -> showConfigDialog(0, false),
+                () -> showConfigDialog(0, true),
+                this::showSitePicker,
                 () -> HistoryDialog.create().vod().show(this),
                 true);
 
@@ -77,8 +108,8 @@ public final class VodWallSettingsActivity extends BaseActivity implements Confi
                 com.fongmi.android.tv.R.drawable.ic_setting_home,
                 com.fongmi.android.tv.R.drawable.ic_setting_refresh,
                 "切換桌布", "重新整理",
-                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().wall().show(this),
-                () -> com.fongmi.android.tv.ui.dialog.ConfigDialog.create().wall().edit().show(this),
+                () -> showConfigDialog(2, false),
+                () -> showConfigDialog(2, true),
                 this::setWallDefault,
                 this::setWallRefresh,
                 false);
