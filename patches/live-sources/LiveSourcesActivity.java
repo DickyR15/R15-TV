@@ -65,7 +65,8 @@ public final class LiveSourcesActivity extends BaseActivity {
     private int editingIndex = -1;
     private int refreshHours = 8;
     private boolean editing;
-    private Switch autoSortSwitch;
+    private com.google.android.material.materialswitch.MaterialSwitch autoSortSwitch;
+    private EditText lastFocusedField;
     private LinearLayout advancedFields;
 
     public static void start(Context context) {
@@ -421,36 +422,74 @@ public final class LiveSourcesActivity extends BaseActivity {
     }
 
     private void addField(LinearLayout container, String label, String hint, String key, String initial, boolean multiline) {
-        com.google.android.material.textfield.TextInputLayout field = new com.google.android.material.textfield.TextInputLayout(this);
+        com.google.android.material.textfield.TextInputLayout field =
+                new com.google.android.material.textfield.TextInputLayout(this);
         field.setHint(label);
-        field.setHintTextColor(android.content.res.ColorStateList.valueOf(0xDDFFFFFF));
         field.setBoxBackgroundMode(com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
-        field.setBoxStrokeColor(0xAAFFFFFF);
+        field.setBoxStrokeColor(colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF888888));
         field.setBoxStrokeWidth(dp(1));
         field.setBoxStrokeWidthFocused(dp(2));
         field.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
-        field.setPadding(0, dp(8), 0, 0);
-        field.setDefaultHintTextColor(android.content.res.ColorStateList.valueOf(0xDDFFFFFF));
+        field.setDefaultHintTextColor(android.content.res.ColorStateList.valueOf(
+                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
+        field.setPlaceholderText(hint);
+        field.setHelperText("按確認鍵可直接輸入，也可以在 " + Server.get().getAddress()
+                + " 的「配置」頁面推送");
+        field.setHelperTextTextColor(android.content.res.ColorStateList.valueOf(
+                colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD)));
 
-        EditText input = new EditText(this);
+        com.google.android.material.textfield.TextInputEditText input =
+                new com.google.android.material.textfield.TextInputEditText(this);
         input.setSingleLine(!multiline);
-        input.setMinLines(multiline ? 2 : 1);
-        input.setMaxLines(multiline ? 4 : 1);
+        input.setMinLines(multiline ? 3 : 1);
+        input.setMaxLines(multiline ? 5 : 1);
         input.setTextSize(18);
-        input.setTextColor(WHITE);
-        input.setHintTextColor(0xCCFFFFFF);
-        input.setHint(hint);
-        input.setPadding(dp(16), dp(12), dp(16), dp(12));
-        input.setBackgroundColor(Color.TRANSPARENT);
+        input.setTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE));
+        input.setHintTextColor(colorAttr(com.google.android.material.R.attr.colorOnSurfaceVariant, 0xFFBDBDBD));
         input.setText(safe(initial));
         input.setSelectAllOnFocus(false);
+        input.setInputType(multiline
+                ? android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                : (key.equals("url") || key.equals("epg") || key.equals("referer")
+                    ? android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_VARIATION_URI
+                    : android.text.InputType.TYPE_CLASS_TEXT));
+        input.setImeOptions(multiline ? android.view.inputmethod.EditorInfo.IME_ACTION_NONE
+                : android.view.inputmethod.EditorInfo.IME_ACTION_NEXT);
+        input.setOnFocusChangeListener((view, focused) -> {
+            if (focused) lastFocusedField = input;
+        });
+        input.setOnClickListener(view -> lastFocusedField = input);
         fields.put(key, input);
-        field.addView(input, new LinearLayout.LayoutParams(-1, multiline ? dp(82) : dp(54)));
+        field.addView(input, new LinearLayout.LayoutParams(-1, multiline ? dp(86) : dp(56)));
 
-        LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(-1, -2);
-        ip.topMargin = dp(8);
-        ip.bottomMargin = dp(8);
-        container.addView(field, ip);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(-1, -2);
+        params.topMargin = dp(key.equals("name") ? 20 : 12);
+        params.bottomMargin = dp(2);
+        container.addView(field, params);
+    }
+
+    @Subscribe(threadMode = ThreadMode.MAIN)
+    public void onServerEvent(ServerEvent event) {
+        if (!editing || event.type() != ServerEvent.Type.SETTING) return;
+
+        String incomingName = safe(event.name()).trim();
+        String incomingText = safe(event.text()).trim();
+        EditText nameInput = fields.get("name");
+        EditText urlInput = fields.get("url");
+        if (!incomingName.isEmpty() && nameInput != null) {
+            nameInput.setText(incomingName);
+            nameInput.setSelection(nameInput.getText().length());
+        }
+        if (!incomingText.isEmpty()) {
+            EditText target = urlInput;
+            if (incomingName.isEmpty() && lastFocusedField != null) target = lastFocusedField;
+            if (target == null) target = urlInput;
+            if (target != null) {
+                target.setText(incomingText);
+                target.setSelection(target.getText().length());
+            }
+        }
+        Toast.makeText(this, "已接收手機推送資料，確認欄位後請按儲存", Toast.LENGTH_LONG).show();
     }
 
     private void chooseInterval(Button interval) {
@@ -574,16 +613,26 @@ public final class LiveSourcesActivity extends BaseActivity {
     }
 
     private Button button(String label, boolean primary) {
-        Button button = new Button(this);
+        com.google.android.material.button.MaterialButton button =
+                new com.google.android.material.button.MaterialButton(this);
         button.setText(label);
-        button.setTextSize(16);
+        button.setTextSize(14);
         button.setAllCaps(false);
-        button.setTextColor(primary ? PURPLE : WHITE);
-        button.setPadding(dp(14), dp(4), dp(14), dp(4));
-        button.setMinHeight(dp(46));
-        button.setBackground(buttonDrawable(primary, false));
+        button.setMinHeight(dp(44));
+        button.setInsetTop(0);
+        button.setInsetBottom(0);
+        button.setCornerRadius(dp(22));
+        int surface = colorAttr(com.google.android.material.R.attr.colorSurfaceContainer, 0xFF292929);
+        int primaryColor = colorAttr(com.google.android.material.R.attr.colorPrimary, PURPLE);
+        int onPrimary = colorAttr(com.google.android.material.R.attr.colorOnPrimary, Color.WHITE);
+        int onSurface = colorAttr(com.google.android.material.R.attr.colorOnSurface, WHITE);
+        button.setBackgroundTintList(android.content.res.ColorStateList.valueOf(primary ? primaryColor : surface));
+        button.setTextColor(primary ? onPrimary : onSurface);
+        button.setStrokeWidth(dp(1));
+        button.setStrokeColor(android.content.res.ColorStateList.valueOf(
+                colorAttr(com.google.android.material.R.attr.colorOutline, 0xFF666666)));
         button.setFocusable(true);
-        button.setOnFocusChangeListener((v, focused) -> v.setBackground(buttonDrawable(primary, focused)));
+        button.setOnFocusChangeListener((view, focused) -> button.setStrokeWidth(dp(focused ? 2 : 1)));
         return button;
     }
 
@@ -593,6 +642,26 @@ public final class LiveSourcesActivity extends BaseActivity {
         view.setTextSize(sp);
         view.setTextColor(color);
         return view;
+    }
+
+    private int colorAttr(int attribute, int fallback) {
+        android.util.TypedValue value = new android.util.TypedValue();
+        if (!getTheme().resolveAttribute(attribute, value, true)) return fallback;
+        if (value.resourceId != 0) {
+            try {
+                return androidx.core.content.ContextCompat.getColor(this, value.resourceId);
+            } catch (Exception ignored) {
+            }
+        }
+        return value.data != 0 ? value.data : fallback;
+    }
+
+    private GradientDrawable roundDrawable(int color, int radius) {
+        GradientDrawable drawable = new GradientDrawable();
+        drawable.setShape(GradientDrawable.RECTANGLE);
+        drawable.setColor(color);
+        drawable.setCornerRadius(radius);
+        return drawable;
     }
 
     private GradientDrawable buttonDrawable(boolean primary, boolean focused) {
