@@ -214,6 +214,112 @@ def patch_live_settings_layout(tv: Path) -> None:
         layout.write_text(text, encoding="utf-8")
 
 
+def patch_live_settings_layout(tv: Path) -> None:
+    """Group VOD and wallpaper configuration side-by-side without changing behavior."""
+    import xml.etree.ElementTree as ET
+
+    layout = tv / "app/src/leanback/res/layout/activity_setting.xml"
+    if not layout.is_file():
+        raise SystemExit(f"Missing Leanback layout: {layout}")
+
+    ET.register_namespace("android", "http://schemas.android.com/apk/res/android")
+    ET.register_namespace("tools", "http://schemas.android.com/tools")
+    tree = ET.parse(layout)
+    root = tree.getroot()
+    aid = "{http://schemas.android.com/apk/res/android}id"
+    # The original XML uses direct source rows with internal wrapper layouts.
+    # Locate the nearest ancestor that contains both controls, then group their
+    # immediate row containers without changing view IDs or click handlers.
+    rows = {}
+    for target in ("vod", "wall"):
+        found = next((node for node in root.iter()
+                      if node.attrib.get(aid) == f"@+id/{target}"), None)
+        if found is None:
+            raise SystemExit(f"Could not find @{target} in settings layout.")
+        rows[target] = found
+    parents = {child: parent for parent in root.iter() for child in parent}
+    ancestors = []
+    node = rows["vod"]
+    while node in parents:
+        node = parents[node]
+        ancestors.append(node)
+    container = next((candidate for candidate in ancestors
+                      if any(desc is rows["wall"] for desc in candidate.iter())
+                      and candidate.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"), None)
+    if container is None:
+        raise SystemExit("Could not locate shared parent for VOD and wallpaper controls.")
+
+    def top_row(target: str):
+        node = rows[target]
+        while parents.get(node) is not container and node in parents:
+            node = parents[node]
+        return node if parents.get(node) is container else None
+
+    vod_row, wall_row = top_row("vod"), top_row("wall")
+    if vod_row is None or wall_row is None:
+        raise SystemExit("Could not find VOD/wall rows under their shared settings parent.")
+
+    parent_map = {child: parent for parent in root.iter() for child in parent}
+    existing_group = next((node for node in container.iter()
+                           if node.attrib.get(aid) == "@+id/vodAndWall"), None)
+    if existing_group is None and vod_row is not wall_row:
+        if parent_map.get(vod_row) is not container or parent_map.get(wall_row) is not container:
+            raise SystemExit("VOD and wallpaper rows must be direct children of the settings container.")
+
+        group = ET.Element("androidx.appcompat.widget.LinearLayoutCompat", {
+            aid: "@+id/vodAndWall",
+            "{http://schemas.android.com/apk/res/android}layout_width": "match_parent",
+            "{http://schemas.android.com/apk/res/android}layout_height": "wrap_content",
+            "{http://schemas.android.com/apk/res/android}orientation": "horizontal",
+            "{http://schemas.android.com/apk/res/android}gravity": "center_vertical",
+        })
+        index = list(container).index(vod_row)
+        container.remove(vod_row)
+        container.insert(index, group)
+        container.remove(wall_row)
+        # Insert the VOD and wallpaper rows inside the shared group once each.
+        group.append(vod_row)
+        group.append(wall_row)
+        for row, end_margin in ((vod_row, "12dp"), (wall_row, "0dp")):
+            row.set("{http://schemas.android.com/apk/res/android}layout_width", "0dp")
+            row.set("{http://schemas.android.com/apk/res/android}layout_weight", "1")
+            row.set("{http://schemas.android.com/apk/res/android}layout_marginTop", "0dp")
+            row.set("{http://schemas.android.com/apk/res/android}layout_marginEnd", end_margin)
+        ET.indent(tree, space="    ")
+        tree.write(layout, encoding="utf-8", xml_declaration=True)
+
+    # Use a clear Taiwan Traditional Chinese label for the existing live-source control.
+    labels = [
+        (tv / "app/src/leanback/res/values-zh-rTW/strings.xml", "直播源設定"),
+        (tv / "app/src/leanback/res/values-zh-rCN/strings.xml", "直播源設定"),
+        (tv / "app/src/leanback/res/values/strings.xml", "Live source settings"),
+    ]
+    for resource, label in labels:
+        if not resource.is_file():
+            continue
+        stree = ET.parse(resource)
+        sroot = stree.getroot()
+        node = next((item for item in list(sroot)
+                     if item.tag.rsplit("}", 1)[-1] == "string"
+                     and item.attrib.get("name") == "setting_live_sources"), None)
+        if node is None:
+            node = ET.SubElement(sroot, "string", {"name": "setting_live_sources"})
+        for child in list(node):
+            node.remove(child)
+        node.text = label
+        ET.indent(stree, space="    ")
+        stree.write(resource, encoding="utf-8", xml_declaration=True)
+
+    text = layout.read_text(encoding="utf-8")
+    if 'android:text="@string/setting_live_sources"' not in text:
+        if 'android:text="@string/setting_live"' not in text:
+            raise SystemExit("Could not locate the live settings label.")
+        text = text.replace('android:text="@string/setting_live"',
+                            'android:text="@string/setting_live_sources"', 1)
+        layout.write_text(text, encoding="utf-8")
+
+
+
 def patch_tv_settings_layout(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     row = '''        
@@ -257,13 +363,6 @@ def patch_tv_settings_layout(path: Path) -> None:
 
 
 
-
-def patch_tv_home_grouping(tv: Path) -> None:
-    """Keep this patch idempotent: live source setup is in Settings; VOD and wallpaper are grouped there."""
-    # VOD/wallpaper are configuration rows in activity_setting.xml, already grouped
-    # by patch_live_settings_layout. The app home screen uses Leanback Presenter rows,
-    # not XML cards, so no home-layout mutation belongs here.
-    return
 
 
 def ensure_keep_rules(path: Path) -> None:
@@ -372,7 +471,6 @@ def main() -> None:
     patch_tv_settings_activity(tv_settings)
     patch_tv_settings_layout(tv_settings_layout)
     patch_live_settings_layout(tv)
-    patch_tv_home_grouping(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
