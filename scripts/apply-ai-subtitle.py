@@ -213,6 +213,35 @@ def main() -> None:
     main_settings_layout.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(patch_dir / "activity_ai_subtitle_settings.xml", main_settings_layout)
 
+    # The upstream selector_item drawable exists only in the leanback source set.
+    # The AI subtitle settings activity is in main, so provide a self-contained
+    # drawable usable by both mobile and leanback builds.
+    selector_drawable = tv / "app/src/main/res/drawable/ai_subtitle_selector_item.xml"
+    selector_drawable.parent.mkdir(parents=True, exist_ok=True)
+    selector_drawable.write_text("""<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#263B55" />
+            <stroke android:width="2dp" android:color="#FFBFD7FF" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item android:state_selected="true">
+        <shape android:shape="rectangle">
+            <solid android:color="#263B55" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="#1F2937" />
+            <corners android:radius="8dp" />
+        </shape>
+    </item>
+</selector>
+""", encoding="utf-8")
+
     # Support the sherpa-onnx Java API JAR in both leanback and mobile builds.
     gradle_text = gradle.read_text(encoding="utf-8")
     old_dep = 'implementation fileTree(dir: "libs", include: ["*.aar"])'
