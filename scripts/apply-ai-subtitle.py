@@ -212,15 +212,26 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    candidates = [
-        node for node in root.iter()
-        if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
-        and all(any(desc.attrib.get(aid) == f"@+id/{target}" for desc in node.iter())
-                for target in ("vod", "live", "wall"))
-    ]
-    container = min(candidates, key=lambda node: sum(1 for _ in node.iter())) if candidates else None
+    # In the upstream layout the VOD, live and wallpaper rows are siblings
+    # within the top-level vertical LinearLayoutCompat. Find that real container
+    # by requiring a vertical orientation and direct child rows for each ID.
+    candidates = []
+    for node in root.iter():
+        if node.tag.rsplit("}", 1)[-1] != "LinearLayoutCompat":
+            continue
+        if node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") != "vertical":
+            continue
+        direct_ids = {
+            desc.attrib.get(aid)
+            for child in list(node)
+            for desc in child.iter()
+            if desc.attrib.get(aid)
+        }
+        if all(f"@+id/{target}" in direct_ids for target in ("vod", "live", "wall")):
+            candidates.append(node)
+    container = candidates[0] if candidates else None
     if container is None:
-        raise SystemExit("Could not find settings container with VOD/live/wall controls.")
+        raise SystemExit("Could not find settings content container holding the VOD/live/wall rows.")
 
     def direct_row(target_id: str):
         return next((child for child in list(container)
