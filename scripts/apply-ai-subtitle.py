@@ -303,6 +303,106 @@ def patch_live_sources_ui(tv: Path) -> None:
     setting.write_text(source, encoding="utf-8")
 
 
+def patch_live_source_options(tv: Path) -> None:
+    """Apply saved per-source EPG, UA, Referer and custom headers to active Live data."""
+    live = tv / "app/src/main/java/com/fongmi/android/tv/bean/Live.java"
+    live_config = tv / "app/src/main/java/com/fongmi/android/tv/api/config/LiveConfig.java"
+
+    live_text = live.read_text(encoding="utf-8")
+    ua_anchor = """    public String getUa() {
+        return TextUtils.isEmpty(ua) ? "" : ua;
+    }"""
+    ua_setter = ua_anchor + """
+
+    public void setUa(String ua) {
+        this.ua = ua;
+    }"""
+    if "public void setUa(String ua)" not in live_text:
+        live_text = replace_once(live_text, ua_anchor, ua_setter, live)
+
+    referer_anchor = """    public String getReferer() {
+        return TextUtils.isEmpty(referer) ? "" : referer;
+    }"""
+    referer_setter = referer_anchor + """
+
+    public void setReferer(String referer) {
+        this.referer = referer;
+    }"""
+    if "public void setReferer(String referer)" not in live_text:
+        live_text = replace_once(live_text, referer_anchor, referer_setter, live)
+
+    header_anchor = """    public Map<String, String> getHeader() {
+        return header == null ? new HashMap<>() : header;
+    }"""
+    header_setter = header_anchor + """
+
+    public void setHeader(Map<String, String> header) {
+        this.header = header;
+    }"""
+    if "public void setHeader(Map<String, String> header)" not in live_text:
+        live_text = replace_once(live_text, header_anchor, header_setter, live)
+    live.write_text(live_text, encoding="utf-8")
+
+    config_text = live_config.read_text(encoding="utf-8")
+    if "import org.json.JSONObject;" not in config_text:
+        import_anchor = "import java.util.stream.Collectors;\n"
+        config_text = replace_once(
+            config_text, import_anchor,
+            import_anchor + "import org.json.JSONObject;\n", live_config
+        )
+
+    parse_anchor = """        LiveParser.text(live, text);
+        setHome(config, live, false);"""
+    parse_replacement = parse_anchor + """
+        applyR15SourceOptions(config, live);"""
+    if "applyR15SourceOptions(config, live);" not in config_text:
+        config_text = replace_once(config_text, parse_anchor, parse_replacement, live_config)
+
+    json_home_anchor = """        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);"""
+    json_home_replacement = json_home_anchor + """
+        applyR15SourceOptions(config, getHome());"""
+    if "applyR15SourceOptions(config, getHome());" not in config_text:
+        config_text = replace_once(config_text, json_home_anchor, json_home_replacement, live_config)
+
+    helper_anchor = "    public void setKeep(Channel channel) {"
+    helper = """    private void applyR15SourceOptions(Config config, Live live) {
+        if (config == null || live == null || TextUtils.isEmpty(config.getJson())) return;
+        try {
+            JSONObject json = new JSONObject(config.getJson());
+            if (!json.optBoolean("r15SourceOptions", false)) return;
+
+            String epg = json.optString("epg", "");
+            String ua = json.optString("userAgent", "");
+            String referer = json.optString("referer", "");
+            if (!TextUtils.isEmpty(epg)) live.setEpg(epg);
+            if (!TextUtils.isEmpty(ua)) live.setUa(ua);
+            if (!TextUtils.isEmpty(referer)) live.setReferer(referer);
+
+            String text = json.optString("headersText", "");
+            if (!TextUtils.isEmpty(text)) {
+                Map<String, String> headers = new java.util.HashMap<>(live.getHeader());
+                for (String line : text.split("\\r?\\n")) {
+                    String item = line.trim();
+                    if (item.isEmpty()) continue;
+                    int split = item.indexOf('=');
+                    if (split <= 0) split = item.indexOf(':');
+                    if (split <= 0) continue;
+                    String name = item.substring(0, split).trim();
+                    String value = item.substring(split + 1).trim();
+                    if (!name.isEmpty() && !value.isEmpty()) headers.put(name, value);
+                }
+                live.setHeader(headers);
+            }
+        } catch (Exception ignored) {
+        }
+    }
+
+"""
+    if "private void applyR15SourceOptions(Config config, Live live)" not in config_text:
+        config_text = replace_once(config_text, helper_anchor, helper + helper_anchor, live_config)
+    live_config.write_text(config_text, encoding="utf-8")
+
+
 def ensure_keep_rules(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     rules = [
@@ -410,6 +510,7 @@ def main() -> None:
     patch_tv_settings_layout(tv_settings_layout)
     patch_live_settings_layout(tv)
     patch_live_sources_ui(tv)
+    patch_live_source_options(tv)
 
     # Validate idempotence-critical anchors and the forbidden translation providers.
     for path in player_activities:
