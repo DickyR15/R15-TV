@@ -122,20 +122,15 @@ def patch_live_settings_layout(tv: Path) -> None:
     tree = ET.parse(layout)
     root = tree.getroot()
     aid = "{http://schemas.android.com/apk/res/android}id"
-    # Find the container which directly owns the VOD, live and wallpaper rows.
-    candidates = []
-    for node in root.iter():
-        if node.tag.rsplit("}", 1)[-1] != "LinearLayoutCompat":
-            continue
-        direct_child_ids = set()
-        for child in list(node):
-            for desc in child.iter():
-                value = desc.attrib.get(aid)
-                if value:
-                    direct_child_ids.add(value)
-        if all(f"@+id/{target}" in direct_child_ids for target in ("vod", "live", "wall")):
-            candidates.append(node)
-    container = min(candidates, key=lambda node: sum(1 for _ in node.iter())) if candidates else None
+    # Locate the existing vertical settings column by checking its subtree
+    # (the rows themselves may be nested in layout wrappers).
+    container = next((
+        node for node in root.iter()
+        if node.tag.rsplit("}", 1)[-1] == "LinearLayoutCompat"
+        and node.attrib.get("{http://schemas.android.com/apk/res/android}orientation") == "vertical"
+        and all(any(desc.attrib.get(aid) == f"@+id/{target}" for desc in node.iter())
+                for target in ("vod", "live", "wall"))
+    ), None)
     if container is None:
         raise SystemExit("Could not find settings content container holding the VOD/live/wall rows.")
 
