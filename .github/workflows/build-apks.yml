@@ -236,6 +236,47 @@ jobs:
                   report.append(f"--- {p.relative_to(source_root)} ---")
                   report.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
               report.append("")
+          # Print the exact upstream APK playback path separately from the large resource report.
+          # This avoids truncating the Java methods after the XML layout inventory.
+          focus_names = {
+              "LiveActivity.java", "PlaybackActivity.java", "LivePlaybackController.java",
+              "LivePlaybackState.java", "LiveViewModel.java", "PlayerView.java",
+              "Loader.java", "Platform.java"
+          }
+          focus_terms = (
+              "setPosition(", "checkLive(", "getLive(", "setGroup(", "onItemClick(",
+              "onServiceConnected(", "onPlaybackServiceReady(", "configurePlayerView(",
+              "setRender(", "selectChannel(", "requestLive(", "startResolvedPlayback(",
+              "setPlayer(", "clearVideoSurfaceView(", "Python.start("
+          )
+          focused = []
+          focused.append("TV-AutoBuild autobuild-170 focused playback code")
+          focused.append("These excerpts are decompiled from the exact released APK, not from current source.")
+          for p, source_text in sorted(((p, p.read_text(errors="replace")) for p in source_root.rglob("*.java") if p.name in focus_names), key=lambda item: str(item[0])):
+              lines = source_text.splitlines()
+              focused.append("")
+              focused.append(f"--- {p.relative_to(source_root)} ({len(lines)} lines) ---")
+              if len(lines) <= 420:
+                  focused.extend(f"{i+1}: {line}" for i, line in enumerate(lines))
+                  continue
+              anchors = [i for i, line in enumerate(lines) if any(term in line for term in focus_terms)]
+              ranges = []
+              for i in anchors:
+                  lo, hi = max(0, i-18), min(len(lines), i+55)
+                  if ranges and lo <= ranges[-1][1]:
+                      ranges[-1] = (ranges[-1][0], max(ranges[-1][1], hi))
+                  else:
+                      ranges.append((lo, hi))
+              shown = set()
+              for lo, hi in ranges[:20]:
+                  focused.extend(f"{i+1}: {lines[i]}" for i in range(lo, hi))
+                  shown.update(range(lo, hi))
+              if not shown:
+                  focused.extend(f"{i+1}: {line}" for i, line in enumerate(lines[:160]))
+          (root / "focused-playback-report.txt").write_text("\n".join(focused), encoding="utf-8")
+          print("=== AUTOBUILD170_FOCUSED_CODE_BEGIN ===")
+          print("\n".join(focused)[:70000])
+          print("=== AUTOBUILD170_FOCUSED_CODE_END ===")
           full = "\n".join(report)
           (root / "reverse-engineering-report.txt").write_text(full, encoding="utf-8")
           # A bounded report in logs is retained for inspection even if artifact retrieval is unavailable.
