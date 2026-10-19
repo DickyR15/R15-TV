@@ -240,6 +240,9 @@ jobs:
           python3 -m py_compile scripts/apply-r15-branding.py
           python3 scripts/apply-r15-branding.py --tv-dir sources/TV --branding-dir patches/branding
           echo "R15 TV launcher icon and four built-in TV wallpapers staged."
+          python3 -m py_compile scripts/apply-long-press-speed.py
+          python3 scripts/apply-long-press-speed.py --tv-dir sources/TV
+          echo "Long-press speed setting row staged for Leanback and Mobile."
           mkdir -p sources/TV/app/src/main/assets
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
