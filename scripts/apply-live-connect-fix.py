@@ -300,7 +300,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
         text = text.replace(anchor, "import android.os.Build;\n" + anchor, 1)
 
     old = "playerView.setRender(PlayerSetting.getRender());"
-    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE : PlayerSetting.getRender());"
+    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE : PlayerSetting.getRender());"
     if new not in text:
         count = text.count(old)
         if count != 1:
@@ -309,7 +309,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
     path.write_text(text, encoding="utf-8")
     if new not in path.read_text(encoding="utf-8"):
         raise SystemExit("Android 9 TextureView compatibility setting was not applied")
-    print("Applied SurfaceView compatibility on Android 9 and older; Android 10+ keeps the user's configured renderer.")
+    print("Applied TextureView compatibility on Android 9 and older; Android 10+ keeps the saved renderer.")
 
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
