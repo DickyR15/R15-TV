@@ -98,6 +98,7 @@ new_stream = r'''    fun stream(id: String, maxQuality: Int = 1080, seriesId: St
         // of quietly selecting a low-resolution stream.
         val qualityCeiling = maxOf(720, maxQuality)
         val selected = rows.firstOrNull { it.first in 720..qualityCeiling }
+            ?: rows.firstOrNull { it.first > qualityCeiling && it.first >= 720 }
             ?: throw IOException("本集没有可确认的 720P 或更高画质，已停止自动降质")
         val item = selected.third
         val seed = info.str("key_seed")
@@ -128,7 +129,9 @@ new_stream = r'''    fun stream(id: String, maxQuality: Int = 1080, seriesId: St
             else -> candidates[(attempt - candidates.size) % candidates.size]
         }
         val key = item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-        return StreamInfo(selectedUrl, key, selected.first.toString() + "P")
+        val qualityLabel = selected.first.toString() + "P" +
+            (if (selected.first > qualityCeiling) "（兼容资源）" else "")
+        return StreamInfo(selectedUrl, key, qualityLabel)
     }
 
     /**
@@ -284,6 +287,12 @@ src = replace_once(
 )
 src = replace_once(
     src,
+    "import android.widget.ImageView\n",
+    "import android.widget.ImageView\nimport android.widget.TextView\n",
+    "featured hero TextView import",
+)
+src = replace_once(
+    src,
     "    private var compact = false",
     "    private var compact = false\n    private var heroButton: View? = null",
     "hero button state",
@@ -400,7 +409,24 @@ src = replace_once(
 )
 write(path, src)
 
-# G) Convert visible UI literals/resources into Taiwan Traditional Chinese while
+# G) Keep playback regression tests aligned with the 720P floor. A lower-than-720P
+# H.264 stream must not win over an available compatible 1080P source.
+path, src = read("android/core/src/test/kotlin/com/hgtv/star/core/ContentRepositoryTest.kt")
+src = replace_once(
+    src,
+    """    @Test fun compatibleLowerQualityWinsBeforeHigherResolutionFallback() {
+        val repo=streamRepository(Triple(720,"bytevc2","https://example.com/unsupported"),Triple(480,"h264","https://example.com/avc"),Triple(1080,"bytevc1","https://example.com/hevc"))
+        assertEquals("480P",repo.stream("123",720).quality)
+    }""",
+    """    @Test fun respects720PMinimumWhenLowerQualityIsOnlyH264Choice() {
+        val repo=streamRepository(Triple(720,"bytevc2","https://example.com/unsupported"),Triple(480,"h264","https://example.com/avc"),Triple(1080,"bytevc1","https://example.com/hevc"))
+        assertEquals("1080P（兼容资源）",repo.stream("123",720).quality)
+    }""",
+    "720P minimum regression test",
+)
+write(path, src)
+
+# H) Convert visible UI literals/resources into Taiwan Traditional Chinese while
 # leaving identifiers, comments, API routes and keys unchanged.
 try:
     from opencc import OpenCC
