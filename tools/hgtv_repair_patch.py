@@ -120,7 +120,11 @@ new_stream = r'''    fun stream(id: String, maxQuality: Int = 1080, seriesId: St
         val attempt = streamSourceAttempts[id]?.get() ?: 0
         val selectedUrl = when {
             attempt < candidates.size -> candidates[attempt]
-            attempt == candidates.size -> officialWebStream(id, seriesId, qualityCeiling) ?: candidates[0]
+            attempt == candidates.size -> {
+                val official = officialWebStream(id, seriesId, qualityCeiling)
+                if (official != null) return official
+                candidates[0]
+            }
             else -> candidates[(attempt - candidates.size - 1) % candidates.size]
         }
         val key = item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
