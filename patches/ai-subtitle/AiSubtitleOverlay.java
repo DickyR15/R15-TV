@@ -27,7 +27,9 @@ import androidx.media3.ui.PlayerView;
 
 import com.fongmi.android.tv.ui.activity.AiSubtitleSettingsActivity;
 
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 
@@ -52,6 +54,7 @@ public final class AiSubtitleOverlay {
     private final LinearLayout panel;
     private final ActivityResultLauncher<String> audioPermissionLauncher;
     private final ActivityResultLauncher<Intent> projectionPermissionLauncher;
+    private TextView quickSubtitleControl;
 
     private boolean enabled;
     private boolean hasTranslatedCaption;
@@ -126,6 +129,125 @@ public final class AiSubtitleOverlay {
             overlay = INSTANCES.remove(playerView);
         }
         if (overlay != null) overlay.detachView();
+    }
+
+    private static AiSubtitleOverlay findOverlay(PlayerView playerView) {
+        if (playerView == null) return null;
+        synchronized (INSTANCES) {
+            return INSTANCES.get(playerView);
+        }
+    }
+
+    public static void refreshLiveControls(FragmentActivity activity, PlayerView playerView,
+                                           TextView subtitleControl, TextView languageControl) {
+        if (activity == null) return;
+        String language = AiSubtitleSettingsActivity.getAsrLanguage(activity);
+        if (languageControl != null) {
+            languageControl.setText("來源語種：" + AiSubtitleSettingsActivity.getAsrLanguageLabel(language));
+        }
+        if (subtitleControl != null) {
+            AiSubtitleOverlay overlay = findOverlay(playerView);
+            if (overlay == null) {
+                subtitleControl.setText("字幕翻譯：關");
+            } else {
+                overlay.quickSubtitleControl = subtitleControl;
+                overlay.updateQuickSubtitleLabel();
+            }
+        }
+    }
+
+    public static void handleLiveSubtitleClick(FragmentActivity activity, PlayerView playerView,
+                                               TextView subtitleControl) {
+        if (activity == null || activity.isFinishing()) return;
+        AiSubtitleOverlay overlay = findOverlay(playerView);
+        // A live session that is already running must always be able to turn subtitles off.
+        if (overlay != null && overlay.enabled) {
+            overlay.quickSubtitleControl = subtitleControl;
+            overlay.toggleCapture();
+            overlay.updateQuickSubtitleLabel();
+            return;
+        }
+
+        String language = AiSubtitleSettingsActivity.getAsrLanguage(activity);
+        AiSubtitleModelManager manager = AiSubtitleModelManager.getInstance(activity);
+        if (!manager.isDownloaded(language)) {
+            AiSubtitleSettingsActivity.start(activity);
+            return;
+        }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            new AlertDialog.Builder(activity)
+                    .setTitle("無法啟動即時字幕")
+                    .setMessage("系統音訊擷取需要 Android 10 以上。可以前往設定管理語音模型。")
+                    .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                    .setPositiveButton("前往設定", (dialog, which) -> AiSubtitleSettingsActivity.start(activity))
+                    .show();
+            return;
+        }
+        // Launchers are registered during LiveActivity.initView, never on a click after RESUMED.
+        if (overlay == null) {
+            new AlertDialog.Builder(activity)
+                    .setTitle("字幕尚未初始化")
+                    .setMessage("請先退出直播再重新進入，然後即可直接切換字幕。")
+                    .setPositiveButton("知道了", (dialog, which) -> dialog.dismiss())
+                    .show();
+            return;
+        }
+        overlay.quickSubtitleControl = subtitleControl;
+        overlay.toggleCapture();
+        overlay.updateQuickSubtitleLabel();
+    }
+
+    public static void handleLiveLanguageClick(FragmentActivity activity, PlayerView playerView,
+                                               TextView languageControl) {
+        if (activity == null || activity.isFinishing()) return;
+        String selected = AiSubtitleSettingsActivity.getAsrLanguage(activity);
+        AiSubtitleModelManager manager = AiSubtitleModelManager.getInstance(activity);
+        // Both bottom actions open the full settings when the selected model is not downloaded.
+        if (!manager.isDownloaded(selected)) {
+            AiSubtitleSettingsActivity.start(activity);
+            return;
+        }
+
+        List<String> installedCodes = new ArrayList<>();
+        List<String> choices = new ArrayList<>();
+        for (String code : manager.getLanguageCodes()) {
+            if (manager.isDownloaded(code)) {
+                installedCodes.add(code);
+                choices.add(AiSubtitleSettingsActivity.getAsrLanguageLabel(code));
+            }
+        }
+        if (installedCodes.isEmpty()) {
+            AiSubtitleSettingsActivity.start(activity);
+            return;
+        }
+        choices.add("下載更多語言…");
+        final int downloadMoreIndex = installedCodes.size();
+        new AlertDialog.Builder(activity)
+                .setTitle("選擇已下載的辨識語種")
+                .setItems(choices.toArray(new String[0]), (dialog, which) -> {
+                    if (which == downloadMoreIndex) {
+                        AiSubtitleSettingsActivity.start(activity);
+                        return;
+                    }
+                    if (which < 0 || which >= installedCodes.size()) return;
+                    String nextLanguage = installedCodes.get(which);
+                    AiSubtitleSettingsActivity.setAsrLanguage(activity, nextLanguage);
+                    if (languageControl != null) {
+                        languageControl.setText("來源語種：" + AiSubtitleSettingsActivity.getAsrLanguageLabel(nextLanguage));
+                    }
+                    AiSubtitleOverlay overlay = findOverlay(playerView);
+                    if (overlay != null && overlay.enabled) {
+                        overlay.stopCapture("來源語種已切換，請重新啟動字幕");
+                    }
+                    if (overlay != null) overlay.updateQuickSubtitleLabel();
+                })
+                .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
+                .show();
+    }
+
+    private void updateQuickSubtitleLabel() {
+        if (quickSubtitleControl == null || activity.isFinishing()) return;
+        quickSubtitleControl.setText(enabled ? "字幕翻譯：開" : "字幕翻譯：關");
     }
 
     private String selectedModelId() {
@@ -435,6 +557,7 @@ public final class AiSubtitleOverlay {
             return;
         }
         enabled = true;
+        updateQuickSubtitleLabel();
         hasTranslatedCaption = false;
         hasRecognizedCaption = false;
         whisperReady = false;
@@ -680,6 +803,7 @@ public final class AiSubtitleOverlay {
         caption.setVisibility(android.view.View.VISIBLE);
         status.setText(message);
         updateModelControls();
+        updateQuickSubtitleLabel();
     }
 
     private void stopCapture(String message) {
@@ -702,6 +826,7 @@ public final class AiSubtitleOverlay {
         caption.setText(showFailure ? message : "");
         caption.setVisibility(showFailure ? android.view.View.VISIBLE : android.view.View.GONE);
         updateModelControls();
+        updateQuickSubtitleLabel();
     }
 
     private void closeTranslationEngine() {
@@ -712,6 +837,7 @@ public final class AiSubtitleOverlay {
 
     private void detachView() {
         stopCapture("播放器已關閉");
+        quickSubtitleControl = null;
         if (panel.getParent() instanceof FrameLayout) {
             ((FrameLayout) panel.getParent()).removeView(panel);
         }

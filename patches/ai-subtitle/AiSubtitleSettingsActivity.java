@@ -72,6 +72,19 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         return "en";
     }
 
+    public static void setAsrLanguage(Context context, String language) {
+        if (context == null) return;
+        String selected = "en";
+        for (String code : ASR_LANGUAGE_CODES) {
+            if (code.equals(language)) {
+                selected = code;
+                break;
+            }
+        }
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+                .edit().putString(KEY_ASR_LANGUAGE, selected).apply();
+    }
+
     public static String getAsrLanguageLabel(String code) {
         for (int i = 0; i < ASR_LANGUAGE_CODES.length; i++) {
             if (ASR_LANGUAGE_CODES[i].equals(code)) return ASR_LANGUAGE_LABELS[i];

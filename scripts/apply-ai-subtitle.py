@@ -49,25 +49,38 @@ def patch_manifest(path: Path) -> None:
 
 
 def patch_player_resume(text: str, path: Path) -> str:
-    """Attach subtitle capture only after the user opts in to auto-start."""
+    """Keep live controls registered before STARTED and refresh their state on return."""
+    is_live = path.name == "LiveActivity.java"
     signature = "protected void onResume() {"
     start = text.find(signature)
     if start < 0:
         signature = "public void onResume() {"
         start = text.find(signature)
 
-    action = """        if (mBinding != null && AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
+    if is_live:
+        action = """        if (mBinding != null) {
+            if (AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
+                AiSubtitleOverlay.attach(this, mBinding.player);
+            }
+            AiSubtitleOverlay.refreshLiveControls(this, mBinding.player,
+                    mBinding.control.actions.r15Subtitle, mBinding.control.actions.r15Language);
+        }"""
+    else:
+        action = """        if (mBinding != null && AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
             AiSubtitleOverlay.attach(this, mBinding.player);
         } else if (mBinding != null) {
             AiSubtitleOverlay.detach(mBinding.player);
         }"""
+
     if start >= 0:
         body_start = start + len(signature)
         body_end = text.find("\n    }", body_start)
         if body_end < 0:
             raise SystemExit(f"{path}: cannot locate onResume() end")
         body = text[body_start:body_end]
-        if "AiSubtitleSettingsActivity.isAutoStartEnabled(this)" in body:
+        needs_attach = "AiSubtitleSettingsActivity.isAutoStartEnabled(this)" not in body
+        needs_refresh = is_live and "AiSubtitleOverlay.refreshLiveControls" not in body
+        if not needs_attach and not needs_refresh:
             return text
         marker = "super.onResume();"
         offset = body.find(marker)
@@ -83,7 +96,22 @@ def patch_player_resume(text: str, path: Path) -> str:
     annotation = text.rfind("@Override", 0, insert_at)
     if annotation >= 0 and text[annotation + len("@Override"):insert_at].strip() == "":
         insert_at = annotation
-    method = """    @Override
+    if is_live:
+        method = """    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mBinding != null) {
+            if (AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
+                AiSubtitleOverlay.attach(this, mBinding.player);
+            }
+            AiSubtitleOverlay.refreshLiveControls(this, mBinding.player,
+                    mBinding.control.actions.r15Subtitle, mBinding.control.actions.r15Language);
+        }
+    }
+
+"""
+    else:
+        method = """    @Override
     protected void onResume() {
         super.onResume();
         if (mBinding != null && AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
@@ -95,7 +123,6 @@ def patch_player_resume(text: str, path: Path) -> str:
 
 """
     return text[:insert_at] + method + text[insert_at:]
-
 
 def patch_player_activity(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
@@ -112,7 +139,12 @@ def patch_player_activity(path: Path) -> None:
     init_body_end = init_end if init_end >= 0 else len(text)
     init_body = text[init_start:init_body_end]
     attach_call = "AiSubtitleOverlay.attach(this, mBinding.player);"
-    attach_line = "if (AiSubtitleSettingsActivity.isAutoStartEnabled(this)) " + attach_call
+    if path.name == "LiveActivity.java":
+        # ActivityResult launchers must be registered before STARTED. This creates an idle overlay
+        # only on Android 10+, while the recognizer/audio capture still starts only on user action.
+        attach_line = "if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) " + attach_call
+    else:
+        attach_line = "if (AiSubtitleSettingsActivity.isAutoStartEnabled(this)) " + attach_call
     if attach_call not in init_body:
         marker = "setVideoView();"
         marker_pos = text.find(marker, init_start, init_body_end)

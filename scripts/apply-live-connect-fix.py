@@ -96,7 +96,13 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
             android:id="@+id/r15Subtitle"
             style="@style/Control"
             android:layout_marginEnd="8dp"
-            android:text="字幕翻譯：關" />'''
+            android:text="字幕翻譯：關" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/r15Language"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="來源語種：英語" />'''
     for flavor in ("leanback", "mobile"):
         layout = tv / "app" / "src" / flavor / "res" / "layout" / "view_control_live_action.xml"
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
@@ -110,11 +116,28 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
 
         source = activity.read_text(encoding="utf-8")
         anchor = "mBinding.control.actions.video.setOnClickListener(this::onTrack);\n"
-        listener = anchor + "        mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleSettingsActivity.start(this));\n"
+        listener = anchor + "        mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleOverlay.handleLiveSubtitleClick(this, mBinding.player, mBinding.control.actions.r15Subtitle));\n"
         if "mBinding.control.actions.r15Subtitle.setOnClickListener" not in source:
             if source.count(anchor) != 1:
                 raise SystemExit(f"{activity}: cannot add subtitle settings click handler")
             source = source.replace(anchor, listener, 1)
+
+        # Migrate an older bottom subtitle control from "open settings" to a quick action.
+        source = source.replace(
+            "mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleSettingsActivity.start(this));",
+            "mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleOverlay.handleLiveSubtitleClick(this, mBinding.player, mBinding.control.actions.r15Subtitle));"
+        )
+        language_listener = "        mBinding.control.actions.r15Language.setOnClickListener(view -> AiSubtitleOverlay.handleLiveLanguageClick(this, mBinding.player, mBinding.control.actions.r15Language));\n"
+        subtitle_listener = "        mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleOverlay.handleLiveSubtitleClick(this, mBinding.player, mBinding.control.actions.r15Subtitle));\n"
+        if "mBinding.control.actions.r15Language.setOnClickListener" not in source:
+            if subtitle_listener.strip() not in source:
+                raise SystemExit(f"{activity}: cannot add source-language click handler")
+            source = source.replace(subtitle_listener, subtitle_listener + language_listener, 1)
+        refresh_line = "AiSubtitleOverlay.refreshLiveControls(this, mBinding.player, mBinding.control.actions.r15Subtitle, mBinding.control.actions.r15Language);"
+        if refresh_line not in source:
+            if language_listener.strip() not in source:
+                raise SystemExit(f"{activity}: source-language handler was not installed")
+            source = source.replace(language_listener, language_listener + "\n        " + refresh_line, 1)
 
         # State refresh is optional because some upstream flavors do not override
         # onResume(). Do not fail the entire build just because the override is absent.
@@ -128,7 +151,7 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
             body_end = source.find("\n    }", body_start)
             if body_end >= 0:
                 body = source[body_start:body_end]
-                label = 'if (mBinding != null) mBinding.control.actions.r15Subtitle.setText(AiSubtitleSettingsActivity.isAutoStartEnabled(this) ? "字幕翻譯：開" : "字幕翻譯：關");'
+                label = 'if (mBinding != null) AiSubtitleOverlay.refreshLiveControls(this, mBinding.player, mBinding.control.actions.r15Subtitle, mBinding.control.actions.r15Language);'
                 if "mBinding.control.actions.r15Subtitle.setText" not in body:
                     super_call = "super.onResume();"
                     pos = body.find(super_call)
@@ -197,8 +220,8 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         player().clear();
         player().stop();
         resetAdapter();"""
-    new_reset = """        // Keep the current frame while the replacement channel loads.
-        // Media3 is configured to retain content on reset to avoid a black flash.
+    new_reset = """        // Retain the existing decoder/surface while the replacement channel loads.
+        player().pause();
         resetAdapter();"""
     for flavor in ("leanback", "mobile"):
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
@@ -231,10 +254,10 @@ def patch_refresh_without_clearing(tv: Path) -> None:
             raise SystemExit(f"{activity}: cannot locate stopPlayer()")
         method = text[method_start:method_end]
         old_pair = "        player().clear();\n        player().stop();"
-        new_pair = "        // Keep the existing decoder/surface while a new URL resolves.\n        player().pause();\n        player().reset();"
+        new_pair = "        // Retain the existing decoder/surface while the new URL resolves.\n        player().pause();"
         if old_pair in method:
             method = method.replace(old_pair, new_pair, 1)
-        elif "player().pause();" not in method or "player().reset();" not in method:
+        elif "player().pause();" not in method:
             raise SystemExit(f"{activity}: cannot safely patch stopPlaybackForRefresh()")
         text = text[:method_start] + method + text[method_end:]
 
@@ -249,16 +272,17 @@ def patch_refresh_without_clearing(tv: Path) -> None:
         player().clear();
         player().stop();"""
         if old_teardown in method:
-            method = method.replace(old_teardown, """        player().pause();
-        player().reset();""", 1)
-        else:
-            before_adapter = method.split("        resetAdapter();", 1)[0]
-            if "player().pause();" not in before_adapter:
-                if "        resetAdapter();" not in method:
-                    raise SystemExit(f"{activity}: cannot locate setLive() adapter reset")
-                method = method.replace("        resetAdapter();", "        player().pause();\n        player().reset();\n        resetAdapter();", 1)
-            elif "player().reset();" not in before_adapter:
-                method = method.replace("        resetAdapter();", "        player().reset();\n        resetAdapter();", 1)
+            method = method.replace(old_teardown, "        player().pause();", 1)
+        # Older revisions may already contain a reset inserted by a previous patch.
+        method = method.replace("        player().pause();\n        player().reset();\n        resetAdapter();",
+                                "        player().pause();\n        resetAdapter();")
+        method = method.replace("        player().reset();\n        resetAdapter();",
+                                "        player().pause();\n        resetAdapter();")
+        before_adapter = method.split("        resetAdapter();", 1)[0]
+        if "player().pause();" not in before_adapter:
+            if "        resetAdapter();" not in method:
+                raise SystemExit(f"{activity}: cannot locate setLive() adapter reset")
+            method = method.replace("        resetAdapter();", "        player().pause();\n        resetAdapter();", 1)
         text = text[:method_start] + method + text[method_end:]
         activity.write_text(text, encoding="utf-8")
     print("Updated live channel refresh and source activation to pause without clearing/stopping the active media surface.")
@@ -381,8 +405,12 @@ def main() -> None:
         raise SystemExit("Bottom subtitle settings control is missing")
     if "android.enableJetifier=true" not in gradle_properties.read_text(encoding="utf-8"):
         raise SystemExit("Jetifier compatibility setting is missing")
-    print("Applied home label/icon, Aurora default wallpaper and live-action duplicate-ID workaround.")
-    print("Kept stock hardware acceleration and PlayerSetting renderer behavior; no old-Android renderer override is applied.")
+    if 'android:id="@+id/r15Language"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
+        raise SystemExit("Bottom source-language control is missing")
+    if "AiSubtitleOverlay.handleLiveSubtitleClick" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
+        raise SystemExit("Quick subtitle toggle is not wired")
+    print("Applied home label/icon, quick subtitle toggle, downloaded-language picker, and pause-only source switching.")
+    print("Applied the Android 9 TextureView fallback; Android 10+ keeps the configured renderer.")
 
 
 if __name__ == "__main__":
