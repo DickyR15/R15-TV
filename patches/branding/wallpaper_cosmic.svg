@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+ <defs>
+  <linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#210921"/><stop offset=".45" stop-color="#170B35"/><stop offset="1" stop-color="#310A32"/></linearGradient>
+  <linearGradient id="flame" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#FF8735" stop-opacity=".92"/><stop offset=".28" stop-color="#FC3F9F" stop-opacity=".45"/><stop offset=".62" stop-color="#924EFF" stop-opacity=".42"/><stop offset="1" stop-color="#FFBC5F" stop-opacity=".85"/></linearGradient>
+  <radialGradient id="amber"><stop stop-color="#FF7B38" stop-opacity=".55"/><stop offset="1" stop-color="#F42192" stop-opacity="0"/></radialGradient>
+ </defs>
+ <rect width="1920" height="1080" fill="url(#base)"/>
+ <ellipse cx="180" cy="250" rx="720" ry="570" fill="url(#amber)"/><ellipse cx="1770" cy="850" rx="640" ry="500" fill="url(#amber)"/>
+ <path d="M-60 190 C270 30 440 120 710 270 S1350 390 1980 30" fill="none" stroke="url(#flame)" stroke-width="155" opacity=".63"/>
+ <path d="M-70 800 C300 510 560 730 830 810 S1430 1030 2000 570" fill="none" stroke="url(#flame)" stroke-width="180" opacity=".62"/>
+ <path d="M-40 890 C280 640 530 760 820 860 S1440 1060 1970 680" fill="none" stroke="#FFB54F" stroke-width="6" opacity=".8"/>
+ <path d="M-20 260 C280 30 480 100 740 250 S1350 410 1950 20" fill="none" stroke="#FFB1D6" stroke-width="5" opacity=".7"/>
+ <path d="M-40 450 C270 200 520 270 780 420 S1420 650 1990 290" fill="none" stroke="#BA7BFF" stroke-width="4" opacity=".55"/>
+ <g fill="#FFC48C" opacity=".63"><circle cx="145" cy="145" r="6"/><circle cx="280" cy="500" r="4"/><circle cx="440" cy="205" r="3"/><circle cx="650" cy="915" r="5"/><circle cx="1220" cy="240" r="4"/><circle cx="1540" cy="690" r="5"/><circle cx="1770" cy="470" r="3"/><circle cx="1680" cy="900" r="5"/></g>
+</svg>

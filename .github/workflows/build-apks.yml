@@ -233,10 +233,13 @@ jobs:
       - name: Install latest OpenCC tooling and validate subtitle catalogs
         run: |
           set -euo pipefail
-          python3 -m pip install --disable-pip-version-check "opencc==1.4.2"
+          python3 -m pip install --disable-pip-version-check "opencc==1.4.2" "cairosvg==2.7.1" "Pillow==11.3.0"
           python3 -m py_compile scripts/apply-taiwan-localization.py scripts/validate-ai-subtitle-config.py
           python3 scripts/validate-ai-subtitle-config.py
           python3 scripts/apply-taiwan-localization.py --tv-dir sources/TV
+          python3 -m py_compile scripts/apply-r15-branding.py
+          python3 scripts/apply-r15-branding.py --tv-dir sources/TV --branding-dir patches/branding
+          echo "R15 TV launcher icon and four built-in TV wallpapers staged."
           mkdir -p sources/TV/app/src/main/assets
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json

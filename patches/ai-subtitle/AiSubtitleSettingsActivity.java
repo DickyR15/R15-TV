@@ -37,9 +37,9 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
     private static final String KEY_REGION = "translation_region";
     private static final String KEY_MODEL = "translation_model";
 
-    private static final String[] ASR_LANGUAGE_CODES = {"yue", "de", "en", "fr", "es", "ja", "zh", "ko"};
+    private static final String[] ASR_LANGUAGE_CODES = {"en", "zh", "yue", "ja", "ko", "de", "fr", "es"};
     private static final String[] ASR_LANGUAGE_LABELS = {
-            "粵語", "德語", "英語", "法語", "西班牙語", "日語", "中文（普通話）", "韓語"
+            "英語", "中文", "粵語", "日語", "韓語", "德語", "法語", "西班牙語"
     };
 
     public static final int DISPLAY_TRANSLATED_ONLY = 0;

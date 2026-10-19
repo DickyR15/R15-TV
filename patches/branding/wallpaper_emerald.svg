@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1920" height="1080" viewBox="0 0 1920 1080">
+ <defs>
+  <linearGradient id="base" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#031A18"/><stop offset=".48" stop-color="#073A28"/><stop offset="1" stop-color="#0A2019"/></linearGradient>
+  <linearGradient id="ribbon" x1="0" y1="0" x2="1" y2=".3"><stop stop-color="#3AFF79" stop-opacity=".08"/><stop offset=".3" stop-color="#C3FF56" stop-opacity=".78"/><stop offset=".58" stop-color="#49E879" stop-opacity=".32"/><stop offset="1" stop-color="#E8FF8D" stop-opacity=".7"/></linearGradient>
+  <radialGradient id="glow"><stop stop-color="#8DFF34" stop-opacity=".52"/><stop offset="1" stop-color="#32D85A" stop-opacity="0"/></radialGradient>
+ </defs>
+ <rect width="1920" height="1080" fill="url(#base)"/>
+ <ellipse cx="230" cy="180" rx="650" ry="420" fill="url(#glow)"/><ellipse cx="1700" cy="850" rx="700" ry="540" fill="url(#glow)"/>
+ <path d="M-80 390 C300 10 650 40 920 250 S1490 590 2000 90 L2000 0 L-80 0Z" fill="url(#ribbon)" opacity=".68"/>
+ <path d="M-60 760 C300 400 570 510 810 610 S1310 810 1980 390" fill="none" stroke="url(#ribbon)" stroke-width="115" opacity=".56"/>
+ <path d="M-80 860 C300 570 690 650 930 710 S1510 1000 2020 580" fill="none" stroke="#B7FF53" stroke-width="5" opacity=".75"/>
+ <path d="M-30 270 C380 80 590 150 920 340 S1490 620 1960 120" fill="none" stroke="#D9FF8C" stroke-width="4" opacity=".5"/>
+ <path d="M-20 980 C400 700 770 800 1000 860 S1590 1090 1970 720" fill="none" stroke="#51FC95" stroke-width="3" opacity=".38"/>
+ <g fill="#D9FF91" opacity=".45"><circle cx="170" cy="265" r="5"/><circle cx="330" cy="690" r="7"/><circle cx="510" cy="180" r="4"/><circle cx="1280" cy="270" r="5"/><circle cx="1570" cy="690" r="6"/><circle cx="1780" cy="400" r="4"/><circle cx="1430" cy="930" r="5"/><circle cx="720" cy="885" r="3"/></g>
+ <rect width="1920" height="1080" fill="#00110C" opacity=".12"/>
+</svg>
