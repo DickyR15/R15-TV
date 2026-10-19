@@ -1,0 +1,68 @@
+name: HGTV Dicky Repair Test Build
+
+on:
+  push:
+    branches:
+      - hgtv-repair-build-20261019
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repair harness
+        uses: actions/checkout@v4
+
+      - name: Checkout public HGTV Android TV source
+        uses: actions/checkout@v4
+        with:
+          repository: pan8664716/HGTV
+          ref: main
+          path: upstream
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: gradle
+          cache-dependency-path: upstream/android/**/*.gradle*
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Install Android SDK components
+        run: sdkmanager "platforms;android-36" "build-tools;36.0.0"
+
+      - name: Install Traditional Chinese converter
+        run: python3 -m pip install opencc-python-reimplemented
+
+      - name: Apply HGTV repair patch
+        run: python3 tools/hgtv_repair_patch.py
+
+      - name: Build and test repair APK
+        working-directory: upstream/android
+        env:
+          HGTV_VERSION_CODE: '43'
+          HGTV_VERSION_NAME: '1.1.7-DickyFix'
+        run: |
+          chmod +x ./gradlew
+          ./gradlew --no-daemon :core:test :app:lintDebug :app:assembleDebug
+
+      - name: Copy APK and patch log
+        run: |
+          cp upstream/android/app/build/outputs/apk/debug/app-debug.apk HGTV-Dicky-Repair-Test.apk
+          git diff --no-index -- /dev/null tools/hgtv_repair_patch.py > HGTV-repair-patch.diff || test "$?" -eq 1
+
+      - name: Upload test APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: HGTV-Dicky-Repair-Test-APK
+          path: |
+            HGTV-Dicky-Repair-Test.apk
+            HGTV-repair-patch.diff
+          if-no-files-found: error
+          retention-days: 14
