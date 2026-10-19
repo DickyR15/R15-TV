@@ -415,9 +415,6 @@ def patch_live_source_options(tv: Path) -> None:
     live.write_text(live_text, encoding="utf-8")
 
     config_text = live_config.read_text(encoding="utf-8")
-    if "private boolean suppressBootEvent;" not in config_text:
-        ads_anchor = "    private List<String> ads;\n"
-        config_text = replace_once(config_text, ads_anchor, ads_anchor + "\n    private boolean suppressBootEvent;\n", live_config)
     if "import org.json.JSONObject;" not in config_text:
         import_anchor = "import java.util.stream.Collectors;\n"
         config_text = replace_once(
