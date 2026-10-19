@@ -50,13 +50,12 @@ def stage_icon(tv: Path, branding: Path) -> None:
     if not icon_source.is_file():
         raise SystemExit(f"Missing requested R15 TV icon artwork: {icon_source}")
 
-    # Use the user's exact artwork with its original dark background.
+    # Restore the exact supplied R15 icon artwork, including its background.
     with Image.open(icon_source) as source:
         artwork = source.convert("RGB").resize((512, 512), Image.Resampling.LANCZOS)
 
     logo_dir = resources / "drawable-nodpi"
     logo_dir.mkdir(parents=True, exist_ok=True)
-    # Keep the image background on the homepage logo; do not remove it.
     artwork.save(logo_dir / "ic_logo.png", "PNG", optimize=True)
 
     density_sizes = {
@@ -66,8 +65,6 @@ def stage_icon(tv: Path, branding: Path) -> None:
         "mipmap-xxhdpi": 144,
         "mipmap-xxxhdpi": 192,
     }
-    # Update all variants. Android TV's launcher may resolve resources from the
-    # Leanback source set instead of main/res.
     launcher_resource_roots = [
         resources,
         tv / "app" / "src" / "mobile" / "res",
@@ -81,19 +78,16 @@ def stage_icon(tv: Path, branding: Path) -> None:
             resized.save(directory / "ic_launcher.png", "PNG", optimize=True)
             resized.save(directory / "ic_launcher_round.webp", "WEBP", quality=95, method=6)
 
-        # An adaptive-icon XML took precedence over these raster assets and
-        # displayed the obsolete blue-slash image. Remove that override.
+        # Delete old adaptive-icon overrides in case those resources exist.
         anydpi = root / "mipmap-anydpi-v26"
         for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
             path = anydpi / name
             if path.exists():
                 path.unlink()
 
-    # Remove obsolete adaptive foreground assets from previous branding builds.
-    for obsolete in (
-        logo_dir / "r15_launcher_foreground.png",
-        resources / "drawable" / "ic_launcher_foreground.xml",
-    ):
+    # Preserve referenced resources: app/src/main/res/values*/ may still refer
+    # to @drawable/ic_launcher_foreground, so do not delete its XML wrapper.
+    for obsolete in (logo_dir / "r15_launcher_foreground.png",):
         if obsolete.exists():
             obsolete.unlink()
 
