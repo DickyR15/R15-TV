@@ -137,8 +137,17 @@ jobs:
             -o build/autobuild170/jadx.zip
           unzip -q build/autobuild170/jadx.zip -d build/autobuild170/jadx-dist
           java -jar build/autobuild170/apktool.jar d -f -s "$apk" -o build/autobuild170/resources
-          build/autobuild170/jadx-dist/jadx/bin/jadx --show-bad-code \
-            -d build/autobuild170/sources "$apk"
+          # The release ZIP may contain a versioned top-level directory such as jadx-1.5.6.
+          # Resolve the launcher dynamically instead of assuming jadx-dist/jadx/bin/jadx.
+          JADX_BIN="$(find build/autobuild170/jadx-dist -type f -path '*/bin/jadx' -print -quit)"
+          if [[ -z "$JADX_BIN" ]]; then
+            echo "JADX launcher not found after extracting jadx-1.5.6.zip. Extracted files:" >&2
+            find build/autobuild170/jadx-dist -maxdepth 4 -type f -print >&2
+            exit 1
+          fi
+          chmod +x "$JADX_BIN"
+          echo "Using JADX launcher: $JADX_BIN"
+          "$JADX_BIN" --show-bad-code -d build/autobuild170/sources "$apk"
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="ring" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#83FFFF"/>
+      <stop offset=".42" stop-color="#17C8FF"/>
+      <stop offset=".72" stop-color="#536CFF"/>
+      <stop offset="1" stop-color="#EA61F3"/>
+    </linearGradient>
+    <linearGradient id="play" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#B7FFFF"/>
+      <stop offset=".45" stop-color="#21D2FF"/>
+      <stop offset="1" stop-color="#287CFF"/>
+    </linearGradient>
+    <linearGradient id="letters" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#F6FFFF"/>
+      <stop offset=".5" stop-color="#72EEFF"/>
+      <stop offset="1" stop-color="#D88AFF"/>
+    </linearGradient>
+  </defs>
+  <!-- Independent transparent brand mark for the home header; no rectangular background. -->
+  <g transform="translate(0,-12) scale(1,0.84)">
+    <circle cx="256" cy="230" r="151" fill="none" stroke="url(#ring)" stroke-width="14"/>
+    <circle cx="256" cy="230" r="132" fill="#07132C" fill-opacity=".12" stroke="#62E9FF" stroke-opacity=".24" stroke-width="3"/>
+    <path d="M210 165 Q210 151 225 159 L315 216 Q332 226 315 237 L225 294 Q210 302 210 287 Z"
+          fill="url(#play)" stroke="#D4FFFF" stroke-width="7" stroke-linejoin="round"/>
+    <path d="M315 190 Q351 230 315 270" fill="none" stroke="#59F5FF" stroke-width="15" stroke-linecap="round"/>
+    <path d="M342 170 Q390 230 342 290" fill="none" stroke="url(#ring)" stroke-width="15" stroke-linecap="round"/>
+  </g>
+  <path d="M155 385 Q256 411 357 385" fill="none" stroke="url(#ring)" stroke-width="7" stroke-linecap="round"/>
+  <text x="256" y="473" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif"
+        font-size="88" font-weight="900" font-style="italic" letter-spacing="-3" fill="url(#letters)">R15</text>
+</svg>

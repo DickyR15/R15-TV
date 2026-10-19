@@ -46,6 +46,7 @@ def stage_wallpapers(tv: Path, branding: Path) -> None:
 
 def stage_icon(tv: Path, branding: Path) -> None:
     resources = tv / "app" / "src" / "main" / "res"
+    # A compact, transparent mark for Android's adaptive-icon foreground.
     png_data = render_svg(branding / "r15_tv_icon.svg", 512, 512)
     with Image.open(io.BytesIO(png_data)) as source:
         foreground = source.convert("RGBA")
@@ -53,10 +54,16 @@ def stage_icon(tv: Path, branding: Path) -> None:
     foreground_dir.mkdir(parents=True, exist_ok=True)
     foreground.save(foreground_dir / "r15_launcher_foreground.png", "PNG", optimize=True)
 
+    # The home-header logo is a separate transparent asset, not a square composite.
+    logo_data = render_svg(branding / "r15_tv_logo.svg", 512, 512)
+    with Image.open(io.BytesIO(logo_data)) as source:
+        logo = source.convert("RGBA")
+    logo.save(foreground_dir / "ic_logo.png", "PNG", optimize=True)
+
+    # Legacy launcher icons need a background; adaptive icons use the separate
+    # transparent foreground above and apply the launcher mask themselves.
     full = Image.new("RGBA", foreground.size, ICON_BG)
     full.alpha_composite(foreground)
-    # Reuse the branded icon wherever upstream uses the app's logo.
-    full.convert("RGB").save(foreground_dir / "ic_logo.png", "PNG", optimize=True)
 
     density_sizes = {
         "mipmap-mdpi": 48,
