@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Apply the isolated HGTV repair patch to the checked-out public source tree.
+"""Patch the public HGTV Android TV source in an isolated repair build.
 
-This patch is fail-fast: any unexpected upstream source shape stops the build
-instead of silently shipping a partially patched APK.
+The script is deliberately fail-fast: unexpected upstream changes stop the CI build
+rather than producing a partially modified APK.
 """
 from pathlib import Path
 import re
@@ -10,46 +10,57 @@ import sys
 
 ROOT = Path("upstream")
 
-def read(rel):
-    p = ROOT / rel
-    if not p.is_file():
-        raise SystemExit(f"Missing expected source file: {p}")
-    return p, p.read_text(encoding="utf-8")
 
-def write(p, text):
-    p.write_text(text, encoding="utf-8")
+def read(rel):
+    path = ROOT / rel
+    if not path.is_file():
+        raise SystemExit("Missing expected source file: " + str(path))
+    return path, path.read_text(encoding="utf-8")
+
+
+def write(path, text):
+    path.write_text(text, encoding="utf-8")
+
 
 def replace_once(text, old, new, label):
     count = text.count(old)
     if count != 1:
-        raise SystemExit(f"Expected exactly one patch point for {label}, found {count}")
+        raise SystemExit("Expected one patch point for " + label + ", found " + str(count))
     return text.replace(old, new, 1)
 
-# 1) Give StreamInfo per-source HTTP headers. The original app CDN keeps its
-# original headers; official-site direct MP4s use a browser UA/referer.
-p, s = read("android/core/src/main/kotlin/com/hgtv/star/core/ContentRepository.kt")
-s = replace_once(
-    s,
+
+# A) StreamInfo carries request headers so official-page streams can use a browser UA.
+path, src = read("android/core/src/main/kotlin/com/hgtv/star/core/ContentRepository.kt")
+src = replace_once(
+    src,
     "data class StreamInfo(val url: String, val key: ByteArray?, val quality: String)",
-    'data class StreamInfo(val url: String, val key: ByteArray?, val quality: String,\\n'
-    '    val userAgent: String = VendorConstants.VIDEO_UA,\\n'
-    '    val referer: String = "https://novel.snssdk.com/")',
-    "StreamInfo headers",
+    """data class StreamInfo(
+    val url: String,
+    val key: ByteArray?,
+    val quality: String,
+    val userAgent: String = VendorConstants.VIDEO_UA,
+    val referer: String = "https://novel.snssdk.com/"
+)""",
+    "StreamInfo request headers",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
     "    private val signer = Signer()",
-    "    private val signer = Signer()\\n"
-    "    // Per-episode source rotation survives automatic retries; each retry advances\\n"
-    "    // through same-quality CDN mirrors before attempting the official web player.\\n"
-    "    private val streamSourceAttempts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()\\n"
-    "    fun rotateStreamSource(id: String) {\\n"
-    "        if (id.matches(Regex(\\"[0-9]{1,30}\\"))) streamSourceAttempts.computeIfAbsent(id) { java.util.concurrent.atomic.AtomicInteger(0) }.incrementAndGet()\\n"
-    "    }",
+    """    private val signer = Signer()
+    // Retry attempts are keyed by episode and advance through same-quality CDN mirrors.
+    private val streamSourceAttempts = java.util.concurrent.ConcurrentHashMap<String, java.util.concurrent.atomic.AtomicInteger>()
+
+    fun rotateStreamSource(id: String) {
+        if (id.matches(Regex("[0-9]{1,30}"))) {
+            streamSourceAttempts.computeIfAbsent(id) {
+                java.util.concurrent.atomic.AtomicInteger(0)
+            }.incrementAndGet()
+        }
+    }""",
     "source rotation state",
 )
-stream_start = s.index("    fun stream(id: String, maxQuality: Int = 1080): StreamInfo {")
-stream_end = s.index("    /**\\n     * 取一集的弹幕", stream_start)
+stream_start = src.index("    fun stream(id: String, maxQuality: Int = 1080): StreamInfo {")
+stream_end = src.index("    /**\n     * 取一集的弹幕", stream_start)
 new_stream = r'''    fun stream(id: String, maxQuality: Int = 1080, seriesId: String = ""): StreamInfo {
         require(id.matches(Regex("[0-9]{1,30}")))
         val model = videoModel(id)
@@ -63,209 +74,254 @@ new_stream = r'''    fun stream(id: String, maxQuality: Int = 1080, seriesId: St
         val info = JSONObject(text(fallback)).optJSONObject("video_info")?.optJSONObject("data")
             ?: throw IOException("没有播放资源")
         val videoList = info.optJSONObject("video_list") ?: throw IOException("没有可用清晰度")
-        val rows = videoList.keys().asSequence().mapNotNull { k -> videoList.optJSONObject(k)?.let { k to it } }.filter {
-            it.second.str("main_url").isNotEmpty() &&
-                it.second.str("codec_type").lowercase() !in setOf("bytevc2", "bvc2")
-        }.map { (k, o) ->
-            Triple(qualityNumber(o.str("quality_desc").ifEmpty { o.str("height").ifEmpty { o.str("vheight").ifEmpty { o.str("quality").ifEmpty { k } } } }), k, o)
-        }.sortedByDescending { it.first }.toList()
+        val rows = videoList.keys().asSequence()
+            .mapNotNull { key -> videoList.optJSONObject(key)?.let { key to it } }
+            .filter {
+                it.second.str("main_url").isNotEmpty() &&
+                    it.second.str("codec_type").lowercase() !in setOf("bytevc2", "bvc2")
+            }
+            .map { (key, item) ->
+                Triple(
+                    qualityNumber(item.str("quality_desc").ifEmpty {
+                        item.str("height").ifEmpty {
+                            item.str("vheight").ifEmpty { item.str("quality").ifEmpty { key } }
+                        }
+                    }),
+                    key,
+                    item
+                )
+            }
+            .sortedByDescending { it.first }
+            .toList()
 
-        // This build never silently falls back to 480P/360P. Prefer the requested
-        // ceiling, but enforce 720P as the hard minimum even if an old setting was 480P.
+        // 720P is a hard floor. If a source cannot confirm at least 720P, stop instead
+        // of quietly selecting a low-resolution stream.
         val qualityCeiling = maxOf(720, maxQuality)
         val selected = rows.firstOrNull { it.first in 720..qualityCeiling }
             ?: throw IOException("本集没有可确认的 720P 或更高画质，已停止自动降质")
         val item = selected.third
         val seed = info.str("key_seed")
-        val rawCandidates = mutableListOf<String>()
-        rawCandidates += item.str("main_url")
-        rawCandidates += item.str("backup_url")
-        item.optJSONArray("backup_url_list")?.let { backups ->
-            for (i in 0 until backups.length()) rawCandidates += backups.optString(i)
-        }
-        val candidates = rawCandidates.mapNotNull { rawUrl ->
+        val candidates = buildList {
+            add(item.str("main_url"))
+            add(item.str("backup_url"))
+            item.optJSONArray("backup_url_list")?.let { backups ->
+                for (i in 0 until backups.length()) add(backups.optString(i))
+            }
+        }.mapNotNull { rawUrl ->
             if (rawUrl.isBlank()) return@mapNotNull null
-            val resolved = runCatching {
+            runCatching {
                 val cleaned = cleanUrl(rawUrl)
-                if (seed.isNotEmpty()) MediaCrypto.decryptUrl(cleaned, decode64(seed)) else cleaned
-            }.getOrNull() ?: return@mapNotNull null
-            if (resolved.startsWith("https://") || resolved.startsWith("http://")) resolved else null
+                val resolved = if (seed.isNotEmpty()) MediaCrypto.decryptUrl(cleaned, decode64(seed)) else cleaned
+                if (resolved.startsWith("https://") || resolved.startsWith("http://")) resolved else null
+            }.getOrNull()
         }.distinct()
         if (candidates.isEmpty()) throw IOException("本集没有可用的 720P 或更高播放地址")
 
         val attempt = streamSourceAttempts[id]?.get() ?: 0
-        val url = when {
+        val selectedUrl = when {
             attempt < candidates.size -> candidates[attempt]
-            attempt == candidates.size -> {
-                // A distinct source: read the official site's public player metadata.
-                // Only accept a direct MP4 whose URL explicitly identifies 720P or higher.
-                officialWebStream(id, seriesId, qualityCeiling)?.let { return it }
-                candidates[0]
-            }
+            attempt == candidates.size -> officialWebStream(id, seriesId, qualityCeiling) ?: candidates[0]
             else -> candidates[(attempt - candidates.size - 1) % candidates.size]
         }
         val key = item.str("spade_a").takeIf { it.isNotEmpty() }?.let(MediaCrypto::deriveKey)
-        return StreamInfo(url, key, selected.first.toString() + "P")
+        return StreamInfo(selectedUrl, key, selected.first.toString() + "P")
     }
 
     /**
-     * Last-resort source from the official public player page. The URL must belong to
-     * hongguoduanju.com and explicitly identify a 720P/1080P/1440P/2160P MP4.
-     * Unknown quality and lower-resolution files are rejected, never silently used.
+     * Last-resort official website player source. The page and media URL must be HTTPS,
+     * identify this exact episode, and explicitly advertise 720P or higher in the URL.
+     * If quality cannot be verified, the candidate is rejected.
      */
     private fun officialWebStream(id: String, seriesId: String, maxQuality: Int): StreamInfo? {
         if (!id.matches(Regex("[0-9]{1,30}")) || !seriesId.matches(Regex("[0-9]{1,30}"))) return null
         val page = site + "/player/" + seriesId + "/" + id
-        val html = runCatching { text(page) }.getOrNull() ?: return null
-        val scripts = Regex("<script\\\\b([^>]*)>([\\\\s\\\\S]*?)</script\\\\s*>", RegexOption.IGNORE_CASE)
-            .findAll(html)
-        var video: JSONObject? = null
+        val browserUa = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        val request = Request.Builder()
+            .url(page)
+            .header("User-Agent", browserUa)
+            .header("Referer", site + "/")
+            .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+            .header("Accept-Language", "zh-CN,zh;q=0.9")
+            .build()
+        val html = runCatching {
+            RequestScope.execute(http.newCall(request)) { response ->
+                if (!response.isSuccessful) throw IOException("官网备援页面请求失败")
+                val body = response.body ?: throw IOException("官网备援页面为空")
+                if (body.contentLength() > 16 * 1024 * 1024) throw IOException("官网备援页面过大")
+                body.string()
+            }
+        }.getOrNull() ?: return null
+
+        val scripts = Regex("<script\\b([^>]*)>([\\s\\S]*?)</script\\s*>", RegexOption.IGNORE_CASE).findAll(html)
+        val expectedPath = "/player/" + seriesId + "/" + id
         for (match in scripts) {
             if (!match.groupValues[1].contains("application/ld+json", ignoreCase = true)) continue
-            val candidate = runCatching { JSONObject(match.groupValues[2]) }.getOrNull() ?: continue
-            if (candidate.optString("@type") != "VideoObject") continue
-            if (candidate.optString("url").trimEnd('/') != page.trimEnd('/')) continue
-            video = candidate
-            break
+            val video = runCatching { JSONObject(match.groupValues[2]) }.getOrNull() ?: continue
+            if (video.optString("@type") != "VideoObject") continue
+            val pageUri = runCatching { java.net.URI(page).resolve(video.optString("url")) }.getOrNull() ?: continue
+            if (pageUri.scheme != "https" || !pageUri.host.equals("hongguoduanju.com", ignoreCase = true) ||
+                pageUri.path != expectedPath) continue
+
+            val contentUrl = cleanUrl(video.optString("contentUrl"))
+            val mediaUri = runCatching { java.net.URI(contentUrl) }.getOrNull() ?: continue
+            if (mediaUri.scheme != "https" || !mediaUri.host.equals("hongguoduanju.com", ignoreCase = true) ||
+                mediaUri.userInfo != null) continue
+            val resolution = Regex("(2160|1440|1080|720)p", RegexOption.IGNORE_CASE)
+                .find(contentUrl)?.groupValues?.get(1)?.toIntOrNull() ?: continue
+            if (resolution < 720 || resolution > maxQuality || !contentUrl.endsWith(".mp4", ignoreCase = true)) continue
+            return StreamInfo(contentUrl, null, resolution.toString() + "P · 官网备援", browserUa, site + "/")
         }
-        val contentUrl = cleanUrl(video?.optString("contentUrl").orEmpty())
-        if (contentUrl.isBlank()) return null
-        val parsed = runCatching { java.net.URI(contentUrl) }.getOrNull() ?: return null
-        val host = parsed.host?.lowercase().orEmpty()
-        if (parsed.scheme != "https" || !(host == "hongguoduanju.com" || host.endsWith(".hongguoduanju.com"))) return null
-        val resolution = Regex("(2160|1440|1080|720)p", RegexOption.IGNORE_CASE)
-            .find(contentUrl)?.groupValues?.get(1)?.toIntOrNull() ?: return null
-        if (resolution < 720 || resolution > maxQuality) return null
-        return StreamInfo(
-            contentUrl, null, resolution.toString() + "P · 官网备援",
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-            site + "/"
-        )
+        return null
     }
 '''
-s = s[:stream_start] + new_stream + "\n" + s[stream_end:]
-write(p, s)
+src = src[:stream_start] + new_stream + "\n" + src[stream_end:]
+write(path, src)
 
-# 2) Honor StreamInfo's user-agent and referer for the official-web source.
-p, s = read("android/core/src/main/kotlin/com/hgtv/star/core/RemoteVideo.kt")
-s = replace_once(
-    s,
+# B) Respect the user-agent / referer assigned to the selected source.
+path, src = read("android/core/src/main/kotlin/com/hgtv/star/core/RemoteVideo.kt")
+src = replace_once(
+    src,
     '.header("User-Agent",VendorConstants.VIDEO_UA).header("Referer","https://novel.snssdk.com/")',
     '.header("User-Agent",info.userAgent).header("Referer",info.referer)',
-    "RemoteVideo source headers",
+    "RemoteVideo request headers",
 )
-write(p, s)
+write(path, src)
 
-# 3) Pass the series ID so the official web page can be resolved per episode.
-p, s = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlayer.kt")
-s = replace_once(
-    s,
+# C) Pass series ID into both foreground and prefetched source resolution.
+path, src = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlayer.kt")
+src = replace_once(
+    src,
     "prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality)).prepare()",
     "prefetched ?: RemoteVideo(repository.http,repository.stream(requestedId,maxQuality,data.series.id)).prepare()",
-    "normal playback source lookup",
+    "foreground stream call",
 )
-needle = "        val listener=object: Player.Listener {"
-buffering = '''        // If an actively playing source buffers continuously, move to the next source
-        // after 18 seconds instead of leaving the TV spinning indefinitely.
-        val bufferingTimeout = Runnable {
+src = replace_once(
+    src,
+    "        val listener=object: Player.Listener {",
+    """        val bufferingTimeout = Runnable {
             if (player===p && generation==ticket && p.currentMediaItem?.mediaId==requestedId &&
                 p.playbackState==Player.STATE_BUFFERING && p.playWhenReady && foreground && !playError) {
                 playerFailure(java.io.IOException("來源持續緩衝 18 秒，嘗試切換備援來源"))
             }
         }
-'''
-s = replace_once(s, needle, buffering + needle, "buffering timeout declaration")
-s = replace_once(
-    s,
-    "            override fun onPlaybackStateChanged(state: Int) {\\n                if(!active()) return",
-    "            override fun onPlaybackStateChanged(state: Int) {\\n"
-    "                if(!active()) { main.removeCallbacks(bufferingTimeout); return }\\n"
-    "                if(state==Player.STATE_BUFFERING && p.playWhenReady) {\\n"
-    "                    main.removeCallbacks(bufferingTimeout); main.postDelayed(bufferingTimeout,18_000)\\n"
-    "                } else main.removeCallbacks(bufferingTimeout)",
-    "buffering timeout scheduling",
+        val listener=object: Player.Listener {""",
+    "continuous-buffer timeout",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
+    "            override fun onPlaybackStateChanged(state: Int) {\n                if(!active()) return",
+    """            override fun onPlaybackStateChanged(state: Int) {
+                main.removeCallbacks(bufferingTimeout)
+                if(!active()) return
+                if(state==Player.STATE_BUFFERING && p.playWhenReady) main.postDelayed(bufferingTimeout,18_000)""",
+    "buffering timeout state",
+)
+src = replace_once(
+    src,
     "            override fun onPlayerError(error: PlaybackException) { if(active()) playerFailure(error) }",
     "            override fun onPlayerError(error: PlaybackException) { main.removeCallbacks(bufferingTimeout); if(active()) playerFailure(error) }",
-    "clear buffering timeout on error",
+    "clear timeout on player error",
 )
-write(p, s)
+write(path, src)
 
-# 4) Every retryable playback failure advances the source candidate. Decoder errors
-# are not network failures, and explicit no-720P failures should not be retried needlessly.
-p, s = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlayback.kt")
-s = replace_once(
-    s,
+# D) Retryable network/timeout failures rotate to the next source. A genuine
+# no-720P response is terminal and does not trigger repeated requests.
+path, src = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlayback.kt")
+src = replace_once(
+    src,
     "    val retryable=if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException",
-    "    val retryable=if(problem is PlaybackException) problem.errorCode in 2000..2999 || problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException\\n"
-    "    if(retryable && !problem.message.orEmpty().contains(\\"没有可确认的 720P\\") && !problem.message.orEmpty().contains(\\"没有可用的 720P\\")) {\\n"
-    "        detail?.episodes?.getOrNull(episodeIndex)?.let { repository.rotateStreamSource(it) }\\n"
-    "    }",
-    "rotate source on recoverable error",
+    """    val noHdSource=problem.message.orEmpty().contains("没有可确认的 720P") ||
+        problem.message.orEmpty().contains("没有可用的 720P")
+    val retryable=!noHdSource && (if(problem is PlaybackException) problem.errorCode in 2000..2999 ||
+        problem.errorCode==PlaybackException.ERROR_CODE_TIMEOUT else problem is java.io.IOException)
+    if(retryable) detail?.episodes?.getOrNull(episodeIndex)?.let { repository.rotateStreamSource(it) }""",
+    "rotation on recoverable playback failure",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
     "RemoteVideo(http,source.stream(id,quality)).also { remote=it; it.warm() }",
     "RemoteVideo(http,source.stream(id,quality,data.series.id)).also { remote=it; it.warm() }",
-    "prefetch source lookup",
+    "prefetch stream call",
 )
-write(p, s)
+write(path, src)
 
-# 5) Remove old sub-720P choices and migrate old persisted quality to 720P.
-p, s = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlaybackMenu.kt")
-s = replace_once(
-    s,
+# E) Do not expose sub-720P choices in either playback menu or the settings picker.
+path, src = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlaybackMenu.kt")
+src = replace_once(
+    src,
     '.addRow("清晰度",PlaybackQuality.options.mapIndexed { index,value ->',
     '.addRow("清晰度",PlaybackQuality.options.filter { it >= 720 }.mapIndexed { index,value ->',
-    "player quality choices",
+    "in-player quality choices",
 )
-s = replace_once(
-    s,
-    "    val options=PlaybackQuality.options\\n",
-    "    if (library.maxQuality < 720) library.maxQuality = 720\\n    val options=PlaybackQuality.options.filter { it >= 720 }\\n",
-    "quality-picker choices",
+src = replace_once(
+    src,
+    "    val options=PlaybackQuality.options\n",
+    "    if (library.maxQuality < 720) library.maxQuality = 720\n    val options=PlaybackQuality.options.filter { it >= 720 }\n",
+    "settings quality choices",
 )
-write(p, s)
+write(path, src)
+path, src = read("android/app/src/main/kotlin/com/hgtv/star/MainActivityPlayer.kt")
+src = replace_once(
+    src,
+    "    val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation",
+    "    if(library.maxQuality<720) library.maxQuality=720\n    val requestedId=data.episodes[episodeIndex]; val maxQuality=library.maxQuality; val ticket=generation",
+    "minimum quality migration",
+)
+write(path, src)
 
-# 6) Netflix-inspired home hero: broad featured artwork, title, synopsis and a
-# focusable primary action. Existing TV focus behavior remains the navigation base.
-p, s = read("android/app/src/main/kotlin/com/hgtv/star/list/HomeScreen.kt")
-s = replace_once(s, "import android.graphics.Color\\n", "import android.graphics.Color\\nimport android.graphics.drawable.GradientDrawable\\n", "hero drawable import")
-s = replace_once(s, "    private var compact = false", "    private var compact = false\\n    private var heroButton: View? = null", "hero focus reference")
-s = replace_once(
-    s,
-    "        lastRow = null\\n\\n        shelves.filter { it.entries.isNotEmpty() || it.more != null }.forEach { shelf ->",
-    "        lastRow = null\\n        heroButton = null\\n\\n"
-    "        val featured = shelves.firstOrNull { it.key == \\"rank-hongguo\\" && it.entries.isNotEmpty() }?.entries?.firstOrNull()\\n"
-    "            ?: shelves.firstOrNull { it.key.startsWith(\\"rank-\\") && it.entries.isNotEmpty() }?.entries?.firstOrNull()\\n"
-    "        if (featured != null) contents.addView(featuredHero(featured), LinearLayout.LayoutParams(-1, dp(256)).apply { bottomMargin = dp(18) })\\n\\n"
-    "        shelves.filter { it.entries.isNotEmpty() || it.more != null }.forEach { shelf ->",
+# F) Netflix-inspired featured shelf: featured title, synopsis, artwork, and a
+# remote-focusable primary action. All focus paths remain explicit for a D-pad.
+path, src = read("android/app/src/main/kotlin/com/hgtv/star/list/HomeScreen.kt")
+src = replace_once(
+    src,
+    "import android.graphics.Color\n",
+    "import android.graphics.Color\nimport android.graphics.drawable.GradientDrawable\n",
+    "hero gradient import",
+)
+src = replace_once(
+    src,
+    "    private var compact = false",
+    "    private var compact = false\n    private var heroButton: View? = null",
+    "hero button state",
+)
+src = replace_once(
+    src,
+    "        lastRow = null\n\n        shelves.filter { it.entries.isNotEmpty() || it.more != null }.forEach { shelf ->",
+    """        lastRow = null
+        heroButton = null
+
+        val featured = shelves.firstOrNull { it.key == "rank-hongguo" && it.entries.isNotEmpty() }?.entries?.firstOrNull()
+            ?: shelves.firstOrNull { it.key.startsWith("rank-") && it.entries.isNotEmpty() }?.entries?.firstOrNull()
+        if (featured != null) contents.addView(
+            featuredHero(featured),
+            LinearLayout.LayoutParams(-1, dp(256)).apply { bottomMargin = dp(18) }
+        )
+
+        shelves.filter { it.entries.isNotEmpty() || it.more != null }.forEach { shelf ->""",
     "featured hero insertion",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
     "        top.nextFocusDownId = firstId()",
-    "        heroButton?.let { hero ->\\n"
-    "            hero.nextFocusUpId = top.id\\n"
-    "            hero.nextFocusDownId = rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id\\n"
-    "            rows.firstOrNull()?.cards?.firstOrNull()?.view?.nextFocusUpId = hero.id\\n"
-    "        }\\n"
-    "        top.nextFocusDownId = firstId()",
-    "hero focus chain",
+    """        heroButton?.let { hero ->
+            hero.nextFocusUpId = top.id
+            hero.nextFocusDownId = rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id
+            rows.firstOrNull()?.cards?.firstOrNull()?.view?.nextFocusUpId = hero.id
+        }
+        top.nextFocusDownId = firstId()""",
+    "hero D-pad focus chain",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
     "    fun firstId() = rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id",
     "    fun firstId() = heroButton?.id?.takeIf { it != View.NO_ID } ?: rows.firstOrNull()?.cards?.firstOrNull()?.view?.id ?: top.id",
-    "hero nav down target",
+    "first focus target",
 )
-s = replace_once(
-    s,
+src = replace_once(
+    src,
     "                    onHeadUp?.invoke() ?: false",
     "                    if (heroButton?.isAttachedToWindow == true) { heroButton?.requestFocus(); true } else onHeadUp?.invoke() ?: false",
-    "first row up to hero",
+    "first shelf up focus",
 )
 hero_method = r'''    private fun featuredHero(entry: Entry): View {
         val hero = FrameLayout(context).apply {
@@ -292,13 +348,20 @@ hero_method = r'''    private fun featuredHero(entry: Entry): View {
             setPadding(dp(26), dp(14), dp(18), dp(20))
             isFocusable = false
         }
-        info.addView(context.tvText("本週主打", 12f, Color.LTGRAY, true), LinearLayout.LayoutParams(-1, -2))
-        info.addView(context.tvText(entry.series.title, 27f, Color.WHITE, true).apply { maxLines = 2 },
-            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+        info.addView(
+            context.tvText("本週主打", 12f, Color.LTGRAY, true),
+            LinearLayout.LayoutParams(-1, -2)
+        )
+        info.addView(
+            context.tvText(entry.series.title, 27f, Color.WHITE, true).apply { maxLines = 2 },
+            LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
+        )
         val synopsis = entry.series.description.ifBlank { entry.series.tags }.take(88)
         if (synopsis.isNotBlank()) {
-            info.addView(context.tvText(synopsis, 14f, Color.LTGRAY).apply { maxLines = 2 },
-                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) })
+            info.addView(
+                context.tvText(synopsis, 14f, Color.LTGRAY).apply { maxLines = 2 },
+                LinearLayout.LayoutParams(-1, -2).apply { topMargin = dp(8) }
+            )
         }
         val cta = TextView(context).apply {
             id = View.generateViewId()
@@ -325,38 +388,50 @@ hero_method = r'''    private fun featuredHero(entry: Entry): View {
     }
 
 '''
-s = replace_once(s, "    fun restorePosition(position: Position, requestFocus: Boolean = true) {", hero_method + "    fun restorePosition(position: Position, requestFocus: Boolean = true) {", "featured hero method")
-write(p, s)
+src = replace_once(
+    src,
+    "    fun restorePosition(position: Position, requestFocus: Boolean = true) {",
+    hero_method + "    fun restorePosition(position: Position, requestFocus: Boolean = true) {",
+    "featured hero view",
+)
+write(path, src)
 
-# 7) Convert visible Chinese literals/resources to Traditional Chinese (Taiwan).
-# Comments and identifiers are untouched; only Kotlin string literals are converted.
+# G) Convert visible UI literals/resources into Taiwan Traditional Chinese while
+# leaving identifiers, comments, API routes and keys unchanged.
 try:
     from opencc import OpenCC
-    cc = OpenCC("s2twp")
+    converter = OpenCC("s2twp")
 except Exception as exc:
-    raise SystemExit("OpenCC is required to produce the Traditional Chinese UI: " + str(exc))
+    raise SystemExit("Cannot convert UI to Traditional Chinese: " + str(exc))
 
-literal_re = re.compile(r'"""[\s\S]*?"""|"(?:\\\\.|[^"\\\\])*"', re.MULTILINE)
-for path in list((ROOT / "android").rglob("*.kt")):
-    text = path.read_text(encoding="utf-8")
+literal_re = re.compile(r'"""[\s\S]*?"""|"(?:\\.|[^"\\])*"', re.MULTILINE)
+for path in (ROOT / "android").rglob("*.kt"):
+    original = path.read_text(encoding="utf-8")
     def convert_literal(match):
         token = match.group(0)
         if token.startswith('"""'):
-            return '"""' + cc.convert(token[3:-3]) + '"""'
-        return '"' + cc.convert(token[1:-1]) + '"'
-    converted = literal_re.sub(convert_literal, text)
-    if converted != text:
+            return '"""' + converter.convert(token[3:-3]) + '"""'
+        return '"' + converter.convert(token[1:-1]) + '"'
+    converted = literal_re.sub(convert_literal, original)
+    if converted != original:
         path.write_text(converted, encoding="utf-8")
 for path in (ROOT / "android/app/src/main/res").rglob("*.xml"):
-    text = path.read_text(encoding="utf-8")
-    converted = cc.convert(text)
-    if converted != text:
+    original = path.read_text(encoding="utf-8")
+    converted = converter.convert(original)
+    if converted != original:
         path.write_text(converted, encoding="utf-8")
 
-# 8) Keep the test package separate so it can be installed side-by-side with the user's
-# current APK. Do not silently replace the existing app or its local data.
-p, s = read("android/app/build.gradle.kts")
-s = replace_once(s, 'applicationId = "com.hgtv.star"', 'applicationId = "com.hgtv.star.dickyfix"', "test application ID")
-write(p, s)
+# H) Keep the custom repair APK installable side-by-side; do not overwrite the
+# current HGTV install and do not risk deleting its saved local data.
+path, src = read("android/app/build.gradle.kts")
+src = replace_once(
+    src,
+    'applicationId = "com.hgtv.star"',
+    'applicationId = "com.hgtv.star.dickyfix"',
+    "separate test package",
+)
+write(path, src)
 
-print("HGTV repair patch applied: rank/focus baseline, featured hero, 720P floor, CDN rotation, official-site fallback, Taiwan Traditional Chinese.")
+print("Applied HGTV repair patch: independent four-rank baseline, stable D-pad focus,")
+print("Netflix-inspired featured hero, 720P hard floor, CDN rotation, verified official")
+print("website fallback, playback-position recovery and Taiwan Traditional Chinese.")
