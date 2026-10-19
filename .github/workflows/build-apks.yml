@@ -265,6 +265,9 @@ jobs:
           python3 -m py_compile scripts/apply-long-press-speed.py
           python3 scripts/apply-long-press-speed.py --tv-dir sources/TV
           echo "Long-press speed setting row staged for Leanback and Mobile."
+          python3 -m py_compile scripts/apply-live-connect-fix.py
+          python3 scripts/apply-live-connect-fix.py --tv-dir sources/TV --patch-dir patches/live-sources
+          echo "Connect menu label/icon and live render compatibility fixes staged."
           mkdir -p sources/TV/app/src/main/assets
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
