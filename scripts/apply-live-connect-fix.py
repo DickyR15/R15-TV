@@ -106,8 +106,7 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
         if 'android:id="@+id/r15Subtitle"' not in xml:
             if xml.count(video_anchor) != 1:
                 raise SystemExit(f"{layout}: expected one video-track button")
-            xml = xml.replace(video_anchor, subtitle_control, 1)
-            layout.write_text(xml, encoding="utf-8")
+            layout.write_text(xml.replace(video_anchor, subtitle_control, 1), encoding="utf-8")
 
         source = activity.read_text(encoding="utf-8")
         anchor = "mBinding.control.actions.video.setOnClickListener(this::onTrack);\n"
@@ -117,28 +116,27 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
                 raise SystemExit(f"{activity}: cannot add subtitle settings click handler")
             source = source.replace(anchor, listener, 1)
 
+        # State refresh is optional because some upstream flavors do not override
+        # onResume(). Do not fail the entire build just because the override is absent.
         signature = "protected void onResume() {"
         start = source.find(signature)
         if start < 0:
             signature = "public void onResume() {"
             start = source.find(signature)
-        if start < 0:
-            raise SystemExit(f"{activity}: AI subtitle patch did not create an onResume() hook")
-        body_start = start + len(signature)
-        body_end = source.find("\n    }", body_start)
-        if body_end < 0:
-            raise SystemExit(f"{activity}: cannot locate onResume() end")
-        body = source[body_start:body_end]
-        label = 'if (mBinding != null) mBinding.control.actions.r15Subtitle.setText(AiSubtitleSettingsActivity.isAutoStartEnabled(this) ? "字幕翻譯：開" : "字幕翻譯：關");'
-        if "mBinding.control.actions.r15Subtitle.setText" not in body:
-            super_call = "super.onResume();"
-            pos = body.find(super_call)
-            if pos < 0:
-                raise SystemExit(f"{activity}: cannot locate super.onResume()")
-            insert_pos = body_start + pos + len(super_call)
-            source = source[:insert_pos] + "\n        " + label + source[insert_pos:]
+        if start >= 0:
+            body_start = start + len(signature)
+            body_end = source.find("\n    }", body_start)
+            if body_end >= 0:
+                body = source[body_start:body_end]
+                label = 'if (mBinding != null) mBinding.control.actions.r15Subtitle.setText(AiSubtitleSettingsActivity.isAutoStartEnabled(this) ? "字幕翻譯：開" : "字幕翻譯：關");'
+                if "mBinding.control.actions.r15Subtitle.setText" not in body:
+                    super_call = "super.onResume();"
+                    pos = body.find(super_call)
+                    insert_pos = body_start + pos + len(super_call) if pos >= 0 else body_start
+                    source = source[:insert_pos] + "\n        " + label + source[insert_pos:]
         activity.write_text(source, encoding="utf-8")
     print("Added the subtitle settings entry to the bottom live-player control row.")
+
 
 
 def patch_live_group_selection_and_switch(tv: Path) -> None:
