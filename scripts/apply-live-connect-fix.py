@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-"""Apply R15 TV home-connect wording and old-Android live playback fixes."""
+"""Apply R15 TV home-connect wording, live-action ID fix and wallpaper defaults."""
 
 from __future__ import annotations
 
 import argparse
 from pathlib import Path
+import re
 import shutil
 import xml.etree.ElementTree as ET
 
@@ -40,37 +41,6 @@ def patch_home_label(path: Path) -> None:
         tree.write(path, encoding="utf-8", xml_declaration=True)
 
 
-def patch_player_render(path: Path) -> None:
-    text = path.read_text(encoding="utf-8")
-    import_anchor = "package com.fongmi.android.tv.setting;\n"
-    if "import android.os.Build;" not in text:
-        if text.count(import_anchor) != 1:
-            raise SystemExit(f"{path}: cannot locate package declaration to add Build import")
-        text = text.replace(import_anchor, import_anchor + "\nimport android.os.Build;\n", 1)
-
-    old = """    public static int getRender() {
-        return Math.clamp(Prefers.getInt("render", RENDER_SURFACE), RENDER_SURFACE, RENDER_TEXTURE);
-    }"""
-    new = """    public static int getRender() {
-        int render = Math.clamp(Prefers.getInt("render", RENDER_SURFACE), RENDER_SURFACE, RENDER_TEXTURE);
-        // The Android 9 emulator logs show Android HWUI aborting while opening
-        // LiveActivity. That flavor uses a software-rendered window on API 28
-        // and below, so keep video output on SurfaceView (TextureView requires
-        // hardware acceleration and can become blank in a software window).
-        if (Build.VERSION.SDK_INT <= Build.VERSION_CODES.P && render != RENDER_SURFACE) {
-            render = RENDER_SURFACE;
-            Prefers.put("render", render);
-        }
-        return render;
-    }"""
-    if new not in text:
-        count = text.count(old)
-        if count != 1:
-            raise SystemExit(f"{path}: expected one getRender() method, found {count}")
-        text = text.replace(old, new, 1)
-    path.write_text(text, encoding="utf-8")
-
-
 def patch_default_wallpaper(path: Path) -> None:
     replace_exact(
         path,
@@ -79,43 +49,40 @@ def patch_default_wallpaper(path: Path) -> None:
     )
 
 
-def set_bool_resource(path: Path, name: str, value: bool) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    if path.exists():
-        try:
-            tree = ET.parse(path)
-        except ET.ParseError as exc:
-            raise SystemExit(f"Invalid boolean resource XML {path}: {exc}") from exc
-        root = tree.getroot()
-    else:
-        root = ET.Element("resources")
-        tree = ET.ElementTree(root)
-    matches = [
-        node for node in root.iter()
-        if node.tag.rsplit("}", 1)[-1] == "bool" and node.attrib.get("name") == name
-    ]
-    if len(matches) > 1:
-        raise SystemExit(f"{path}: duplicate bool resource {name}")
-    node = matches[0] if matches else ET.SubElement(root, "bool", {"name": name})
-    node.text = "true" if value else "false"
-    ET.indent(tree, space="    ")
-    tree.write(path, encoding="utf-8", xml_declaration=True)
-
-
-def patch_live_hardware_acceleration(tv: Path) -> None:
-    """Disable Android HWUI only for LiveActivity on API 28 and below."""
+def patch_live_action_binding(tv: Path) -> None:
+    """Avoid the duplicate action ID that can crash LiveActivity on some devices."""
+    include_pattern = re.compile(
+        r'(<include\s*\n\s*)android:id="@\+id/action"'
+        r'(\s*\n\s*layout="@layout/view_control_live_action")'
+    )
     for flavor in ("leanback", "mobile"):
-        manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
-        replace_exact(
-            manifest,
-            '            android:name=".ui.activity.LiveActivity"\n',
-            '            android:name=".ui.activity.LiveActivity"\n'
-            '            android:hardwareAccelerated="@bool/r15_live_hardware_accelerated"\n',
-        )
-        values = tv / "app" / "src" / flavor / "res"
-        # Resource qualifiers make the workaround specific to old Android.
-        set_bool_resource(values / "values" / "r15_live_compat.xml", "r15_live_hardware_accelerated", False)
-        set_bool_resource(values / "values-v29" / "r15_live_compat.xml", "r15_live_hardware_accelerated", True)
+        layout = tv / "app" / "src" / flavor / "res" / "layout" / "view_control_live.xml"
+        activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        if not layout.is_file() or not activity.is_file():
+            raise SystemExit(f"Missing expected {flavor} live controls or LiveActivity source")
+
+        xml = layout.read_text(encoding="utf-8")
+        if 'android:id="@+id/actions"' not in xml:
+            xml, count = include_pattern.subn(
+                r'\1android:id="@+id/actions"\2',
+                xml,
+                count=1,
+            )
+            if count != 1:
+                raise SystemExit(f"{layout}: expected one live-control include with duplicate action ID, found {count}")
+            layout.write_text(xml, encoding="utf-8")
+
+        source = activity.read_text(encoding="utf-8")
+        old_prefix = "mBinding.control.action"
+        new_prefix = "mBinding.control.actions"
+        if old_prefix in source:
+            source = source.replace(old_prefix, new_prefix)
+            activity.write_text(source, encoding="utf-8")
+        if re.search(r"\bmBinding\.control\.action(?=\.|$)", source):
+            raise SystemExit(f"{activity}: stale duplicate live-control binding references remain")
+        if 'android:id="@+id/actions"' not in layout.read_text(encoding="utf-8"):
+            raise SystemExit(f"{layout}: unique actions include ID was not applied")
+    print("Renamed the outer live-control include to actions in Leanback and Mobile, preserving inner action button IDs.")
 
 
 def enable_jetifier(path: Path) -> None:
@@ -146,13 +113,12 @@ def main() -> None:
 
     home_strings = tv / "app/src/leanback/res/values-zh-rTW/strings.xml"
     func_java = tv / "app/src/leanback/java/com/fongmi/android/tv/bean/Func.java"
-    player_setting = tv / "app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java"
     wallpaper_setting = tv / "app/src/main/java/com/fongmi/android/tv/setting/Setting.java"
     gradle_properties = tv / "gradle.properties"
     icon_source = patch_dir / "ic_home_connect.xml"
     icon_target = tv / "app/src/leanback/res/drawable/ic_home_connect.xml"
 
-    for path in (home_strings, func_java, player_setting, wallpaper_setting, icon_source):
+    for path in (home_strings, func_java, wallpaper_setting, icon_source):
         if not path.is_file():
             raise SystemExit(f"Missing expected R15 TV patch input: {path}")
 
@@ -165,26 +131,21 @@ def main() -> None:
     icon_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(icon_source, icon_target)
 
-    patch_player_render(player_setting)
     patch_default_wallpaper(wallpaper_setting)
-    patch_live_hardware_acceleration(tv)
+    patch_live_action_binding(tv)
     enable_jetifier(gradle_properties)
 
-    # Sanity checks: visible label/icon, wallpaper default, and API-qualified render policy.
+    # Sanity checks: menu label/icon, default wallpaper and duplicate-ID fix.
     if "連線" not in home_strings.read_text(encoding="utf-8"):
         raise SystemExit("home_push was not localized to 連線")
     if "R.drawable.ic_home_connect" not in func_java.read_text(encoding="utf-8"):
         raise SystemExit("home menu does not use the connect icon")
     if 'Prefers.getInt("wall", 4)' not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("wallpaper_4 is not the default wallpaper")
-    if "@bool/r15_live_hardware_accelerated" not in (tv / "app/src/leanback/AndroidManifest.xml").read_text(encoding="utf-8"):
-        raise SystemExit("old-Android live rendering workaround is missing")
     if "android.enableJetifier=true" not in gradle_properties.read_text(encoding="utf-8"):
         raise SystemExit("Jetifier compatibility setting is missing")
-
-    print("Applied home label/icon and wallpaper_4 (aurora) default.")
-    print("LiveActivity uses software UI rendering on Android 9 and older and hardware rendering on API 29+.")
-    print("Enabled Jetifier to rewrite legacy support-library references in AndroidX dependencies.")
+    print("Applied home label/icon, Aurora default wallpaper and live-action duplicate-ID workaround.")
+    print("Kept stock hardware acceleration and PlayerSetting renderer behavior; no old-Android renderer override is applied.")
 
 
 if __name__ == "__main__":

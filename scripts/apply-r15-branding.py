@@ -58,6 +58,26 @@ def stage_icon(tv: Path, branding: Path) -> None:
     logo_dir.mkdir(parents=True, exist_ok=True)
     artwork.save(logo_dir / "ic_logo.png", "PNG", optimize=True)
 
+    # Android 12+ masks the animated splash icon to a circle. Keep the exact
+    # full artwork for launcher/home use, but pad the splash-specific copy so
+    # the R15 wordmark is not clipped by the system's circular safe area.
+    corners = [
+        artwork.getpixel((0, 0)),
+        artwork.getpixel((artwork.width - 1, 0)),
+        artwork.getpixel((0, artwork.height - 1)),
+        artwork.getpixel((artwork.width - 1, artwork.height - 1)),
+    ]
+    splash_background = tuple(
+        round(sum(pixel[channel] for pixel in corners) / len(corners))
+        for channel in range(3)
+    )
+    splash_canvas = Image.new("RGB", (512, 512), splash_background)
+    splash_size = 332
+    splash_art = artwork.resize((splash_size, splash_size), Image.Resampling.LANCZOS)
+    splash_offset = ((512 - splash_size) // 2, (512 - splash_size) // 2)
+    splash_canvas.paste(splash_art, splash_offset)
+    splash_canvas.save(logo_dir / "ic_splash_logo.png", "PNG", optimize=True)
+
     density_sizes = {
         "mipmap-mdpi": 48,
         "mipmap-hdpi": 72,
@@ -95,7 +115,7 @@ def stage_icon(tv: Path, branding: Path) -> None:
 def patch_splash_icons(tv: Path) -> None:
     """Use the supplied R15 artwork on Android 12+ startup splash screens."""
     old = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>'
-    new = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo</item>'
+    new = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_splash_logo</item>'
     for flavor in ("leanback", "mobile"):
         path = tv / "app" / "src" / flavor / "res" / "values" / "styles.xml"
         if not path.is_file():

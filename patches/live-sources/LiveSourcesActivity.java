@@ -7,6 +7,8 @@ import android.graphics.Bitmap;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.text.TextUtils;
 import android.view.Gravity;
 import android.view.View;
@@ -668,11 +670,24 @@ public final class LiveSourcesActivity extends BaseActivity {
         if (source == null || TextUtils.isEmpty(source.url)) return;
         Config config = Config.find(source.url, source.name, LIVE_TYPE);
         config.url(source.url).type(LIVE_TYPE).name(source.name).json(optionsJson(source).toString()).save();
-        Notify.progress(this);
+
+        // Avoid a one-frame progress flash on fast first-time source activation.
+        // If loading takes longer than 250 ms, show the existing progress indicator.
+        Handler mainHandler = new Handler(Looper.getMainLooper());
+        java.util.concurrent.atomic.AtomicBoolean progressShown = new java.util.concurrent.atomic.AtomicBoolean(false);
+        Runnable showProgress = () -> {
+            if (!isFinishing() && !isDestroyed()) {
+                Notify.progress(this);
+                progressShown.set(true);
+            }
+        };
+        mainHandler.postDelayed(showProgress, 250L);
+
         LiveConfig.load(config, new Callback() {
             @Override
             public void success() {
-                Notify.dismiss();
+                mainHandler.removeCallbacks(showProgress);
+                if (progressShown.get()) Notify.dismiss();
                 Toast.makeText(LiveSourcesActivity.this, "直播源載入成功", Toast.LENGTH_SHORT).show();
                 LiveActivity.start(LiveSourcesActivity.this);
                 finish();
@@ -680,7 +695,8 @@ public final class LiveSourcesActivity extends BaseActivity {
 
             @Override
             public void error(String msg) {
-                Notify.dismiss();
+                mainHandler.removeCallbacks(showProgress);
+                if (progressShown.get()) Notify.dismiss();
                 Notify.show(msg);
             }
         });
