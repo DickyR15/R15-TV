@@ -46,24 +46,18 @@ def stage_wallpapers(tv: Path, branding: Path) -> None:
 
 def stage_icon(tv: Path, branding: Path) -> None:
     resources = tv / "app" / "src" / "main" / "res"
-    # A compact, transparent mark for Android's adaptive-icon foreground.
-    png_data = render_svg(branding / "r15_tv_icon.svg", 512, 512)
-    with Image.open(io.BytesIO(png_data)) as source:
-        foreground = source.convert("RGBA")
-    foreground_dir = resources / "drawable-nodpi"
-    foreground_dir.mkdir(parents=True, exist_ok=True)
-    foreground.save(foreground_dir / "r15_launcher_foreground.png", "PNG", optimize=True)
+    icon_source = branding / "r15_tv_icon_reference.webp"
+    if not icon_source.is_file():
+        raise SystemExit(f"Missing requested R15 TV icon artwork: {icon_source}")
 
-    # The home-header logo is a separate transparent asset, not a square composite.
-    logo_data = render_svg(branding / "r15_tv_logo.svg", 512, 512)
-    with Image.open(io.BytesIO(logo_data)) as source:
-        logo = source.convert("RGBA")
-    logo.save(foreground_dir / "ic_logo.png", "PNG", optimize=True)
+    # Use the user's exact artwork with its original dark background.
+    with Image.open(icon_source) as source:
+        artwork = source.convert("RGB").resize((512, 512), Image.Resampling.LANCZOS)
 
-    # Legacy launcher icons need a background; adaptive icons use the separate
-    # transparent foreground above and apply the launcher mask themselves.
-    full = Image.new("RGBA", foreground.size, ICON_BG)
-    full.alpha_composite(foreground)
+    logo_dir = resources / "drawable-nodpi"
+    logo_dir.mkdir(parents=True, exist_ok=True)
+    # Keep the image background on the homepage logo; do not remove it.
+    artwork.save(logo_dir / "ic_logo.png", "PNG", optimize=True)
 
     density_sizes = {
         "mipmap-mdpi": 48,
@@ -72,43 +66,36 @@ def stage_icon(tv: Path, branding: Path) -> None:
         "mipmap-xxhdpi": 144,
         "mipmap-xxxhdpi": 192,
     }
-    for directory_name, size in density_sizes.items():
-        directory = resources / directory_name
-        directory.mkdir(parents=True, exist_ok=True)
-        resized = full.resize((size, size), Image.Resampling.LANCZOS).convert("RGB")
-        resized.save(directory / "ic_launcher.png", "PNG", optimize=True)
-        # Keep the round legacy icon valid and visually consistent.
-        resized.save(directory / "ic_launcher_round.webp", "WEBP", quality=92, method=6)
+    # Update all variants. Android TV's launcher may resolve resources from the
+    # Leanback source set instead of main/res.
+    launcher_resource_roots = [
+        resources,
+        tv / "app" / "src" / "mobile" / "res",
+        tv / "app" / "src" / "leanback" / "res",
+    ]
+    for root in launcher_resource_roots:
+        for directory_name, size in density_sizes.items():
+            directory = root / directory_name
+            directory.mkdir(parents=True, exist_ok=True)
+            resized = artwork.resize((size, size), Image.Resampling.LANCZOS)
+            resized.save(directory / "ic_launcher.png", "PNG", optimize=True)
+            resized.save(directory / "ic_launcher_round.webp", "WEBP", quality=95, method=6)
 
-    values_file = resources / "values" / "colors.xml"
-    colors = values_file.read_text(encoding="utf-8")
-    if 'name="r15_launcher_background"' not in colors:
-        colors = re.sub(
-            r"</resources>\s*$",
-            '    <color name="r15_launcher_background">#07132C</color>\n</resources>\n',
-            colors,
-        )
-        values_file.write_text(colors, encoding="utf-8")
+        # An adaptive-icon XML took precedence over these raster assets and
+        # displayed the obsolete blue-slash image. Remove that override.
+        anydpi = root / "mipmap-anydpi-v26"
+        for name in ("ic_launcher.xml", "ic_launcher_round.xml"):
+            path = anydpi / name
+            if path.exists():
+                path.unlink()
 
-    foreground_xml = resources / "drawable" / "ic_launcher_foreground.xml"
-    foreground_xml.write_text(
-        '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<bitmap xmlns:android="http://schemas.android.com/apk/res/android"\n'
-        '    android:src="@drawable/r15_launcher_foreground"\n'
-        '    android:gravity="center" />\n',
-        encoding="utf-8",
-    )
-    adaptive = (
-        '<?xml version="1.0" encoding="utf-8"?>\n'
-        '<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">\n'
-        '    <background android:drawable="@color/r15_launcher_background" />\n'
-        '    <foreground android:drawable="@drawable/ic_launcher_foreground" />\n'
-        '</adaptive-icon>\n'
-    )
-    anydpi = resources / "mipmap-anydpi-v26"
-    anydpi.mkdir(parents=True, exist_ok=True)
-    (anydpi / "ic_launcher.xml").write_text(adaptive, encoding="utf-8")
-    (anydpi / "ic_launcher_round.xml").write_text(adaptive, encoding="utf-8")
+    # Remove obsolete adaptive foreground assets from previous branding builds.
+    for obsolete in (
+        logo_dir / "r15_launcher_foreground.png",
+        resources / "drawable" / "ic_launcher_foreground.xml",
+    ):
+        if obsolete.exists():
+            obsolete.unlink()
 
 
 def main() -> None:
@@ -118,7 +105,7 @@ def main() -> None:
     args = parser.parse_args()
     stage_wallpapers(args.tv_dir, args.branding_dir)
     stage_icon(args.tv_dir, args.branding_dir)
-    print("Staged custom R15 launcher icon and four offline built-in wallpapers for Leanback and Mobile.")
+    print("Restored the supplied R15 TV icon with its original background for launcher and homepage logo; staged four offline wallpapers.")
 
 
 if __name__ == "__main__":
