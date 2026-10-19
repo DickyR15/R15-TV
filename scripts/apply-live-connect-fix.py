@@ -20,7 +20,7 @@ def replace_exact(path: Path, old: str, new: str) -> None:
 
 
 def patch_home_label(path: Path) -> None:
-    ET.register_namespace("xliff", "urn:oasis:names:tc:xliff:document:1.2")
+    ET.register_namespace("xliff", "http://schemas.android.com/apk/res-auto")
     try:
         tree = ET.parse(path)
     except ET.ParseError as exc:
