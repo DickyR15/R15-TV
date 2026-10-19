@@ -199,16 +199,26 @@ def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
 def patch_application_icons(tv: Path) -> None:
     """Point Android's package/application icon directly at the staged R15 artwork."""
     manifest = tv / "app/src/main/AndroidManifest.xml"
-    replace_exact(
-        manifest,
-        'android:icon="@mipmap/ic_launcher"',
-        'android:icon="@drawable/ic_logo"',
+    if not manifest.is_file():
+        raise SystemExit(f"Missing main manifest: {manifest}")
+    text = manifest.read_text(encoding="utf-8")
+    replacements = (
+        ('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_logo"'),
+        ('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/ic_logo"'),
     )
-    replace_exact(
-        manifest,
-        'android:roundIcon="@mipmap/ic_launcher_round"',
-        'android:roundIcon="@drawable/ic_logo"',
-    )
+    for old, new in replacements:
+        if new in text:
+            continue
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{manifest}: expected exactly one icon reference {old!r}, found {count}")
+        text = text.replace(old, new, 1)
+    manifest.write_text(text, encoding="utf-8")
+    verify = manifest.read_text(encoding="utf-8")
+    if 'android:icon="@drawable/ic_logo"' not in verify:
+        raise SystemExit("R15 application icon reference was not applied")
+    if 'android:roundIcon="@drawable/ic_logo"' not in verify:
+        raise SystemExit("R15 round application icon reference was not applied")
 
 
 def patch_splash_icons(tv: Path) -> None:
