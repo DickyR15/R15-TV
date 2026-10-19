@@ -57,6 +57,7 @@ def stage_icon(tv: Path, branding: Path) -> None:
     logo_dir = resources / "drawable-nodpi"
     logo_dir.mkdir(parents=True, exist_ok=True)
     artwork.save(logo_dir / "ic_logo.png", "PNG", optimize=True)
+    stage_tv_banner(tv, artwork)
 
     # Android 12+ masks the animated splash icon to a circle. Keep the exact
     # full artwork for launcher/home use, but pad the splash-specific copy so
@@ -112,6 +113,45 @@ def stage_icon(tv: Path, branding: Path) -> None:
             obsolete.unlink()
 
 
+
+def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
+    """Replace the stock FongMi cube banner with the user's R15 TV artwork."""
+    banner_dir = tv / "app" / "src" / "leanback" / "res" / "drawable-nodpi"
+    banner_dir.mkdir(parents=True, exist_ok=True)
+
+    # Match the banner canvas to the edge color of the supplied artwork so
+    # the square logo blends into the Android TV 16:9 banner without a white box.
+    corners = [
+        artwork.getpixel((0, 0)),
+        artwork.getpixel((artwork.width - 1, 0)),
+        artwork.getpixel((0, artwork.height - 1)),
+        artwork.getpixel((artwork.width - 1, artwork.height - 1)),
+    ]
+    background = tuple(
+        round(sum(pixel[channel] for pixel in corners) / len(corners))
+        for channel in range(3)
+    )
+    banner = Image.new("RGB", (320, 180), background)
+    logo_size = 128
+    logo = artwork.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
+    banner.paste(logo, ((320 - logo_size) // 2, (180 - logo_size) // 2))
+    banner.save(banner_dir / "r15_tv_banner.png", "PNG", optimize=True)
+
+    manifest = tv / "app" / "src" / "leanback" / "AndroidManifest.xml"
+    if not manifest.is_file():
+        raise SystemExit(f"Missing Leanback manifest: {manifest}")
+    text = manifest.read_text(encoding="utf-8")
+    old = 'android:banner="@mipmap/ic_banner"'
+    new = 'android:banner="@drawable/r15_tv_banner"'
+    if new not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{manifest}: expected one stock Android TV banner reference, found {count}")
+        manifest.write_text(text.replace(old, new, 1), encoding="utf-8")
+    if 'android:banner="@drawable/r15_tv_banner"' not in manifest.read_text(encoding="utf-8"):
+        raise SystemExit("R15 TV banner was not connected to the Leanback application manifest")
+
+
 def patch_splash_icons(tv: Path) -> None:
     """Use the supplied R15 artwork on Android 12+ startup splash screens."""
     old = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>'
@@ -137,7 +177,7 @@ def main() -> None:
     stage_wallpapers(args.tv_dir, args.branding_dir)
     stage_icon(args.tv_dir, args.branding_dir)
     patch_splash_icons(args.tv_dir)
-    print("Restored R15 TV launcher/homepage/splash icon artwork and staged four offline wallpapers.")
+    print("Restored R15 TV launcher/homepage/splash icons, replaced the Google TV banner artwork, and staged four offline wallpapers.")
 
 
 if __name__ == "__main__":

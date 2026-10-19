@@ -85,6 +85,30 @@ def patch_live_action_binding(tv: Path) -> None:
     print("Renamed the outer live-control include to actions in Leanback and Mobile, preserving inner action button IDs.")
 
 
+
+def patch_live_player_keep_frame(tv: Path) -> None:
+    """Keep the previous decoded frame visible while a live channel/source resets."""
+    for flavor in ("leanback", "mobile"):
+        layout = tv / "app" / "src" / flavor / "res" / "layout" / "activity_live.xml"
+        if not layout.is_file():
+            raise SystemExit(f"Missing live playback layout: {layout}")
+        text = layout.read_text(encoding="utf-8")
+        attr = 'app:keep_content_on_player_reset="true"'
+        if attr not in text:
+            old = 'app:surface_type="none" />'
+            count = text.count(old)
+            if count != 1:
+                raise SystemExit(f"{layout}: expected one Media3 PlayerView surface declaration, found {count}")
+            text = text.replace(
+                old,
+                'app:surface_type="none"\n            app:keep_content_on_player_reset="true" />',
+                1,
+            )
+            layout.write_text(text, encoding="utf-8")
+        if attr not in layout.read_text(encoding="utf-8"):
+            raise SystemExit(f"{layout}: keep_content_on_player_reset was not applied")
+    print("Enabled Media3 keep-content-on-reset for Leanback and Mobile to reduce black flashes when live playback resets.")
+
 def enable_jetifier(path: Path) -> None:
     text = path.read_text(encoding="utf-8") if path.exists() else ""
     lines = text.splitlines()
@@ -133,6 +157,7 @@ def main() -> None:
 
     patch_default_wallpaper(wallpaper_setting)
     patch_live_action_binding(tv)
+    patch_live_player_keep_frame(tv)
     enable_jetifier(gradle_properties)
 
     # Sanity checks: menu label/icon, default wallpaper and duplicate-ID fix.

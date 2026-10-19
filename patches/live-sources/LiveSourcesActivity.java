@@ -690,7 +690,11 @@ public final class LiveSourcesActivity extends BaseActivity {
                 if (progressShown.get()) Notify.dismiss();
                 Toast.makeText(LiveSourcesActivity.this, "直播源載入成功", Toast.LENGTH_SHORT).show();
                 LiveActivity.start(LiveSourcesActivity.this);
+                // Avoid the default Activity transition, which briefly exposes a black frame
+                // between source configuration and the live player's first rendered frame.
+                overridePendingTransition(0, 0);
                 finish();
+                overridePendingTransition(0, 0);
             }
 
             @Override
