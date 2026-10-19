@@ -92,6 +92,23 @@ def stage_icon(tv: Path, branding: Path) -> None:
             obsolete.unlink()
 
 
+def patch_splash_icons(tv: Path) -> None:
+    """Use the supplied R15 artwork on Android 12+ startup splash screens."""
+    old = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>'
+    new = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_logo</item>'
+    for flavor in ("leanback", "mobile"):
+        path = tv / "app" / "src" / flavor / "res" / "values" / "styles.xml"
+        if not path.is_file():
+            raise SystemExit(f"Missing expected splash theme resource: {path}")
+        text = path.read_text(encoding="utf-8")
+        if new in text:
+            continue
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{path}: expected one stock splash icon reference, found {count}")
+        path.write_text(text.replace(old, new, 1), encoding="utf-8")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
@@ -99,7 +116,8 @@ def main() -> None:
     args = parser.parse_args()
     stage_wallpapers(args.tv_dir, args.branding_dir)
     stage_icon(args.tv_dir, args.branding_dir)
-    print("Restored the supplied R15 TV icon with its original background for launcher and homepage logo; staged four offline wallpapers.")
+    patch_splash_icons(args.tv_dir)
+    print("Restored R15 TV launcher/homepage/splash icon artwork and staged four offline wallpapers.")
 
 
 if __name__ == "__main__":
