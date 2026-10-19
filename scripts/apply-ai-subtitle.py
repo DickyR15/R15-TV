@@ -157,21 +157,9 @@ def patch_live_settings_layout(tv: Path) -> None:
             node.set(vis, "gone")
 
     android = "{http://schemas.android.com/apk/res/android}"
-    disclaimer_id = "@+id/r15Disclaimer"
-    if find_id("r15Disclaimer") is None:
-        disclaimer = ET.Element("com.google.android.material.textview.MaterialTextView", {
-            android + "id": disclaimer_id,
-            android + "layout_width": "match_parent",
-            android + "layout_height": "wrap_content",
-            android + "layout_marginTop": "8dp",
-            android + "layout_marginBottom": "16dp",
-            android + "padding": "14dp",
-            android + "background": "#66000000",
-            android + "text": "本 APP 為第三方改版，針對音訊／視訊解碼、AI 字幕及多直播源訂閱管理功能加強，不包含任何內建來源。",
-            android + "textColor": "@color/white",
-            android + "textSize": "16sp",
-        })
-        content.insert(list(content).index(live_row), disclaimer)
+    disclaimer = find_id("r15Disclaimer")
+    if disclaimer is not None:
+        content.remove(disclaimer)
 
     # Keep the live entry first and ensure the combined VOD/Wall entry is present.
     group = find_id("vodAndWall")

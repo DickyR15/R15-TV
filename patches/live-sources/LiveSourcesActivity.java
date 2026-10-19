@@ -395,10 +395,11 @@ public final class LiveSourcesActivity extends BaseActivity {
 
     private void showPhoneQrDialog(String target, String label, String currentValue) {
         remoteTarget = target;
-        LinearLayout content = new LinearLayout(this);
-        content.setOrientation(LinearLayout.VERTICAL);
-        content.setGravity(Gravity.CENTER_HORIZONTAL);
-        content.setPadding(dp(20), dp(12), dp(20), dp(16));
+
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.HORIZONTAL);
+        panel.setGravity(Gravity.CENTER_VERTICAL);
+        panel.setPadding(dp(4), dp(8), dp(4), dp(8));
 
         ImageView qr = new ImageView(this);
         qr.setContentDescription("手機掃描以輸入" + label);
@@ -406,37 +407,106 @@ public final class LiveSourcesActivity extends BaseActivity {
         qr.setBackgroundColor(Color.WHITE);
         Bitmap bitmap = createQrBitmap(Server.get().getAddress(4), 220);
         if (bitmap != null) qr.setImageBitmap(bitmap);
-        content.addView(qr, new LinearLayout.LayoutParams(dp(220), dp(220)));
+        LinearLayout.LayoutParams qrParams = new LinearLayout.LayoutParams(dp(220), dp(220));
+        qrParams.gravity = Gravity.CENTER_VERTICAL;
+        panel.addView(qr, qrParams);
 
-        TextView address = text(Server.get().getAddress(), 14, 0xFFBDBDBD);
-        address.setGravity(Gravity.CENTER);
-        address.setPadding(0, dp(10), 0, dp(8));
-        content.addView(address, new LinearLayout.LayoutParams(-1, -2));
+        LinearLayout details = new LinearLayout(this);
+        details.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout.LayoutParams detailsParams = new LinearLayout.LayoutParams(0, -2, 1f);
+        detailsParams.setMarginStart(dp(20));
+        panel.addView(details, detailsParams);
 
-        TextView targetLabel = text("目前欄位：" + label, 15, WHITE);
-        targetLabel.setGravity(Gravity.CENTER);
-        content.addView(targetLabel, new LinearLayout.LayoutParams(-1, -2));
+        TextView instructions = text(
+                "按確認鍵可直接輸入，也可以在 " + Server.get().getAddress()
+                        + " 的「配置」頁面推送",
+                14, 0xFFD0D0D0);
+        instructions.setLineSpacing(dp(3), 1.0f);
+        details.addView(instructions, new LinearLayout.LayoutParams(-1, -2));
 
-        if (!TextUtils.isEmpty(currentValue)) {
-            TextView current = text("目前內容：" + currentValue, 13, 0xFFBDBDBD);
-            current.setMaxLines(2);
-            current.setEllipsize(android.text.TextUtils.TruncateAt.MIDDLE);
-            current.setGravity(Gravity.CENTER);
-            current.setPadding(0, dp(6), 0, 0);
-            content.addView(current, new LinearLayout.LayoutParams(-1, -2));
-        }
+        boolean multiline = "headers".equals(target);
+        com.google.android.material.textfield.TextInputLayout inputLayout =
+                new com.google.android.material.textfield.TextInputLayout(this);
+        inputLayout.setHint(label);
+        inputLayout.setBoxBackgroundMode(
+                com.google.android.material.textfield.TextInputLayout.BOX_BACKGROUND_OUTLINE);
+        inputLayout.setBoxStrokeColor(0xFF777777);
+        inputLayout.setBoxStrokeWidth(dp(1));
+        inputLayout.setBoxStrokeWidthFocused(dp(2));
+        inputLayout.setBoxCornerRadii(dp(7), dp(7), dp(7), dp(7));
+        inputLayout.setPlaceholderText("請輸入" + label);
 
-        TextView message = text("手機掃描後，在「配置」頁輸入此欄位的內容並推送；收到後會直接填入這個欄位。",
-                14, WHITE);
-        message.setGravity(Gravity.CENTER);
-        message.setPadding(0, dp(10), 0, 0);
-        content.addView(message, new LinearLayout.LayoutParams(-1, -2));
+        com.google.android.material.textfield.TextInputEditText input =
+                new com.google.android.material.textfield.TextInputEditText(this);
+        input.setSingleLine(!multiline);
+        input.setMinLines(multiline ? 3 : 1);
+        input.setMaxLines(multiline ? 5 : 1);
+        input.setTextSize(18);
+        input.setTextColor(WHITE);
+        input.setText(safe(currentValue));
+        input.setSelectAllOnFocus(false);
+        input.setInputType(multiline
+                ? android.text.InputType.TYPE_CLASS_TEXT | android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+                : android.text.InputType.TYPE_CLASS_TEXT);
+        input.setImeOptions(android.view.inputmethod.EditorInfo.IME_ACTION_DONE);
+        input.setShowSoftInputOnFocus(true);
+        input.setFocusable(true);
+        input.setFocusableInTouchMode(true);
+        inputLayout.addView(input, new LinearLayout.LayoutParams(-1, multiline ? dp(86) : dp(56)));
+        LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(-1, -2);
+        fieldParams.topMargin = dp(20);
+        details.addView(inputLayout, fieldParams);
+
+        LinearLayout actions = new LinearLayout(this);
+        actions.setOrientation(LinearLayout.HORIZONTAL);
+        actions.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+        LinearLayout.LayoutParams actionsParams = new LinearLayout.LayoutParams(-1, -2);
+        actionsParams.topMargin = dp(24);
+        details.addView(actions, actionsParams);
+
+        Button cancel = button("取消", false);
+        cancel.setTextSize(16);
+        actions.addView(cancel, new LinearLayout.LayoutParams(dp(100), dp(52)));
+
+        Button fill = button("填入", false);
+        fill.setTextSize(16);
+        LinearLayout.LayoutParams fillParams = new LinearLayout.LayoutParams(dp(100), dp(52));
+        fillParams.setMarginStart(dp(12));
+        actions.addView(fill, fillParams);
 
         phoneDialog = new com.google.android.material.dialog.MaterialAlertDialogBuilder(this)
-                .setTitle("手機遠端輸入")
-                .setView(content)
-                .setPositiveButton("完成", null)
-                .show();
+                .setTitle("遠端輸入：" + label)
+                .setView(panel)
+                .create();
+        phoneDialog.setOnShowListener(dialog -> {
+            android.view.Window window = phoneDialog.getWindow();
+            if (window != null) {
+                int availableWidth = (int) (getResources().getDisplayMetrics().widthPixels * 0.72f);
+                window.setLayout(Math.min(availableWidth, dp(720)),
+                        android.view.ViewGroup.LayoutParams.WRAP_CONTENT);
+            }
+        });
+        phoneDialog.setOnDismissListener(dialog -> {
+            if (target.equals(remoteTarget)) remoteTarget = null;
+        });
+
+        cancel.setOnClickListener(view -> {
+            remoteTarget = null;
+            if (phoneDialog != null) phoneDialog.dismiss();
+        });
+        fill.setOnClickListener(view -> {
+            EditText destination = fields.get(target);
+            if (destination != null) {
+                String value = input.getText() == null ? "" : input.getText().toString();
+                destination.setText(value);
+                destination.setSelection(destination.getText().length());
+                lastFocusedField = destination;
+            }
+            remoteTarget = null;
+            if (phoneDialog != null) phoneDialog.dismiss();
+        });
+
+        phoneDialog.show();
     }
 
     private void addField(LinearLayout container, String label, String hint, String key, String initial, boolean multiline) {

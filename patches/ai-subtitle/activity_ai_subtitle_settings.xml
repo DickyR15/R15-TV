@@ -427,7 +427,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp"
-            android:text="辨識語言可選英文、中文、日文、韓文；英文為 F1 預設。Base 與 Tiny Q5_1 共用 Whisper.cpp，需分別下載。Google ML Kit 翻譯模型首次下載後可在本機執行；中文來源只做臺灣繁體轉換。"
+            android:text="辨識語言可選英文、中文、日文、韓文。Base 與 Tiny Q5_1 共用 Whisper.cpp，需分別下載。Google ML Kit 翻譯模型首次下載後可在本機執行；中文來源只做臺灣繁體轉換。"
             android:textColor="#FFD0D0D0"
             android:textSize="15sp"
             tools:ignore="HardcodedText" />
