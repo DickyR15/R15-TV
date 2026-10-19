@@ -683,18 +683,15 @@ public final class LiveSourcesActivity extends BaseActivity {
         };
         mainHandler.postDelayed(showProgress, 250L);
 
+        // Loading a source must not create a LiveActivity. The user opens Live from Home.
+        // Suppress the startup/boot event for this manual source switch to avoid a duplicate launch.
         LiveConfig.load(config, new Callback() {
             @Override
             public void success() {
                 mainHandler.removeCallbacks(showProgress);
                 if (progressShown.get()) Notify.dismiss();
-                Toast.makeText(LiveSourcesActivity.this, "直播源載入成功", Toast.LENGTH_SHORT).show();
-                LiveActivity.start(LiveSourcesActivity.this);
-                // Avoid the default Activity transition, which briefly exposes a black frame
-                // between source configuration and the live player's first rendered frame.
-                overridePendingTransition(0, 0);
-                finish();
-                overridePendingTransition(0, 0);
+                Toast.makeText(LiveSourcesActivity.this, "直播源載入成功，返回首頁後點選「直播」即可播放", Toast.LENGTH_SHORT).show();
+                showList();
             }
 
             @Override
@@ -703,7 +700,7 @@ public final class LiveSourcesActivity extends BaseActivity {
                 if (progressShown.get()) Notify.dismiss();
                 Notify.show(msg);
             }
-        });
+        }, true);
     }
 
     private LinearLayout makeHeader(String titleText, String rightText, Runnable rightAction) {

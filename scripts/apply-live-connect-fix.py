@@ -216,13 +216,6 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         mLive.selectGroup(mGroup);
         mLive.selectChannel(mGroup.current());
     }"""
-    old_reset = """        player().reset();
-        player().clear();
-        player().stop();
-        resetAdapter();"""
-    new_reset = """        // Retain the existing decoder/surface while the replacement channel loads.
-        player().pause();
-        resetAdapter();"""
     for flavor in ("leanback", "mobile"):
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
         text = activity.read_text(encoding="utf-8")
@@ -232,10 +225,6 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
             raise SystemExit(f"{activity}: cannot locate setPosition(int[]) method bounds")
         new_position = new_position_leanback if flavor == "leanback" else new_position_mobile
         text = text[:method_start] + new_position + text[method_end:]
-        if old_reset in text:
-            text = text.replace(old_reset, new_reset, 1)
-        elif new_reset not in text:
-            raise SystemExit(f"{activity}: source-switch reset patch anchor missing")
         activity.write_text(text, encoding="utf-8")
     print("Fixed single-group source selection in Leanback and Mobile and retained the current frame during source switching.")
 
@@ -387,7 +376,7 @@ def main() -> None:
     patch_live_action_binding(tv)
     patch_bottom_subtitle_control(tv)
     patch_live_group_selection_and_switch(tv)
-    patch_refresh_without_clearing(tv)
+    # Preserve upstream player stop/reset/clear behavior; pause-only teardown left stale state.
     patch_android9_renderer_compat(tv)
     patch_live_player_keep_frame(tv)
     enable_jetifier(gradle_properties)

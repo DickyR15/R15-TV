@@ -415,6 +415,9 @@ def patch_live_source_options(tv: Path) -> None:
     live.write_text(live_text, encoding="utf-8")
 
     config_text = live_config.read_text(encoding="utf-8")
+    if "private boolean suppressBootEvent;" not in config_text:
+        ads_anchor = "    private List<String> ads;\n"
+        config_text = replace_once(config_text, ads_anchor, ads_anchor + "\n    private boolean suppressBootEvent;\n", live_config)
     if "import org.json.JSONObject;" not in config_text:
         import_anchor = "import java.util.stream.Collectors;\n"
         config_text = replace_once(
@@ -471,6 +474,40 @@ def patch_live_source_options(tv: Path) -> None:
 """
     if "private void applyR15SourceOptions(Config config, Live live)" not in config_text:
         config_text = replace_once(config_text, helper_anchor, helper + helper_anchor, live_config)
+    load_anchor = """    public static void load(Config config, Callback callback) {
+        get().clear().config(config).load(callback);
+    }"""
+    load_replacement = """    private boolean suppressBootEvent;
+
+    public static void load(Config config, Callback callback) {
+        load(config, callback, false);
+    }
+
+    public static void load(Config config, Callback callback, boolean suppressBootEvent) {
+        LiveConfig instance = get().clear().config(config);
+        instance.suppressBootEvent = suppressBootEvent;
+        instance.load(callback);
+    }"""
+    if "public static void load(Config config, Callback callback, boolean suppressBootEvent)" not in config_text:
+        config_text = replace_once(config_text, load_anchor, load_replacement, live_config)
+
+    post_anchor = """    protected void postEvent() {
+        super.postEvent();
+        ConfigEvent.live();
+    }"""
+    post_replacement = """    protected void postEvent() {
+        super.postEvent();
+        ConfigEvent.live();
+        suppressBootEvent = false;
+    }"""
+    if "        suppressBootEvent = false;" not in config_text:
+        config_text = replace_once(config_text, post_anchor, post_replacement, live_config)
+
+    boot_anchor = "        if (!save && (home.isBoot() || LiveSetting.isBoot())) ConfigEvent.boot();"
+    boot_replacement = "        if (!save && !suppressBootEvent && (home.isBoot() || LiveSetting.isBoot())) ConfigEvent.boot();"
+    if boot_replacement not in config_text:
+        config_text = replace_once(config_text, boot_anchor, boot_replacement, live_config)
+
     live_config.write_text(config_text, encoding="utf-8")
 
 
