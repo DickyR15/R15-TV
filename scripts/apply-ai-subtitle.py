@@ -48,6 +48,55 @@ def patch_manifest(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+def patch_player_resume(text: str, path: Path) -> str:
+    """Attach subtitle capture only after the user opts in to auto-start."""
+    signature = "protected void onResume() {"
+    start = text.find(signature)
+    if start < 0:
+        signature = "public void onResume() {"
+        start = text.find(signature)
+
+    action = """        if (mBinding != null && AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
+            AiSubtitleOverlay.attach(this, mBinding.player);
+        } else if (mBinding != null) {
+            AiSubtitleOverlay.detach(mBinding.player);
+        }"""
+    if start >= 0:
+        body_start = start + len(signature)
+        body_end = text.find("\n    }", body_start)
+        if body_end < 0:
+            raise SystemExit(f"{path}: cannot locate onResume() end")
+        body = text[body_start:body_end]
+        if "AiSubtitleSettingsActivity.isAutoStartEnabled(this)" in body:
+            return text
+        marker = "super.onResume();"
+        offset = body.find(marker)
+        if offset >= 0:
+            insert_at = body_start + offset + len(marker)
+            return text[:insert_at] + "\n" + action + text[insert_at:]
+        return text[:body_start] + "\n" + action + text[body_start:]
+
+    destroy = "protected void onDestroy() {"
+    insert_at = text.find(destroy)
+    if insert_at < 0:
+        raise SystemExit(f"{path}: cannot locate onDestroy() for subtitle lifecycle hook")
+    annotation = text.rfind("@Override", 0, insert_at)
+    if annotation >= 0 and text[annotation + len("@Override"):insert_at].strip() == "":
+        insert_at = annotation
+    method = """    @Override
+    protected void onResume() {
+        super.onResume();
+        if (mBinding != null && AiSubtitleSettingsActivity.isAutoStartEnabled(this)) {
+            AiSubtitleOverlay.attach(this, mBinding.player);
+        } else if (mBinding != null) {
+            AiSubtitleOverlay.detach(mBinding.player);
+        }
+    }
+
+"""
+    return text[:insert_at] + method + text[insert_at:]
+
+
 def patch_player_activity(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     import_anchor = "import com.fongmi.android.tv.App;\n"
@@ -62,8 +111,9 @@ def patch_player_activity(path: Path) -> None:
     init_end = text.find("\n    }", init_start)
     init_body_end = init_end if init_end >= 0 else len(text)
     init_body = text[init_start:init_body_end]
-    attach_line = "AiSubtitleOverlay.attach(this, mBinding.player);"
-    if attach_line not in init_body:
+    attach_call = "AiSubtitleOverlay.attach(this, mBinding.player);"
+    attach_line = "if (AiSubtitleSettingsActivity.isAutoStartEnabled(this)) " + attach_call
+    if attach_call not in init_body:
         marker = "setVideoView();"
         marker_pos = text.find(marker, init_start, init_body_end)
         if marker_pos < 0:
@@ -89,8 +139,9 @@ def patch_player_activity(path: Path) -> None:
     detach_line = "AiSubtitleOverlay.detach(mBinding.player);"
     if detach_line not in destroy_body:
         text = text[:body_start] + "\n        " + detach_line + text[body_start:]
-    path.write_text(text, encoding="utf-8")
 
+    text = patch_player_resume(text, path)
+    path.write_text(text, encoding="utf-8")
 
 def patch_tv_settings_activity(path: Path) -> None:
     text = path.read_text(encoding="utf-8")

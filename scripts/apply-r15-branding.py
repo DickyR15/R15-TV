@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 import cairosvg
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 
 WALLPAPERS = (
@@ -115,26 +115,38 @@ def stage_icon(tv: Path, branding: Path) -> None:
 
 
 def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
-    """Replace the stock FongMi cube banner with the user's R15 TV artwork."""
+    """Create a full-width 16:9 Google TV banner using the R15 TV logo."""
     banner_dir = tv / "app" / "src" / "leanback" / "res" / "drawable-nodpi"
     banner_dir.mkdir(parents=True, exist_ok=True)
 
-    # Match the banner canvas to the edge color of the supplied artwork so
-    # the square logo blends into the Android TV 16:9 banner without a white box.
-    corners = [
-        artwork.getpixel((0, 0)),
-        artwork.getpixel((artwork.width - 1, 0)),
-        artwork.getpixel((0, artwork.height - 1)),
-        artwork.getpixel((artwork.width - 1, artwork.height - 1)),
-    ]
-    background = tuple(
-        round(sum(pixel[channel] for pixel in corners) / len(corners))
-        for channel in range(3)
-    )
-    banner = Image.new("RGB", (320, 180), background)
-    logo_size = 128
+    width, height = 1280, 720
+    banner = Image.new("RGB", (width, height), (6, 16, 43))
+    draw = ImageDraw.Draw(banner)
+    for x in range(width):
+        t = x / max(1, width - 1)
+        draw.line((x, 0, x, height), fill=(
+            round(5 + 12 * t),
+            round(15 + 1 * t),
+            round(43 + 34 * t),
+        ))
+
+    # Large brand tile on the left; the title fills the remaining banner width.
+    logo_size = 570
     logo = artwork.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-    banner.paste(logo, ((320 - logo_size) // 2, (180 - logo_size) // 2))
+    logo_x = 42
+    logo_y = (height - logo_size) // 2
+    draw.rounded_rectangle(
+        (logo_x - 10, logo_y - 10, logo_x + logo_size + 10, logo_y + logo_size + 10),
+        radius=56, outline=(34, 181, 255), width=5,
+    )
+    banner.paste(logo, (logo_x, logo_y))
+
+    font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
+    font = ImageFont.truetype(str(font_path), 128) if font_path.is_file() else ImageFont.load_default()
+    draw.text((681, 291), "R15 TV", font=font, fill=(12, 10, 42))
+    draw.text((676, 284), "R15 TV", font=font, fill=(244, 249, 255),
+              stroke_width=2, stroke_fill=(37, 140, 255))
+    draw.rounded_rectangle((680, 448, 1184, 458), radius=5, fill=(40, 202, 255))
     banner.save(banner_dir / "r15_tv_banner.png", "PNG", optimize=True)
 
     manifest = tv / "app" / "src" / "leanback" / "AndroidManifest.xml"
@@ -150,7 +162,6 @@ def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
         manifest.write_text(text.replace(old, new, 1), encoding="utf-8")
     if 'android:banner="@drawable/r15_tv_banner"' not in manifest.read_text(encoding="utf-8"):
         raise SystemExit("R15 TV banner was not connected to the Leanback application manifest")
-
 
 def patch_splash_icons(tv: Path) -> None:
     """Use the supplied R15 artwork on Android 12+ startup splash screens."""

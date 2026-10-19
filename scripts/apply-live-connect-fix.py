@@ -86,6 +86,120 @@ def patch_live_action_binding(tv: Path) -> None:
 
 
 
+
+def patch_bottom_subtitle_control(tv: Path) -> None:
+    """Put the subtitle settings entry in the bottom live-player control row."""
+    video_anchor = 'android:text="@string/play_track_video" />'
+    subtitle_control = '''android:text="@string/play_track_video" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:id="@+id/r15Subtitle"
+            style="@style/Control"
+            android:layout_marginEnd="8dp"
+            android:text="字幕翻譯：關" />'''
+    for flavor in ("leanback", "mobile"):
+        layout = tv / "app" / "src" / flavor / "res" / "layout" / "view_control_live_action.xml"
+        activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        if not layout.is_file() or not activity.is_file():
+            raise SystemExit(f"Missing subtitle bottom-row resources for {flavor}")
+        xml = layout.read_text(encoding="utf-8")
+        if 'android:id="@+id/r15Subtitle"' not in xml:
+            if xml.count(video_anchor) != 1:
+                raise SystemExit(f"{layout}: expected one video-track button")
+            xml = xml.replace(video_anchor, subtitle_control, 1)
+            layout.write_text(xml, encoding="utf-8")
+
+        source = activity.read_text(encoding="utf-8")
+        anchor = "mBinding.control.actions.video.setOnClickListener(this::onTrack);\n"
+        listener = anchor + "        mBinding.control.actions.r15Subtitle.setOnClickListener(view -> AiSubtitleSettingsActivity.start(this));\n"
+        if "mBinding.control.actions.r15Subtitle.setOnClickListener" not in source:
+            if source.count(anchor) != 1:
+                raise SystemExit(f"{activity}: cannot add subtitle settings click handler")
+            source = source.replace(anchor, listener, 1)
+
+        signature = "protected void onResume() {"
+        start = source.find(signature)
+        if start < 0:
+            signature = "public void onResume() {"
+            start = source.find(signature)
+        if start < 0:
+            raise SystemExit(f"{activity}: AI subtitle patch did not create an onResume() hook")
+        body_start = start + len(signature)
+        body_end = source.find("\n    }", body_start)
+        if body_end < 0:
+            raise SystemExit(f"{activity}: cannot locate onResume() end")
+        body = source[body_start:body_end]
+        label = 'if (mBinding != null) mBinding.control.actions.r15Subtitle.setText(AiSubtitleSettingsActivity.isAutoStartEnabled(this) ? "字幕翻譯：開" : "字幕翻譯：關");'
+        if "mBinding.control.actions.r15Subtitle.setText" not in body:
+            super_call = "super.onResume();"
+            pos = body.find(super_call)
+            if pos < 0:
+                raise SystemExit(f"{activity}: cannot locate super.onResume()")
+            insert_pos = body_start + pos + len(super_call)
+            source = source[:insert_pos] + "\n        " + label + source[insert_pos:]
+        activity.write_text(source, encoding="utf-8")
+    print("Added the subtitle settings entry to the bottom live-player control row.")
+
+
+def patch_live_group_selection_and_switch(tv: Path) -> None:
+    """Handle single-group playlists and retain the last frame during source changes."""
+    old_position = """    private void setPosition(int[] position) {
+        if (position[0] == -1) return;
+        int size = mGroupAdapter.getItemCount();
+        if (size == 1 || position[0] >= size) return;
+        mGroup = mGroupAdapter.get(position[0]);
+        mBinding.group.setSelectedPosition(position[0]);
+        mGroup.setPosition(position[1]);
+        mLive.selectGroup(mGroup);
+        mLive.selectChannel(mGroup.current());
+    }"""
+    new_position = """    private void setPosition(int[] position) {
+        int size = mGroupAdapter.getItemCount();
+        if (size == 0) return;
+        int groupPosition = position == null || position.length == 0 ? -1 : position[0];
+        if (groupPosition < 0 || groupPosition >= size) groupPosition = size > 1 ? 1 : 0;
+        mGroup = mGroupAdapter.get(groupPosition);
+        if (mGroup.getChannel().isEmpty()) {
+            boolean found = false;
+            for (int i = 0; i < size; i++) {
+                Group candidate = mGroupAdapter.get(i);
+                if (!candidate.getChannel().isEmpty()) {
+                    groupPosition = i;
+                    mGroup = candidate;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return;
+        }
+        int channelPosition = position != null && position.length > 1 ? position[1] : 0;
+        if (channelPosition < 0 || channelPosition >= mGroup.getChannel().size()) channelPosition = 0;
+        mBinding.group.setSelectedPosition(groupPosition);
+        mGroup.setPosition(channelPosition);
+        mLive.selectGroup(mGroup);
+        mLive.selectChannel(mGroup.current());
+    }"""
+    old_reset = """        player().reset();
+        player().clear();
+        player().stop();
+        resetAdapter();"""
+    new_reset = """        // Keep the current frame while the replacement channel loads.
+        // Media3 is configured to retain content on reset to avoid a black flash.
+        resetAdapter();"""
+    for flavor in ("leanback", "mobile"):
+        activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        text = activity.read_text(encoding="utf-8")
+        if old_position in text:
+            text = text.replace(old_position, new_position, 1)
+        elif new_position not in text:
+            raise SystemExit(f"{activity}: setPosition() patch anchor missing")
+        if old_reset in text:
+            text = text.replace(old_reset, new_reset, 1)
+        elif new_reset not in text:
+            raise SystemExit(f"{activity}: source-switch reset patch anchor missing")
+        activity.write_text(text, encoding="utf-8")
+    print("Fixed single-group source selection and stopped clearing the current frame before the replacement channel is ready.")
+
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
     for flavor in ("leanback", "mobile"):
@@ -157,6 +271,8 @@ def main() -> None:
 
     patch_default_wallpaper(wallpaper_setting)
     patch_live_action_binding(tv)
+    patch_bottom_subtitle_control(tv)
+    patch_live_group_selection_and_switch(tv)
     patch_live_player_keep_frame(tv)
     enable_jetifier(gradle_properties)
 
@@ -167,6 +283,8 @@ def main() -> None:
         raise SystemExit("home menu does not use the connect icon")
     if 'Prefers.getInt("wall", 4)' not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("wallpaper_4 is not the default wallpaper")
+    if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
+        raise SystemExit("Bottom subtitle settings control is missing")
     if "android.enableJetifier=true" not in gradle_properties.read_text(encoding="utf-8"):
         raise SystemExit("Jetifier compatibility setting is missing")
     print("Applied home label/icon, Aurora default wallpaper and live-action duplicate-ID workaround.")

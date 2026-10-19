@@ -364,12 +364,8 @@ public final class AiSubtitleOverlay {
         panel.setVisibility(android.view.View.GONE);
         overlay.addView(panel, panelParams);
 
-        FrameLayout.LayoutParams entryParams = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.TOP | Gravity.END);
-        entryParams.setMargins(dp(12), dp(18), dp(18), 0);
-        overlay.addView(entryButton, entryParams);
+        // Subtitle settings are opened from the bottom live-player control row.
+        // Do not overlay a second floating settings button on the video.
 
         // Reuse the overlay across media-item changes: the player view stays attached
         // while the channel changes. Start once per attached PlayerView, not per stream.
