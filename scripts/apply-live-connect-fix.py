@@ -219,7 +219,7 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         }
         int channelPosition = position != null && position.length > 1 ? position[1] : 0;
         if (channelPosition < 0 || channelPosition >= mGroup.getChannel().size()) channelPosition = 0;
-        mGroupAdapter.setSelected(groupPosition);
+        mBinding.group.scrollToPosition(groupPosition);
         mGroup.setPosition(channelPosition);
         mLive.selectGroup(mGroup);
         mLive.selectChannel(mGroup.current());
