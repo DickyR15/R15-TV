@@ -292,7 +292,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
         text = text.replace(anchor, "import android.os.Build;\n" + anchor, 1)
 
     old = "playerView.setRender(PlayerSetting.getRender());"
-    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE : PlayerSetting.getRender());"
+    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE : PlayerSetting.getRender());"
     if new not in text:
         count = text.count(old)
         if count != 1:
@@ -301,7 +301,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
     path.write_text(text, encoding="utf-8")
     if new not in path.read_text(encoding="utf-8"):
         raise SystemExit("Android 9 TextureView compatibility setting was not applied")
-    print("Applied TextureView compatibility only for Android 9 and older; Android 10+ keeps the user's configured renderer.")
+    print("Applied SurfaceView compatibility on Android 9 and older; Android 10+ keeps the user's configured renderer.")
 
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
@@ -388,7 +388,7 @@ def main() -> None:
         raise SystemExit("home menu does not use the connect icon")
     if 'Prefers.getInt("wall", 4)' not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("wallpaper_4 is not the default wallpaper")
-    if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
+    if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Android 9 renderer compatibility setting is missing")
     if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
         raise SystemExit("Bottom subtitle settings control is missing")
@@ -398,8 +398,8 @@ def main() -> None:
         raise SystemExit("Bottom source-language control is missing")
     if "AiSubtitleOverlay.handleLiveSubtitleClick" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Quick subtitle toggle is not wired")
-    print("Applied home label/icon, quick subtitle toggle, downloaded-language picker, and pause-only source switching.")
-    print("Applied the Android 9 TextureView fallback; Android 10+ keeps the configured renderer.")
+    print("Applied home label/icon and quick subtitle controls.")
+    print("Applied the Android 9 SurfaceView fallback; Android 10+ keeps the configured renderer.")
 
 
 if __name__ == "__main__":
