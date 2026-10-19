@@ -201,14 +201,6 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
     new_position_mobile = """    private void setPosition(int[] position) {
         int size = mGroupAdapter.getItemCount();
         if (size == 0) return;
-        if (size == 1) {
-            mGroup = mGroupAdapter.get(0);
-            if (mGroup.getChannel().isEmpty()) return;
-            mGroup.setPosition(0);
-            mBinding.group.setSelectedPosition(0);
-            mLive.selectGroup(mGroup);
-            return; // Do not auto-start a channel while entering a single-group playlist.
-        }
         int groupPosition = position == null || position.length == 0 ? -1 : position[0];
         if (groupPosition < 0 || groupPosition >= size) groupPosition = size > 1 ? 1 : 0;
         mGroup = mGroupAdapter.get(groupPosition);
