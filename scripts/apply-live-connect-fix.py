@@ -223,24 +223,23 @@ def patch_refresh_without_clearing(tv: Path) -> None:
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
         text = activity.read_text(encoding="utf-8")
 
-        old_stop = """    private void stopPlayer() {
-        player().clear();
-        player().stop();
-    }"""
-        new_stop = """    private void stopPlayer() {
-        // Do not tear down the current decoder/surface on every channel request.
-        // Pause audio/video and retain the last frame while the new URL resolves.
-        player().pause();
-        player().reset();
-    }"""
-        if old_stop in text:
-            text = text.replace(old_stop, new_stop, 1)
-        elif new_stop not in text:
+        # The Mobile flavor has an extra checkControl() call in stopPlayer().
+        # Patch only the teardown calls so flavor-specific behavior is retained.
+        method_start = text.find("    private void stopPlayer() {")
+        method_end = text.find("\n    }", method_start)
+        if method_start < 0 or method_end < 0:
+            raise SystemExit(f"{activity}: cannot locate stopPlayer()")
+        method = text[method_start:method_end]
+        old_pair = "        player().clear();\n        player().stop();"
+        new_pair = "        // Keep the existing decoder/surface while a new URL resolves.\n        player().pause();\n        player().reset();"
+        if old_pair in method:
+            method = method.replace(old_pair, new_pair, 1)
+        elif "player().pause();" not in method or "player().reset();" not in method:
             raise SystemExit(f"{activity}: cannot safely patch stopPlaybackForRefresh()")
+        text = text[:method_start] + method + text[method_end:]
 
         # Source activation calls setLive(); the base implementation also stopped
-        # and cleared the player. Patch this method separately instead of relying
-        # on the first matching resetAdapter() sequence elsewhere in the file.
+        # and cleared the player. Patch this method separately.
         method_start = text.find("    public void setLive(Live item) {")
         method_end = text.find("\n    }", method_start)
         if method_start < 0 or method_end < 0:
@@ -263,6 +262,7 @@ def patch_refresh_without_clearing(tv: Path) -> None:
         text = text[:method_start] + method + text[method_end:]
         activity.write_text(text, encoding="utf-8")
     print("Updated live channel refresh and source activation to pause without clearing/stopping the active media surface.")
+
 
 
 def patch_android9_renderer_compat(tv: Path) -> None:
