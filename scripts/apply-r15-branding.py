@@ -9,7 +9,7 @@ import re
 from pathlib import Path
 
 import cairosvg
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 
 WALLPAPERS = (
@@ -115,38 +115,70 @@ def stage_icon(tv: Path, branding: Path) -> None:
 
 
 def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
-    """Create a full-width 16:9 Google TV banner using the R15 TV logo."""
+    """Create a full-bleed Google TV banner with a large R15 TV logo and wordmark."""
     banner_dir = tv / "app" / "src" / "leanback" / "res" / "drawable-nodpi"
     banner_dir.mkdir(parents=True, exist_ok=True)
 
     width, height = 1280, 720
-    banner = Image.new("RGB", (width, height), (6, 16, 43))
-    draw = ImageDraw.Draw(banner)
-    for x in range(width):
-        t = x / max(1, width - 1)
-        draw.line((x, 0, x, height), fill=(
-            round(5 + 12 * t),
-            round(15 + 1 * t),
-            round(43 + 34 * t),
-        ))
 
-    # Large brand tile on the left; the title fills the remaining banner width.
-    logo_size = 570
-    logo = artwork.resize((logo_size, logo_size), Image.Resampling.LANCZOS)
-    logo_x = 42
-    logo_y = (height - logo_size) // 2
-    draw.rounded_rectangle(
-        (logo_x - 10, logo_y - 10, logo_x + logo_size + 10, logo_y + logo_size + 10),
-        radius=56, outline=(34, 181, 255), width=5,
+    # Fill the entire banner with an enlarged, softened version of the supplied
+    # brand artwork; this avoids the unused solid-color margins of the previous
+    # banner while preserving the original logo itself in the foreground.
+    background = ImageOps.fit(
+        artwork, (width, height), method=Image.Resampling.LANCZOS, centering=(0.5, 0.5)
+    ).filter(ImageFilter.GaussianBlur(radius=28))
+    navy = Image.new("RGB", (width, height), (4, 10, 34))
+    banner = Image.blend(background, navy, 0.60)
+    draw = ImageDraw.Draw(banner)
+
+    # Tighten the source bounds around bright logo strokes so the launcher icon
+    # uses its full banner height instead of leaving the artwork's original padding.
+    pixels = artwork.load()
+    xs, ys = [], []
+    for y in range(artwork.height):
+        for x in range(artwork.width):
+            r, g, b = pixels[x, y]
+            hi, lo = max(r, g, b), min(r, g, b)
+            if hi >= 112 and (hi - lo >= 48 or hi >= 205):
+                xs.append(x)
+                ys.append(y)
+    if xs and ys:
+        pad = max(4, int(min(artwork.width, artwork.height) * 0.018))
+        box = (
+            max(0, min(xs) - pad),
+            max(0, min(ys) - pad),
+            min(artwork.width, max(xs) + pad + 1),
+            min(artwork.height, max(ys) + pad + 1),
+        )
+        logo_art = artwork.crop(box)
+    else:
+        logo_art = artwork
+
+    # Large logo lockup: the logo runs almost edge-to-edge vertically.
+    max_logo_h = height - 8
+    max_logo_w = 720
+    scale = min(max_logo_h / logo_art.height, max_logo_w / logo_art.width)
+    logo = logo_art.resize(
+        (max(1, round(logo_art.width * scale)), max(1, round(logo_art.height * scale))),
+        Image.Resampling.LANCZOS,
     )
+    logo_x = 8
+    logo_y = (height - logo.height) // 2
     banner.paste(logo, (logo_x, logo_y))
 
     font_path = Path("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf")
-    font = ImageFont.truetype(str(font_path), 128) if font_path.is_file() else ImageFont.load_default()
-    draw.text((681, 291), "R15 TV", font=font, fill=(12, 10, 42))
-    draw.text((676, 284), "R15 TV", font=font, fill=(244, 249, 255),
+    font_size = 168
+    font = ImageFont.truetype(str(font_path), font_size) if font_path.is_file() else ImageFont.load_default()
+    title = "R15 TV"
+    while font_size > 70 and draw.textbbox((0, 0), title, font=font)[2] > width - 760:
+        font_size -= 4
+        if font_path.is_file():
+            font = ImageFont.truetype(str(font_path), font_size)
+        else:
+            break
+    draw.text((740, 258), title, font=font, fill=(244, 249, 255),
               stroke_width=2, stroke_fill=(37, 140, 255))
-    draw.rounded_rectangle((680, 448, 1184, 458), radius=5, fill=(40, 202, 255))
+    draw.rounded_rectangle((744, 445, 1228, 459), radius=7, fill=(40, 202, 255))
     banner.save(banner_dir / "r15_tv_banner.png", "PNG", optimize=True)
 
     manifest = tv / "app" / "src" / "leanback" / "AndroidManifest.xml"

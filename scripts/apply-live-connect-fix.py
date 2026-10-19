@@ -216,6 +216,80 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         activity.write_text(text, encoding="utf-8")
     print("Fixed single-group source selection in Leanback and Mobile and retained the current frame during source switching.")
 
+
+def patch_refresh_without_clearing(tv: Path) -> None:
+    """Pause and retain the current video surface while a new live URL resolves."""
+    for flavor in ("leanback", "mobile"):
+        activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        text = activity.read_text(encoding="utf-8")
+
+        old_stop = """    private void stopPlayer() {
+        player().clear();
+        player().stop();
+    }"""
+        new_stop = """    private void stopPlayer() {
+        // Do not tear down the current decoder/surface on every channel request.
+        // Pause audio/video and retain the last frame while the new URL resolves.
+        player().pause();
+        player().reset();
+    }"""
+        if old_stop in text:
+            text = text.replace(old_stop, new_stop, 1)
+        elif new_stop not in text:
+            raise SystemExit(f"{activity}: cannot safely patch stopPlaybackForRefresh()")
+
+        # Source activation calls setLive(); the base implementation also stopped
+        # and cleared the player. Patch this method separately instead of relying
+        # on the first matching resetAdapter() sequence elsewhere in the file.
+        method_start = text.find("    public void setLive(Live item) {")
+        method_end = text.find("\n    }", method_start)
+        if method_start < 0 or method_end < 0:
+            raise SystemExit(f"{activity}: cannot locate setLive(Live item)")
+        method = text[method_start:method_end]
+        old_teardown = """        player().reset();
+        player().clear();
+        player().stop();"""
+        if old_teardown in method:
+            method = method.replace(old_teardown, """        player().pause();
+        player().reset();""", 1)
+        else:
+            before_adapter = method.split("        resetAdapter();", 1)[0]
+            if "player().pause();" not in before_adapter:
+                if "        resetAdapter();" not in method:
+                    raise SystemExit(f"{activity}: cannot locate setLive() adapter reset")
+                method = method.replace("        resetAdapter();", "        player().pause();\n        player().reset();\n        resetAdapter();", 1)
+            elif "player().reset();" not in before_adapter:
+                method = method.replace("        resetAdapter();", "        player().reset();\n        resetAdapter();", 1)
+        text = text[:method_start] + method + text[method_end:]
+        activity.write_text(text, encoding="utf-8")
+    print("Updated live channel refresh and source activation to pause without clearing/stopping the active media surface.")
+
+
+def patch_android9_renderer_compat(tv: Path) -> None:
+    """Use TextureView only on Android 9 and older; keep stock rendering on newer TVs."""
+    path = tv / "app" / "src" / "main" / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "PlaybackActivity.java"
+    if not path.is_file():
+        raise SystemExit(f"Missing shared PlaybackActivity source: {path}")
+    text = path.read_text(encoding="utf-8")
+
+    if "import android.os.Build;" not in text:
+        anchor = "import android.os.Bundle;\n"
+        if text.count(anchor) != 1:
+            raise SystemExit(f"{path}: cannot safely add Build import")
+        text = text.replace(anchor, "import android.os.Build;\n" + anchor, 1)
+
+    old = "playerView.setRender(PlayerSetting.getRender());"
+    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE : PlayerSetting.getRender());"
+    if new not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{path}: expected one renderer selection point, found {count}")
+        text = text.replace(old, new, 1)
+    path.write_text(text, encoding="utf-8")
+    if new not in path.read_text(encoding="utf-8"):
+        raise SystemExit("Android 9 TextureView compatibility setting was not applied")
+    print("Applied TextureView compatibility only for Android 9 and older; Android 10+ keeps the user's configured renderer.")
+
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
     for flavor in ("leanback", "mobile"):
@@ -289,6 +363,8 @@ def main() -> None:
     patch_live_action_binding(tv)
     patch_bottom_subtitle_control(tv)
     patch_live_group_selection_and_switch(tv)
+    patch_refresh_without_clearing(tv)
+    patch_android9_renderer_compat(tv)
     patch_live_player_keep_frame(tv)
     enable_jetifier(gradle_properties)
 
@@ -299,6 +375,8 @@ def main() -> None:
         raise SystemExit("home menu does not use the connect icon")
     if 'Prefers.getInt("wall", 4)' not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("wallpaper_4 is not the default wallpaper")
+    if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
+        raise SystemExit("Android 9 renderer compatibility setting is missing")
     if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
         raise SystemExit("Bottom subtitle settings control is missing")
     if "android.enableJetifier=true" not in gradle_properties.read_text(encoding="utf-8"):
