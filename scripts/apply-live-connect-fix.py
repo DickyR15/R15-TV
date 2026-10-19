@@ -141,17 +141,7 @@ def patch_bottom_subtitle_control(tv: Path) -> None:
 
 def patch_live_group_selection_and_switch(tv: Path) -> None:
     """Handle single-group playlists and retain the last frame during source changes."""
-    old_position = """    private void setPosition(int[] position) {
-        if (position[0] == -1) return;
-        int size = mGroupAdapter.getItemCount();
-        if (size == 1 || position[0] >= size) return;
-        mGroup = mGroupAdapter.get(position[0]);
-        mBinding.group.setSelectedPosition(position[0]);
-        mGroup.setPosition(position[1]);
-        mLive.selectGroup(mGroup);
-        mLive.selectChannel(mGroup.current());
-    }"""
-    new_position = """    private void setPosition(int[] position) {
+    new_position_leanback = """    private void setPosition(int[] position) {
         int size = mGroupAdapter.getItemCount();
         if (size == 0) return;
         int groupPosition = position == null || position.length == 0 ? -1 : position[0];
@@ -177,6 +167,32 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         mLive.selectGroup(mGroup);
         mLive.selectChannel(mGroup.current());
     }"""
+    new_position_mobile = """    private void setPosition(int[] position) {
+        int size = mGroupAdapter.getItemCount();
+        if (size == 0) return;
+        int groupPosition = position == null || position.length == 0 ? -1 : position[0];
+        if (groupPosition < 0 || groupPosition >= size) groupPosition = size > 1 ? 1 : 0;
+        mGroup = mGroupAdapter.get(groupPosition);
+        if (mGroup.getChannel().isEmpty()) {
+            boolean found = false;
+            for (int i = 0; i < size; i++) {
+                Group candidate = mGroupAdapter.get(i);
+                if (!candidate.getChannel().isEmpty()) {
+                    groupPosition = i;
+                    mGroup = candidate;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) return;
+        }
+        int channelPosition = position != null && position.length > 1 ? position[1] : 0;
+        if (channelPosition < 0 || channelPosition >= mGroup.getChannel().size()) channelPosition = 0;
+        mGroupAdapter.setSelected(groupPosition);
+        mGroup.setPosition(channelPosition);
+        mLive.selectGroup(mGroup);
+        mLive.selectChannel(mGroup.current());
+    }"""
     old_reset = """        player().reset();
         player().clear();
         player().stop();
@@ -187,16 +203,18 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
     for flavor in ("leanback", "mobile"):
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
         text = activity.read_text(encoding="utf-8")
-        if old_position in text:
-            text = text.replace(old_position, new_position, 1)
-        elif new_position not in text:
-            raise SystemExit(f"{activity}: setPosition() patch anchor missing")
+        method_start = text.find("    private void setPosition(int[] position) {")
+        method_end = text.find("\n    private void setPosition() {", method_start)
+        if method_start < 0 or method_end < 0:
+            raise SystemExit(f"{activity}: cannot locate setPosition(int[]) method bounds")
+        new_position = new_position_leanback if flavor == "leanback" else new_position_mobile
+        text = text[:method_start] + new_position + text[method_end:]
         if old_reset in text:
             text = text.replace(old_reset, new_reset, 1)
         elif new_reset not in text:
             raise SystemExit(f"{activity}: source-switch reset patch anchor missing")
         activity.write_text(text, encoding="utf-8")
-    print("Fixed single-group source selection and stopped clearing the current frame before the replacement channel is ready.")
+    print("Fixed single-group source selection in Leanback and Mobile and retained the current frame during source switching.")
 
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
