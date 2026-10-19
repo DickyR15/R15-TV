@@ -76,7 +76,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
         for (int i = 0; i < ASR_LANGUAGE_CODES.length; i++) {
             if (ASR_LANGUAGE_CODES[i].equals(code)) return ASR_LANGUAGE_LABELS[i];
         }
-        return ASR_LANGUAGE_LABELS[2];
+        return ASR_LANGUAGE_LABELS[0];
     }
 
     public static String getTranslationProvider(Context context) {
@@ -438,7 +438,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     private static int languageIndex(String value) {
         for (int i = 0; i < ASR_LANGUAGE_CODES.length; i++) if (ASR_LANGUAGE_CODES[i].equals(value)) return i;
-        return 2;
+        return 0;
     }
 
     private static String safe(String value) { return value == null ? "" : value.trim(); }
