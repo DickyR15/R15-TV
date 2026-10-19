@@ -57,6 +57,8 @@ def stage_icon(tv: Path, branding: Path) -> None:
     logo_dir = resources / "drawable-nodpi"
     logo_dir.mkdir(parents=True, exist_ok=True)
     artwork.save(logo_dir / "ic_logo.png", "PNG", optimize=True)
+    # Use a fresh resource name so Android/LDPlayer icon caches cannot reuse the old resource ID.
+    artwork.save(logo_dir / "r15_tv_app_icon.png", "PNG", optimize=True)
     stage_tv_banner(tv, artwork)
 
     # Android 12+ masks the animated splash icon to a circle. Keep the exact
@@ -203,8 +205,8 @@ def patch_application_icons(tv: Path) -> None:
         raise SystemExit(f"Missing main manifest: {manifest}")
     text = manifest.read_text(encoding="utf-8")
     replacements = (
-        ('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/ic_logo"'),
-        ('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/ic_logo"'),
+        ('android:icon="@mipmap/ic_launcher"', 'android:icon="@drawable/r15_tv_app_icon"'),
+        ('android:roundIcon="@mipmap/ic_launcher_round"', 'android:roundIcon="@drawable/r15_tv_app_icon"'),
     )
     for old, new in replacements:
         if new in text:
@@ -215,9 +217,9 @@ def patch_application_icons(tv: Path) -> None:
         text = text.replace(old, new, 1)
     manifest.write_text(text, encoding="utf-8")
     verify = manifest.read_text(encoding="utf-8")
-    if 'android:icon="@drawable/ic_logo"' not in verify:
+    if 'android:icon="@drawable/r15_tv_app_icon"' not in verify:
         raise SystemExit("R15 application icon reference was not applied")
-    if 'android:roundIcon="@drawable/ic_logo"' not in verify:
+    if 'android:roundIcon="@drawable/r15_tv_app_icon"' not in verify:
         raise SystemExit("R15 round application icon reference was not applied")
 
 

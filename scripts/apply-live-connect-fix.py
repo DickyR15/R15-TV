@@ -196,7 +196,7 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         mBinding.group.setSelectedPosition(groupPosition);
         mGroup.setPosition(channelPosition);
         mLive.selectGroup(mGroup);
-        mLive.selectChannel(mGroup.current());
+        // Do not autoplay on entering Live; an explicit channel click starts playback.
     }"""
     new_position_mobile = """    private void setPosition(int[] position) {
         int size = mGroupAdapter.getItemCount();
@@ -222,7 +222,7 @@ def patch_live_group_selection_and_switch(tv: Path) -> None:
         mBinding.group.scrollToPosition(groupPosition);
         mGroup.setPosition(channelPosition);
         mLive.selectGroup(mGroup);
-        mLive.selectChannel(mGroup.current());
+        // Do not autoplay on entering Live; an explicit channel click starts playback.
     }"""
     for flavor in ("leanback", "mobile"):
         activity = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
