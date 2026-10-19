@@ -195,6 +195,22 @@ def stage_tv_banner(tv: Path, artwork: Image.Image) -> None:
     if 'android:banner="@drawable/r15_tv_banner"' not in manifest.read_text(encoding="utf-8"):
         raise SystemExit("R15 TV banner was not connected to the Leanback application manifest")
 
+
+def patch_application_icons(tv: Path) -> None:
+    """Point Android's package/application icon directly at the staged R15 artwork."""
+    manifest = tv / "app/src/main/AndroidManifest.xml"
+    replace_exact(
+        manifest,
+        'android:icon="@mipmap/ic_launcher"',
+        'android:icon="@drawable/ic_logo"',
+    )
+    replace_exact(
+        manifest,
+        'android:roundIcon="@mipmap/ic_launcher_round"',
+        'android:roundIcon="@drawable/ic_logo"',
+    )
+
+
 def patch_splash_icons(tv: Path) -> None:
     """Use the supplied R15 artwork on Android 12+ startup splash screens."""
     old = '<item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>'
@@ -219,6 +235,7 @@ def main() -> None:
     args = parser.parse_args()
     stage_wallpapers(args.tv_dir, args.branding_dir)
     stage_icon(args.tv_dir, args.branding_dir)
+    patch_application_icons(args.tv_dir)
     patch_splash_icons(args.tv_dir)
     print("Restored R15 TV launcher/homepage/splash icons, replaced the Google TV banner artwork, and staged four offline wallpapers.")
 
