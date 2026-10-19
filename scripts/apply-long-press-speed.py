@@ -107,7 +107,7 @@ def patch_layout(path: Path, is_tv: bool) -> None:
 
     pattern = re.compile(
         r'(?m)^(?P<indent>[ ]*)<androidx\.appcompat\.widget\.LinearLayoutCompat\n'
-        r'[ ]+android:id="@"\+id/background"'
+        r'[ ]+android:id="@\+id/background"'
     )
     match = pattern.search(text)
     if not match:
