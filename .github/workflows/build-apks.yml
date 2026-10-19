@@ -147,7 +147,20 @@ jobs:
           fi
           chmod +x "$JADX_BIN"
           echo "Using JADX launcher: $JADX_BIN"
-          "$JADX_BIN" --show-bad-code -d build/autobuild170/sources "$apk"
+          # JADX may return exit 3 after decompiling most classes when some obfuscated
+          # or unsupported bytecode cannot be reconstructed. Keep partial sources for
+          # the comparison report and downgrade only that known partial-decompile result.
+          if "$JADX_BIN" --show-bad-code -d build/autobuild170/sources "$apk"; then
+            echo "JADX decompilation completed without reported errors."
+          else
+            JADX_STATUS=$?
+            if [[ "$JADX_STATUS" -eq 3 ]] && [[ -d build/autobuild170/sources ]]; then
+              echo "::warning::JADX produced partial source output with decompilation errors (exit 3); continuing with available files for the reference report."
+            else
+              echo "JADX failed before producing a usable decompilation (exit $JADX_STATUS)." >&2
+              exit "$JADX_STATUS"
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import xml.etree.ElementTree as ET
