@@ -366,7 +366,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
 
 def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
     """Disable hardware acceleration only for LiveActivity while keeping video on SurfaceView."""
-    pattern = re.compile(r'<activity\\b[^>]*android:name="\\.ui\\.activity\\.LiveActivity"[^>]*>')
+    pattern = re.compile(r'<activity\b[^>]*android:name="\.ui\.activity\.LiveActivity"[^>]*>')
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
         if not manifest.is_file():
@@ -380,7 +380,7 @@ def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
         if attr.search(tag):
             patched_tag = attr.sub('android:hardwareAccelerated="false"', tag, count=1)
         else:
-            patched_tag = tag[:-2] + '\\n            android:hardwareAccelerated="false" />' if tag.endswith("/>") else tag[:-1] + '\\n            android:hardwareAccelerated="false">'
+            patched_tag = tag[:-2] + '\n            android:hardwareAccelerated="false" />' if tag.endswith("/>") else tag[:-1] + '\n            android:hardwareAccelerated="false">'
         source = source[:matches[0].start()] + patched_tag + source[matches[0].end():]
         manifest.write_text(source, encoding="utf-8")
         updated = manifest.read_text(encoding="utf-8")
