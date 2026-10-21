@@ -7,6 +7,7 @@ on:
       - "research/autobuild-170-port"
       - "diagnostic/live-exoplayer-api28"
       - "diagnostic/live-static-wallpaper-exoplayer"
+      - "diagnostic/live-surfaceview-api28"
     paths:
       - ".github/workflows/build-apks.yml"
       - "config/**"
@@ -564,8 +565,12 @@ jobs:
           ref_name = os.environ.get("GITHUB_REF_NAME", "")
           diagnostic_exoplayer = ref_name == "diagnostic/live-exoplayer-api28"
           diagnostic_static_wallpaper = ref_name == "diagnostic/live-static-wallpaper-exoplayer"
-          diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper
-          if diagnostic_static_wallpaper:
+          diagnostic_surfaceview = ref_name == "diagnostic/live-surfaceview-api28"
+          diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview
+          if diagnostic_surfaceview:
+              application_id = "com.dicky.r15tv.diagsurface"
+              app_label = "R15 TV Surface 診斷"
+          elif diagnostic_static_wallpaper:
               application_id = "com.dicky.r15tv.diagwall"
               app_label = "R15 TV 靜態桌布診斷"
           elif diagnostic_exoplayer:
@@ -605,6 +610,8 @@ jobs:
           print(f"Application ID: {application_id}; app label: {app_label}")
           if diagnostic:
               print("DIAGNOSTIC ONLY: MPV is disabled in PlayerEngineFactory; the app uses the official ExoPlayer route.")
+          if diagnostic_surfaceview:
+              print("DIAGNOSTIC ONLY: Android 9 and older force SurfaceView; animated video wallpaper remains disabled.")
           if diagnostic_static_wallpaper:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
