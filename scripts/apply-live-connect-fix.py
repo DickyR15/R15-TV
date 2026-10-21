@@ -431,6 +431,180 @@ def enable_jetifier(path: Path) -> None:
         path.write_text(suffix + "\n".join(additions) + "\n", encoding="utf-8")
 
 
+
+def patch_live_exception_trace(tv: Path) -> None:
+    """Add diagnostic-only uncaught-exception logging and LiveActivity lifecycle checkpoints."""
+    app = tv / "app/src/main/java/com/fongmi/android/tv/App.java"
+    if not app.is_file():
+        raise SystemExit(f"Missing application source: {app}")
+    app_text = app.read_text(encoding="utf-8")
+    if "import android.util.Log;" not in app_text:
+        import_anchor = "import android.os.Looper;\n"
+        if app_text.count(import_anchor) != 1:
+            raise SystemExit(f"{app}: cannot safely add Log import")
+        app_text = app_text.replace(import_anchor, import_anchor + "import android.util.Log;\n", 1)
+    old_on_create = """    public void onCreate() {
+        super.onCreate();
+        Notify.createChannel();
+        registerActivityLifecycleCallbacks(this);
+    }"""
+    new_on_create = """    public void onCreate() {
+        super.onCreate();
+        Thread.UncaughtExceptionHandler previousHandler = Thread.getDefaultUncaughtExceptionHandler();
+        Thread.setDefaultUncaughtExceptionHandler((thread, error) -> {
+            Log.e("R15CrashTrace", "UNCAUGHT thread=" + thread.getName(), error);
+            if (previousHandler != null) previousHandler.uncaughtException(thread, error);
+            else {
+                android.os.Process.killProcess(android.os.Process.myPid());
+                System.exit(10);
+            }
+        });
+        Log.i("R15CrashTrace", "App.onCreate; uncaught-exception logger installed");
+        Notify.createChannel();
+        registerActivityLifecycleCallbacks(this);
+    }"""
+    if new_on_create not in app_text:
+        if app_text.count(old_on_create) != 1:
+            raise SystemExit(f"{app}: expected exactly one onCreate() body, found {app_text.count(old_on_create)}")
+        app_text = app_text.replace(old_on_create, new_on_create, 1)
+    app.write_text(app_text, encoding="utf-8")
+
+    playback = tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java"
+    if not playback.is_file():
+        raise SystemExit(f"Missing playback activity source: {playback}")
+    playback_text = playback.read_text(encoding="utf-8")
+    if "import android.util.Log;" not in playback_text:
+        import_anchor = "import android.os.IBinder;\n"
+        if playback_text.count(import_anchor) != 1:
+            raise SystemExit(f"{playback}: cannot safely add Log import")
+        playback_text = playback_text.replace(import_anchor, import_anchor + "import android.util.Log;\n", 1)
+    old_init = """    @Override
+    protected void initView(Bundle savedInstanceState) {
+        super.initView(savedInstanceState);
+        configurePlayerView();
+        bindPlaybackService();
+        addSeekListener();
+    }"""
+    new_init = """    @Override
+    protected void initView(Bundle savedInstanceState) {
+        Log.i("R15LiveTrace", "PlaybackActivity.initView ENTER");
+        super.initView(savedInstanceState);
+        Log.i("R15LiveTrace", "PlaybackActivity.initView after super");
+        configurePlayerView();
+        Log.i("R15LiveTrace", "PlaybackActivity.initView after configurePlayerView");
+        bindPlaybackService();
+        Log.i("R15LiveTrace", "PlaybackActivity.initView after bindPlaybackService");
+        addSeekListener();
+        Log.i("R15LiveTrace", "PlaybackActivity.initView EXIT");
+    }"""
+    if new_init not in playback_text:
+        if playback_text.count(old_init) != 1:
+            raise SystemExit(f"{playback}: expected exactly one initView() body")
+        playback_text = playback_text.replace(old_init, new_init, 1)
+
+    old_bind = """    private void bindPlaybackService() {
+        startService(new Intent(this, PlaybackService.class));
+        bindService(new Intent(this, PlaybackService.class).setAction(PlaybackService.LOCAL_BIND_ACTION), this, BIND_AUTO_CREATE);
+        buildControllerAsync();
+        bound = true;
+    }"""
+    new_bind = """    private void bindPlaybackService() {
+        Log.i("R15LiveTrace", "bindPlaybackService: start");
+        startService(new Intent(this, PlaybackService.class));
+        Log.i("R15LiveTrace", "bindPlaybackService: after startService");
+        bindService(new Intent(this, PlaybackService.class).setAction(PlaybackService.LOCAL_BIND_ACTION), this, BIND_AUTO_CREATE);
+        Log.i("R15LiveTrace", "bindPlaybackService: after bindService");
+        buildControllerAsync();
+        Log.i("R15LiveTrace", "bindPlaybackService: after buildControllerAsync");
+        bound = true;
+    }"""
+    if new_bind not in playback_text:
+        if playback_text.count(old_bind) != 1:
+            raise SystemExit(f"{playback}: expected exactly one bindPlaybackService() body")
+        playback_text = playback_text.replace(old_bind, new_bind, 1)
+
+    old_connected = """    public void onServiceConnected(ComponentName name, IBinder binder) {
+        mService = ((PlaybackService.LocalBinder) binder).getService();
+        mService.addPlayerCallback(mPlayerCallback);
+        activateService();
+    }"""
+    new_connected = """    public void onServiceConnected(ComponentName name, IBinder binder) {
+        Log.i("R15LiveTrace", "PlaybackActivity.onServiceConnected ENTER");
+        mService = ((PlaybackService.LocalBinder) binder).getService();
+        Log.i("R15LiveTrace", "PlaybackActivity.onServiceConnected got service");
+        mService.addPlayerCallback(mPlayerCallback);
+        Log.i("R15LiveTrace", "PlaybackActivity.onServiceConnected callback registered");
+        activateService();
+        Log.i("R15LiveTrace", "PlaybackActivity.onServiceConnected EXIT");
+    }"""
+    if new_connected not in playback_text:
+        if playback_text.count(old_connected) != 1:
+            raise SystemExit(f"{playback}: expected exactly one onServiceConnected() body")
+        playback_text = playback_text.replace(old_connected, new_connected, 1)
+    playback.write_text(playback_text, encoding="utf-8")
+
+    for flavor in ("leanback", "mobile"):
+        live = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        if not live.is_file():
+            raise SystemExit(f"Missing LiveActivity source: {live}")
+        live_text = live.read_text(encoding="utf-8")
+        if "import android.util.Log;" not in live_text:
+            import_anchor = "import android.os.Bundle;\n"
+            if live_text.count(import_anchor) != 1:
+                raise SystemExit(f"{live}: cannot safely add Log import")
+            live_text = live_text.replace(import_anchor, import_anchor + "import android.util.Log;\n", 1)
+
+        signature = "protected void initView(Bundle savedInstanceState) {"
+        method_start = live_text.find(signature)
+        if method_start < 0:
+            raise SystemExit(f"{live}: cannot find initView()")
+        method_body_start = method_start + len(signature)
+        method_end = live_text.find("\n    }", method_body_start)
+        if method_end < 0:
+            raise SystemExit(f"{live}: cannot find initView() end")
+        body = live_text[method_body_start:method_end]
+        if 'Log.i("R15LiveTrace", "LiveActivity.initView ENTER");' not in body:
+            body = '\n        Log.i("R15LiveTrace", "LiveActivity.initView ENTER");' + body
+            replacements = [
+                ("        super.initView(savedInstanceState);", '        super.initView(savedInstanceState);\n        Log.i("R15LiveTrace", "LiveActivity.initView after super");'),
+                ("        setRecyclerView();", '        Log.i("R15LiveTrace", "LiveActivity.initView before setRecyclerView");\n        setRecyclerView();\n        Log.i("R15LiveTrace", "LiveActivity.initView after setRecyclerView");'),
+                ("        setVideoView();", '        Log.i("R15LiveTrace", "LiveActivity.initView before setVideoView");\n        setVideoView();\n        Log.i("R15LiveTrace", "LiveActivity.initView after setVideoView");'),
+                ("        setViewModel();", '        Log.i("R15LiveTrace", "LiveActivity.initView before setViewModel");\n        setViewModel();\n        Log.i("R15LiveTrace", "LiveActivity.initView after setViewModel");'),
+                ("        checkLive();", '        Log.i("R15LiveTrace", "LiveActivity.initView before checkLive");\n        checkLive();\n        Log.i("R15LiveTrace", "LiveActivity.initView EXIT");'),
+            ]
+            for old, new in replacements:
+                if body.count(old) != 1:
+                    raise SystemExit(f"{live}: expected one initView checkpoint anchor: {old.strip()}")
+                body = body.replace(old, new, 1)
+            live_text = live_text[:method_body_start] + body + live_text[method_end:]
+
+        old_service = """    protected void onServiceConnected() {
+        mLive.onPlaybackServiceReady();
+    }"""
+        new_service = """    protected void onServiceConnected() {
+        Log.i("R15LiveTrace", "LiveActivity.onServiceConnected ENTER");
+        mLive.onPlaybackServiceReady();
+        Log.i("R15LiveTrace", "LiveActivity.onServiceConnected EXIT");
+    }"""
+        if new_service not in live_text:
+            if live_text.count(old_service) != 1:
+                raise SystemExit(f"{live}: expected exactly one onServiceConnected() body")
+            live_text = live_text.replace(old_service, new_service, 1)
+
+        old_live = """    public void setLive(Live item) {
+        player().reset();"""
+        new_live = """    public void setLive(Live item) {
+        Log.i("R15LiveTrace", "LiveActivity.setLive ENTER");
+        player().reset();"""
+        if new_live not in live_text:
+            if live_text.count(old_live) != 1:
+                raise SystemExit(f"{live}: expected exactly one setLive() start")
+            live_text = live_text.replace(old_live, new_live, 1)
+        live.write_text(live_text, encoding="utf-8")
+
+    print("DIAGNOSTIC BUILD: installed R15CrashTrace uncaught-exception logger and R15LiveTrace lifecycle/player-service checkpoints.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
@@ -469,6 +643,7 @@ def main() -> None:
     patch_android9_renderer_compat(tv)
     patch_live_activity_software_rendering_diagnostic(tv)
     patch_live_player_keep_frame(tv)
+    patch_live_exception_trace(tv)
     enable_jetifier(gradle_properties)
 
     # Sanity checks: menu label/icon, default wallpaper and duplicate-ID fix.
@@ -482,6 +657,10 @@ def main() -> None:
         raise SystemExit("static wallpaper diagnostic override is missing")
     if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Android 9 renderer compatibility setting is missing")
+    if "R15LiveTrace" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
+        raise SystemExit("R15LiveTrace instrumentation is missing")
+    if "R15CrashTrace" not in (tv / "app/src/main/java/com/fongmi/android/tv/App.java").read_text(encoding="utf-8"):
+        raise SystemExit("R15CrashTrace uncaught-exception logging is missing")
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
         if 'android:hardwareAccelerated="false"' not in manifest.read_text(encoding="utf-8"):
