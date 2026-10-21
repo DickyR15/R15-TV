@@ -8,6 +8,7 @@ on:
       - "diagnostic/live-exoplayer-api28"
       - "diagnostic/live-static-wallpaper-exoplayer"
       - "diagnostic/live-surfaceview-api28"
+      - "diagnostic/live-soft-ui-surfaceview"
     paths:
       - ".github/workflows/build-apks.yml"
       - "config/**"
@@ -566,8 +567,12 @@ jobs:
           diagnostic_exoplayer = ref_name == "diagnostic/live-exoplayer-api28"
           diagnostic_static_wallpaper = ref_name == "diagnostic/live-static-wallpaper-exoplayer"
           diagnostic_surfaceview = ref_name == "diagnostic/live-surfaceview-api28"
-          diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview
-          if diagnostic_surfaceview:
+          diagnostic_soft_ui_surfaceview = ref_name == "diagnostic/live-soft-ui-surfaceview"
+          diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview or diagnostic_soft_ui_surfaceview
+          if diagnostic_soft_ui_surfaceview:
+              application_id = "com.dicky.r15tv.diagsoftui"
+              app_label = "R15 TV 軟體介面診斷"
+          elif diagnostic_surfaceview:
               application_id = "com.dicky.r15tv.diagsurface"
               app_label = "R15 TV Surface 診斷"
           elif diagnostic_static_wallpaper:
@@ -612,6 +617,8 @@ jobs:
               print("DIAGNOSTIC ONLY: MPV is disabled in PlayerEngineFactory; the app uses the official ExoPlayer route.")
           if diagnostic_surfaceview:
               print("DIAGNOSTIC ONLY: Android 9 and older force SurfaceView; animated video wallpaper remains disabled.")
+          if diagnostic_soft_ui_surfaceview:
+              print("DIAGNOSTIC ONLY: LiveActivity UI hardware acceleration is disabled; video uses SurfaceView; hardware acceleration remains enabled for other activities.")
           if diagnostic_static_wallpaper:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
