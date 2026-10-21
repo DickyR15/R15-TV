@@ -6,6 +6,7 @@ on:
     branches:
       - "research/autobuild-170-port"
       - "diagnostic/live-exoplayer-api28"
+      - "diagnostic/live-static-wallpaper-exoplayer"
     paths:
       - ".github/workflows/build-apks.yml"
       - "config/**"
@@ -560,9 +561,19 @@ jobs:
           base_name = name_match.group(1)
           run_number = int(os.environ["RUN_NUMBER"])
           source_sha = os.environ["SOURCE_SHA"]
-          diagnostic = os.environ.get("GITHUB_REF_NAME") == "diagnostic/live-exoplayer-api28"
-          application_id = "com.dicky.r15tv.diag" if diagnostic else "com.dicky.r15tv"
-          app_label = "R15 TV Exo 診斷" if diagnostic else "R15 TV"
+          ref_name = os.environ.get("GITHUB_REF_NAME", "")
+          diagnostic_exoplayer = ref_name == "diagnostic/live-exoplayer-api28"
+          diagnostic_static_wallpaper = ref_name == "diagnostic/live-static-wallpaper-exoplayer"
+          diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper
+          if diagnostic_static_wallpaper:
+              application_id = "com.dicky.r15tv.diagwall"
+              app_label = "R15 TV 靜態桌布診斷"
+          elif diagnostic_exoplayer:
+              application_id = "com.dicky.r15tv.diag"
+              app_label = "R15 TV Exo 診斷"
+          else:
+              application_id = "com.dicky.r15tv"
+              app_label = "R15 TV"
           version_code = base_code * 1_000_000 + run_number
           if version_code > 2_100_000_000:
               raise SystemExit(f"Generated Android versionCode is too large: {version_code}")
@@ -594,6 +605,8 @@ jobs:
           print(f"Application ID: {application_id}; app label: {app_label}")
           if diagnostic:
               print("DIAGNOSTIC ONLY: MPV is disabled in PlayerEngineFactory; the app uses the official ExoPlayer route.")
+          if diagnostic_static_wallpaper:
+              print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
 
       - name: Record exact upstream source revision
