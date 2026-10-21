@@ -73,6 +73,7 @@ def patch_force_exoplayer_diagnostic(tv: Path) -> None:
     if new not in path.read_text(encoding="utf-8"):
         raise SystemExit("Diagnostic ExoPlayer-only guard was not applied")
     print("DIAGNOSTIC BUILD: MPV disabled; playback engine forced to official ExoPlayer.")
+    print("Saved MPV preference is ignored in this diagnostic APK; ExoPlayer is selected for every source.")
 
 
 def patch_live_action_binding(tv: Path) -> None:
