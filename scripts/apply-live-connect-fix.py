@@ -598,7 +598,7 @@ def patch_live_exception_trace(tv: Path) -> None:
         if live_trace not in live_text:
             if live_text.count(live_signature) != 1:
                 raise SystemExit(f"{live}: expected exactly one setLive() declaration")
-            live_text = live_text.replace(live_signature, live_signature + "\\n" + live_trace, 1)
+            live_text = live_text.replace(live_signature, live_signature + "\n" + live_trace, 1)
         live.write_text(live_text, encoding="utf-8")
 
     print("DIAGNOSTIC BUILD: installed R15CrashTrace uncaught-exception logger and R15LiveTrace lifecycle/player-service checkpoints.")
