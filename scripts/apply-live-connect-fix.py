@@ -591,15 +591,14 @@ def patch_live_exception_trace(tv: Path) -> None:
                 raise SystemExit(f"{live}: expected exactly one onServiceConnected() body")
             live_text = live_text.replace(old_service, new_service, 1)
 
-        old_live = """    public void setLive(Live item) {
-        player().reset();"""
-        new_live = """    public void setLive(Live item) {
-        Log.i("R15LiveTrace", "LiveActivity.setLive ENTER");
-        player().reset();"""
-        if new_live not in live_text:
-            if live_text.count(old_live) != 1:
-                raise SystemExit(f"{live}: expected exactly one setLive() start")
-            live_text = live_text.replace(old_live, new_live, 1)
+        live_signature = "    public void setLive(Live item) {"
+        live_trace = '        Log.i("R15LiveTrace", "LiveActivity.setLive ENTER");'
+        if live_signature not in live_text:
+            raise SystemExit(f"{live}: cannot find setLive(Live item) declaration")
+        if live_trace not in live_text:
+            if live_text.count(live_signature) != 1:
+                raise SystemExit(f"{live}: expected exactly one setLive() declaration")
+            live_text = live_text.replace(live_signature, live_signature + "\\n" + live_trace, 1)
         live.write_text(live_text, encoding="utf-8")
 
     print("DIAGNOSTIC BUILD: installed R15CrashTrace uncaught-exception logger and R15LiveTrace lifecycle/player-service checkpoints.")
