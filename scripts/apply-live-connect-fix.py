@@ -49,6 +49,32 @@ def patch_default_wallpaper(path: Path) -> None:
     )
 
 
+def patch_force_exoplayer_diagnostic(tv: Path) -> None:
+    """Disable MPV in this isolated diagnostic build to test the official ExoPlayer path."""
+    path = tv / "app/src/main/java/com/fongmi/android/tv/player/engine/PlayerEngineFactory.java"
+    if not path.is_file():
+        raise SystemExit(f"Missing expected upstream player engine factory: {path}")
+    text = path.read_text(encoding="utf-8")
+    old = """    private static boolean isMpvReady() {
+        return PlayerSetting.isMpv() && MpvPlayerEngine.isAvailable();
+    }"""
+    new = """    private static boolean isMpvReady() {
+        // Diagnostic-only: force the upstream ExoPlayer route to isolate MPV/native crashes.
+        return false;
+    }"""
+    if new not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(
+                f"{path}: expected exactly one MPV availability guard, found {count}"
+            )
+        text = text.replace(old, new, 1)
+        path.write_text(text, encoding="utf-8")
+    if new not in path.read_text(encoding="utf-8"):
+        raise SystemExit("Diagnostic ExoPlayer-only guard was not applied")
+    print("DIAGNOSTIC BUILD: MPV disabled; playback engine forced to official ExoPlayer.")
+
+
 def patch_live_action_binding(tv: Path) -> None:
     """Avoid the duplicate action ID that can crash LiveActivity on some devices."""
     include_pattern = re.compile(
@@ -384,6 +410,7 @@ def main() -> None:
     patch_live_action_binding(tv)
     patch_bottom_subtitle_control(tv)
     patch_live_group_selection_and_switch(tv)
+    patch_force_exoplayer_diagnostic(tv)
     # Preserve upstream player stop/reset/clear behavior; pause-only teardown left stale state.
     patch_android9_renderer_compat(tv)
     patch_live_player_keep_frame(tv)
