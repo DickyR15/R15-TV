@@ -77,6 +77,26 @@ def patch_force_exoplayer_diagnostic(tv: Path) -> None:
     print("Saved MPV preference is ignored in this diagnostic APK; ExoPlayer is selected for every source.")
 
 
+def patch_disable_hardware_acceleration_diagnostic(tv: Path) -> None:
+    """Disable GPU-backed Android View rendering to test the EGL/RenderThread crash."""
+    manifest = tv / "app/src/main/AndroidManifest.xml"
+    if not manifest.is_file():
+        raise SystemExit(f"Missing expected app manifest: {manifest}")
+    text = manifest.read_text(encoding="utf-8")
+    old = 'android:hardwareAccelerated="true"'
+    new = 'android:hardwareAccelerated="false"'
+    if new not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(
+                f"{manifest}: expected exactly one application hardware-acceleration flag, found {count}"
+            )
+        text = text.replace(old, new, 1)
+        manifest.write_text(text, encoding="utf-8")
+    if new not in manifest.read_text(encoding="utf-8"):
+        raise SystemExit("Software-rendering diagnostic flag was not applied")
+    print("DIAGNOSTIC BUILD: app-wide hardware-accelerated View rendering disabled; video decoder path unchanged.")
+
 def patch_live_action_binding(tv: Path) -> None:
     """Avoid the duplicate action ID that can crash LiveActivity on some devices."""
     include_pattern = re.compile(
@@ -413,6 +433,7 @@ def main() -> None:
     patch_bottom_subtitle_control(tv)
     patch_live_group_selection_and_switch(tv)
     patch_force_exoplayer_diagnostic(tv)
+    patch_disable_hardware_acceleration_diagnostic(tv)
     # Preserve upstream player stop/reset/clear behavior; pause-only teardown left stale state.
     patch_android9_renderer_compat(tv)
     patch_live_player_keep_frame(tv)
