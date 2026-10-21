@@ -77,6 +77,31 @@ def patch_force_exoplayer_diagnostic(tv: Path) -> None:
     print("Saved MPV preference is ignored in this diagnostic APK; ExoPlayer is selected for every source.")
 
 
+def patch_force_static_wallpaper_diagnostic(tv: Path) -> None:
+    """Force the built-in static wallpaper to isolate the background video player."""
+    path = tv / "app/src/main/java/com/fongmi/android/tv/setting/Setting.java"
+    if not path.is_file():
+        raise SystemExit(f"Missing wallpaper settings source: {path}")
+    text = path.read_text(encoding="utf-8")
+    old = """    public static int getWallType() {
+        return Math.clamp(Prefers.getInt("wall_type", 0), MIN_WALL_TYPE, MAX_WALL_TYPE);
+    }"""
+    new = """    public static int getWallType() {
+        // Diagnostic-only: avoid initializing the separate animated-video wallpaper player.
+        return MIN_WALL_TYPE;
+    }"""
+    if new not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{path}: expected exactly one wallpaper-type getter, found {count}")
+        text = text.replace(old, new, 1)
+        path.write_text(text, encoding="utf-8")
+    if new not in path.read_text(encoding="utf-8"):
+        raise SystemExit("Static-wallpaper diagnostic override was not applied")
+    print("DIAGNOSTIC BUILD: video wallpaper disabled; built-in static wallpaper forced.")
+    print("Hardware acceleration remains enabled; LiveActivity still uses official ExoPlayer.")
+
+
 def patch_live_action_binding(tv: Path) -> None:
     """Avoid the duplicate action ID that can crash LiveActivity on some devices."""
     include_pattern = re.compile(
@@ -413,6 +438,7 @@ def main() -> None:
     patch_bottom_subtitle_control(tv)
     patch_live_group_selection_and_switch(tv)
     patch_force_exoplayer_diagnostic(tv)
+    patch_force_static_wallpaper_diagnostic(tv)
     # Preserve upstream player stop/reset/clear behavior; pause-only teardown left stale state.
     patch_android9_renderer_compat(tv)
     patch_live_player_keep_frame(tv)
@@ -425,6 +451,8 @@ def main() -> None:
         raise SystemExit("home menu does not use the connect icon")
     if 'Prefers.getInt("wall", 4)' not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("wallpaper_4 is not the default wallpaper")
+    if "return MIN_WALL_TYPE;" not in wallpaper_setting.read_text(encoding="utf-8"):
+        raise SystemExit("static wallpaper diagnostic override is missing")
     if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Android 9 renderer compatibility setting is missing")
     if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
