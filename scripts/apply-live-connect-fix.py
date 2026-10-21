@@ -55,6 +55,7 @@ def patch_force_exoplayer_diagnostic(tv: Path) -> None:
     if not path.is_file():
         raise SystemExit(f"Missing expected upstream player engine factory: {path}")
     text = path.read_text(encoding="utf-8")
+    # This override is intentionally limited to the diagnostic branch, never the production branch.
     old = """    private static boolean isMpvReady() {
         return PlayerSetting.isMpv() && MpvPlayerEngine.isAvailable();
     }"""
