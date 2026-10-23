@@ -627,32 +627,12 @@ jobs:
 
           path = Path("app/build.gradle")
           text = path.read_text(encoding="utf-8")
-          anchor = """    buildTypes {
-        release {
-            minifyEnabled = true
-            shrinkResources = true
-            signingConfig = signingConfigs.release
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-rules-media.pro'
-        }
-    }"""
-          replacement = """    buildTypes {
-        debug {
-            debuggable true
-            minifyEnabled false
-            shrinkResources false
-            signingConfig signingConfigs.release
-        }
-        release {
-            minifyEnabled = true
-            shrinkResources = true
-            signingConfig = signingConfigs.release
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-rules-media.pro'
-        }
-    }"""
-          if replacement not in text:
+          anchor = "    buildTypes {\\n"
+          inserted = "    buildTypes {\\n        debug {\\n            debuggable true\\n            minifyEnabled false\\n            shrinkResources false\\n            signingConfig signingConfigs.release\\n        }\\n"
+          if "debuggable true" not in text:
               if text.count(anchor) != 1:
-                  raise SystemExit(f"{path}: expected exactly one upstream buildTypes anchor")
-              text = text.replace(anchor, replacement, 1)
+                  raise SystemExit(f"{path}: expected exactly one buildTypes block")
+              text = text.replace(anchor, inserted, 1)
               path.write_text(text, encoding="utf-8")
           if "debuggable true" not in path.read_text(encoding="utf-8"):
               raise SystemExit("Persistent-signed debug build type was not configured")
