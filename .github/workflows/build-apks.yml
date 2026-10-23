@@ -640,7 +640,7 @@ jobs:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackArmeabiV7aRelease
+          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackRelease
 
       - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
         shell: bash
