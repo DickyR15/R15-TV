@@ -512,34 +512,23 @@ jobs:
           STORE_PASSWORD: ${{ secrets.R15TV_STORE_PASSWORD }}
           KEY_PASSWORD: ${{ secrets.R15TV_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           SDK_PATH="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
           test -n "$SDK_PATH"
-          if [[ -n "$KEYSTORE_B64" || -n "$STORE_PASSWORD" || -n "$KEY_PASSWORD" ]]; then
-            if [[ -z "$KEYSTORE_B64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
-              echo "Configure all three secrets: R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, R15TV_KEY_PASSWORD." >&2
-              exit 1
-            fi
-            printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
-            cat > local.properties <<EOF_PROPERTIES
+          if [[ -z "$KEYSTORE_B64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
+            echo "Persistent signing is required for update-install. Configure R15TV_KEYSTORE_B64, R15TV_STORE_PASSWORD, R15TV_KEY_PASSWORD and alias r15tv." >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
+          cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$SDK_PATH
           storeFile=../r15tv.keystore
           keyAlias=r15tv
           storePassword=$STORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           EOF_PROPERTIES
-            echo "mode=release" >> "$GITHUB_OUTPUT"
-            echo "Release-signing key detected; building signed release APKs."
-          else
-            cat > local.properties <<EOF_PROPERTIES
-          sdk.dir=$SDK_PATH
-          storeFile=../r15tv-debug-placeholder.jks
-          keyAlias=r15tv-debug-placeholder
-          storePassword=not-used-for-debug
-          keyPassword=not-used-for-debug
-          EOF_PROPERTIES
-            echo "mode=debug" >> "$GITHUB_OUTPUT"
-            echo "::warning::Release-signing secrets are not configured. Building debug APKs for initial testing; these are not stable updateable releases."
-          fi
+          echo "mode=release" >> "$GITHUB_OUTPUT"
+          echo "Persistent signing key configured."
 
       - name: Set R15 TV package metadata and app label
         id: version
@@ -645,25 +634,13 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build signed release APKs
-        if: steps.signing.outputs.mode == 'release'
-        working-directory: sources/TV
-        run: |
-          chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace \
-            :app:assembleLeanbackRelease \
-            :app:assembleMobileRelease
-
-      - name: Build debug APKs (initial test mode)
-        if: steps.signing.outputs.mode == 'debug'
+      - name: Build only R15 TV Leanback armeabi-v7a
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace \
-            :app:assembleLeanbackDebug \
-            :app:assembleMobileDebug
+          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackArmeabiV7aRelease
 
       - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
         shell: bash
@@ -675,27 +652,19 @@ jobs:
           else
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
-          count=0
-          while IFS= read -r -d '' apk; do
-            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
-            case "$lower" in
-              *arm64*v8a*) abi="arm64-v8a" ;;
-              *armeabi*v7a*) abi="armeabi-v7a" ;;
-              *) echo "Unexpected ABI split: $apk" >&2; exit 1 ;;
-            esac
-            entries=$(unzip -Z1 "$apk")
-            grep -Fq "lib/$abi/libr15opencc.so" <<<"$entries"
-            grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
-            grep -Fq "assets/opencc-1.4.2/dictionary/STPhrases.ocd2" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-models.json" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
-            grep -Fq "classes.dex" <<<"$entries"
-            echo "Verified OpenCC 1.4.2 and subtitle metadata: $(basename "$apk")"
-            count=$((count + 1))
-          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          test "$count" -eq 4
-          echo "Verified current OpenCC 1.4.2 assets across all four APK variants."
+          apk=$(find "$APK_ROOT" -type f -name '*.apk' -print -quit)
+          test -n "$apk"
+          lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
+          [[ "$lower" == *leanback*armeabi*v7a* ]]
+          entries=$(unzip -Z1 "$apk")
+          grep -Fq "lib/armeabi-v7a/libr15opencc.so" <<<"$entries"
+          grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
+          grep -Fq "assets/opencc-1.4.2/dictionary/STPhrases.ocd2" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-models.json" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
+          grep -Fq "classes.dex" <<<"$entries"
+          echo "Verified OpenCC 1.4.2 and subtitle metadata: $(basename "$apk")"
           {
             echo "## Localization and converter verification"
             echo "- UI locale is forced to zh-TW by scripts/apply-taiwan-localization.py."
@@ -722,27 +691,9 @@ jobs:
           else
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
-          found=0
-          while IFS= read -r -d '' apk; do
-            lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
-            case "$lower" in
-              *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
-              *leanback*armeabi*v7a*) name="R15 TV-leanback-armeabi-v7a.apk" ;;
-              *mobile*arm64*v8a*) name="R15 TV-mobile-arm64-v8a.apk" ;;
-              *mobile*armeabi*v7a*) name="R15 TV-mobile-armeabi-v7a.apk" ;;
-              *) continue ;;
-            esac
-            if [[ -e "dist/$name" ]]; then
-              continue
-            fi
-            cp "$apk" "dist/$name"
-            found=$((found + 1))
-          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          if [[ "$found" -ne 4 ]]; then
-            echo "Expected four ABI/flavor APKs under $APK_ROOT but packaged $found." >&2
-            find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
-            exit 1
-          fi
+          apk=$(find "$APK_ROOT" -type f -name '*.apk' -print -quit)
+          test -n "$apk"
+          cp "$apk" "dist/R15 TV-leanback-armeabi-v7a.apk"
 
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
@@ -771,7 +722,7 @@ jobs:
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
             if [[ "$BUILD_MODE" == "debug" ]]; then
-              echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
+              echo "- Signed with the persistent R15 TV private key; update-install requires the installed version to use the same signer."
             else
               echo "- APKs are signed with the private R15 TV release key supplied through GitHub Actions secrets."
             fi
