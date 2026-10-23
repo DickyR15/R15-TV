@@ -557,7 +557,7 @@ jobs:
           diagnostic_static_wallpaper = ref_name == "diagnostic/live-static-wallpaper-exoplayer"
           diagnostic_surfaceview = ref_name == "diagnostic/live-surfaceview-api28"
           diagnostic_soft_ui_surfaceview = ref_name == "diagnostic/live-soft-ui-surfaceview"
-          diagnostic_exception_trace = ref_name == "diagnostic/live-exception-trace"
+          diagnostic_exception_trace = ref_name in ("diagnostic/live-exception-trace", "diagnostic/live-v7a-fixed-debug-sign")
           diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview or diagnostic_soft_ui_surfaceview or diagnostic_exception_trace
           if diagnostic_exception_trace:
               application_id = "com.dicky.r15tv"
