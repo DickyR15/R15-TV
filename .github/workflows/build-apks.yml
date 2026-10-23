@@ -526,8 +526,8 @@ jobs:
           storePassword=$STORE_PASSWORD
           keyPassword=$KEY_PASSWORD
           EOF_PROPERTIES
-          echo "mode=release" >> "$GITHUB_OUTPUT"
-          echo "Persistent signing key configured."
+          echo "mode=debug" >> "$GITHUB_OUTPUT"
+          echo "Persistent signing key configured for the debuggable APK."
 
       - name: Set R15 TV package metadata and app label
         id: version
@@ -618,6 +618,47 @@ jobs:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
 
+      - name: Configure Leanback debug APK signing
+        working-directory: sources/TV
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/build.gradle")
+          text = path.read_text(encoding="utf-8")
+          anchor = """    buildTypes {
+        release {
+            minifyEnabled = true
+            shrinkResources = true
+            signingConfig = signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-rules-media.pro'
+        }
+    }"""
+          replacement = """    buildTypes {
+        debug {
+            debuggable true
+            minifyEnabled false
+            shrinkResources false
+            signingConfig signingConfigs.release
+        }
+        release {
+            minifyEnabled = true
+            shrinkResources = true
+            signingConfig = signingConfigs.release
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro', 'proguard-rules-media.pro'
+        }
+    }"""
+          if replacement not in text:
+              if text.count(anchor) != 1:
+                  raise SystemExit(f"{path}: expected exactly one upstream buildTypes anchor")
+              text = text.replace(anchor, replacement, 1)
+              path.write_text(text, encoding="utf-8")
+          if "debuggable true" not in path.read_text(encoding="utf-8"):
+              raise SystemExit("Persistent-signed debug build type was not configured")
+          print("Leanback debug variant is debuggable and signed by the persistent r15tv keystore.")
+          PY
+
       - name: Record exact upstream source revision
         env:
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
@@ -633,30 +674,22 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build only R15 TV Leanback armeabi-v7a
+      - name: Build only R15 TV Leanback armeabi-v7a debug APK
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
           set -euo pipefail
           chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackRelease
-          candidates=(
-            "Release/apk/leanback/armeabi-v7a"
-            "app/build/outputs/apk/leanback/armeabi-v7a/release"
-          )
-          found=""
-          for d in "${candidates[@]}"; do
-            if [[ -d "$d" ]]; then
-              found=$(find "$d" -maxdepth 1 -type f -name '*.apk' -print -quit)
-              [[ -n "$found" ]] && break
-            fi
-          done
+          ./gradlew --no-daemon --stacktrace :app:assembleLeanbackDebug
+          found=$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)
           if [[ -z "$found" ]]; then
-            echo "Cannot identify the Leanback armeabi-v7a output; APK candidates:" >&2
+            echo "No Leanback debug APK found; candidates:" >&2
             find . -type f -name '*.apk' -print >&2
             exit 1
           fi
+          lower=$(basename "$found" | tr '[:upper:]' '[:lower:]')
+          [[ "$lower" == *leanback*arm* ]]
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$found" "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
           aapt dump badging "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk" | head -n 1
