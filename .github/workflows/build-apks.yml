@@ -662,20 +662,12 @@ jobs:
           aapt dump badging "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk" | head -n 1
           apksigner verify --print-certs "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
 
-      - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
+      - name: Verify OpenCC 1.4.2, manifests and the single APK
         shell: bash
         run: |
           set -euo pipefail
-          TV_DIR="$GITHUB_WORKSPACE/sources/TV"
-          if [[ "${{ steps.signing.outputs.mode }}" == "release" ]]; then
-            APK_ROOT="$TV_DIR/Release/apk"
-          else
-            APK_ROOT="$TV_DIR/app/build/outputs/apk"
-          fi
-          apk=$(find "$APK_ROOT" -type f -name '*.apk' -print -quit)
-          test -n "$apk"
-          lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
-          [[ "$lower" == *leanback*armeabi*v7a* ]]
+          apk="$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
+          test -s "$apk"
           entries=$(unzip -Z1 "$apk")
           grep -Fq "lib/armeabi-v7a/libr15opencc.so" <<<"$entries"
           grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
@@ -684,14 +676,12 @@ jobs:
           grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
           grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
           grep -Fq "classes.dex" <<<"$entries"
-          echo "Verified OpenCC 1.4.2 and subtitle metadata: $(basename "$apk")"
-          {
-            echo "## Localization and converter verification"
-            echo "- UI locale is forced to zh-TW by scripts/apply-taiwan-localization.py."
-            echo "- App label: R15 TV."
-            echo "- OpenCC runtime/dictionaries: official 1.4.2, s2twp."
-            echo "- AI speech and translation manifests are attached as assets."
-          } >> "$GITHUB_STEP_SUMMARY"
+          badging=$(aapt dump badging "$apk" | head -n 1)
+          grep -Fq "package: name='com.dicky.r15tv'" <<<"$badging"
+          grep -Fq "native-code: 'armeabi-v7a'" < <(aapt dump badging "$apk")
+          apksigner verify --print-certs "$apk" > "$GITHUB_WORKSPACE/apk-signer.txt"
+          cmp -s "$GITHUB_WORKSPACE/dist-signer-sha256.txt" <(grep "Signer #1 certificate SHA-256 digest:" "$GITHUB_WORKSPACE/apk-signer.txt" | sed -E 's/.*digest: //')
+          echo "Verified package ID, ARMv7 native ABI, OpenCC 1.4.2, subtitle metadata and signer."
 
       - name: Package APKs and verification metadata
         env:
