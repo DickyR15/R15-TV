@@ -4,12 +4,7 @@ run-name: R15 TV APK Build (manual or source update)
 on:
   push:
     branches:
-      - "research/autobuild-170-port"
-      - "diagnostic/live-exoplayer-api28"
-      - "diagnostic/live-static-wallpaper-exoplayer"
-      - "diagnostic/live-surfaceview-api28"
-      - "diagnostic/live-soft-ui-surfaceview"
-      - "diagnostic/live-exception-trace"
+      - "diagnostic/live-v7a-fixed-debug-sign"
     paths:
       - ".github/workflows/build-apks.yml"
       - "config/**"
@@ -565,8 +560,8 @@ jobs:
           diagnostic_exception_trace = ref_name == "diagnostic/live-exception-trace"
           diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview or diagnostic_soft_ui_surfaceview or diagnostic_exception_trace
           if diagnostic_exception_trace:
-              application_id = "com.dicky.r15tv.diagtrace"
-              app_label = "R15 TV 崩潰追蹤診斷"
+              application_id = "com.dicky.r15tv"
+              app_label = "R15 TV"
           elif diagnostic_soft_ui_surfaceview:
               application_id = "com.dicky.r15tv.diagsoftui"
               app_label = "R15 TV 軟體介面診斷"
@@ -741,7 +736,7 @@ jobs:
           retention-days: 30
 
       - name: Publish GitHub Release
-        if: steps.signing.outputs.mode == 'release' && inputs.publish_release
+        if: false
         uses: softprops/action-gh-release@v2
         with:
           tag_name: r15tv-${{ github.run_number }}
