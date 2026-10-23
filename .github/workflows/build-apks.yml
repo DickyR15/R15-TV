@@ -720,12 +720,12 @@ jobs:
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
-            if [[ "$BUILD_MODE" == "debug" ]]; then
-              echo "- Signed with the persistent R15 TV private key; update-install requires the installed version to use the same signer."
-            else
-              echo "- APKs are signed with the private R15 TV release key supplied through GitHub Actions secrets."
-            fi
+            echo "- Signer certificate SHA-256:"
+            cat "$GITHUB_WORKSPACE/dist-signer-sha256.txt"
+            echo "- Only R15 TV-leanback-armeabi-v7a.apk is built and packaged."
+            echo "- Signed with the persistent R15 TV private key; update-install requires the installed version to use the same signer."
           } >> "$GITHUB_STEP_SUMMARY"
+          cp "$GITHUB_WORKSPACE/dist-signer-sha256.txt" dist/SIGNER_SHA256.txt
 
       - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v7
