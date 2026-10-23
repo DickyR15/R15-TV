@@ -520,6 +520,10 @@ jobs:
             exit 1
           fi
           printf '%s' "$KEYSTORE_B64" | base64 --decode > r15tv.keystore
+          keytool -list -keystore r15tv.keystore -storepass "$STORE_PASSWORD" -alias r15tv >/dev/null
+          keytool -exportcert -keystore r15tv.keystore -storepass "$STORE_PASSWORD" -alias r15tv -file ../r15tv-signer.der >/dev/null 2>&1
+          sha256sum ../r15tv-signer.der | tee "$GITHUB_WORKSPACE/dist-signer-sha256.txt"
+          rm -f ../r15tv-signer.der
           cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$SDK_PATH
           storeFile=../r15tv.keystore
