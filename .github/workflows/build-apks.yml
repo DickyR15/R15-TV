@@ -662,14 +662,19 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleLeanbackDebug
-          found=$(find app/build/outputs/apk -type f -name '*.apk' -print -quit)
+          found=""
+          while IFS= read -r apk; do
+            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]' | tr '_' '-')
+            if [[ "$lower" == *armeabi-v7a* ]] || aapt dump badging "$apk" | grep -Fq "native-code: 'armeabi-v7a'"; then
+              found="$apk"
+              break
+            fi
+          done < <(find app/build/outputs/apk/leanback -type f -name '*.apk' -print)
           if [[ -z "$found" ]]; then
-            echo "No Leanback debug APK found; candidates:" >&2
-            find . -type f -name '*.apk' -print >&2
+            echo "Cannot find the Leanback armeabi-v7a debug split; candidates:" >&2
+            find app/build/outputs/apk -type f -name '*.apk' -print >&2
             exit 1
           fi
-          lower=$(basename "$found" | tr '[:upper:]' '[:lower:]')
-          [[ "$lower" == *leanback*arm* ]]
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$found" "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
           aapt dump badging "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk" | head -n 1
@@ -690,7 +695,7 @@ jobs:
           grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
           grep -Fq "classes.dex" <<<"$entries"
           badging=$(aapt dump badging "$apk" | head -n 1)
-          grep -Fq "package: name='com.dicky.r15tv'" <<<"$badging"
+          grep -Fq "package: name='com.dicky.r15tv.diagtrace'" <<<"$badging"
           grep -Fq "native-code: 'armeabi-v7a'" < <(aapt dump badging "$apk")
           apksigner verify --print-certs "$apk" > "$GITHUB_WORKSPACE/apk-signer.txt"
           cmp -s "$GITHUB_WORKSPACE/dist-signer-sha256.txt" <(grep "Signer #1 certificate SHA-256 digest:" "$GITHUB_WORKSPACE/apk-signer.txt" | sed -E 's/.*digest: //')
