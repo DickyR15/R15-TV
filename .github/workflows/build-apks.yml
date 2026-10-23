@@ -627,8 +627,8 @@ jobs:
 
           path = Path("app/build.gradle")
           text = path.read_text(encoding="utf-8")
-          anchor = "    buildTypes {\\n"
-          inserted = "    buildTypes {\\n        debug {\\n            debuggable true\\n            minifyEnabled false\\n            shrinkResources false\\n            signingConfig signingConfigs.release\\n        }\\n"
+          anchor = "    buildTypes {\n"
+          inserted = "    buildTypes {\n        debug {\n            debuggable true\n            minifyEnabled false\n            shrinkResources false\n            signingConfig signingConfigs.release\n        }\n"
           if "debuggable true" not in text:
               if text.count(anchor) != 1:
                   raise SystemExit(f"{path}: expected exactly one buildTypes block")
