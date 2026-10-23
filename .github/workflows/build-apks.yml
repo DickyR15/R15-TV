@@ -638,8 +638,29 @@ jobs:
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace :app:assembleLeanbackRelease
+          candidates=(
+            "Release/apk/leanback/armeabi-v7a"
+            "app/build/outputs/apk/leanback/armeabi-v7a/release"
+          )
+          found=""
+          for d in "${candidates[@]}"; do
+            if [[ -d "$d" ]]; then
+              found=$(find "$d" -maxdepth 1 -type f -name '*.apk' -print -quit)
+              [[ -n "$found" ]] && break
+            fi
+          done
+          if [[ -z "$found" ]]; then
+            echo "Cannot identify the Leanback armeabi-v7a output; APK candidates:" >&2
+            find . -type f -name '*.apk' -print >&2
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$found" "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
+          aapt dump badging "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk" | head -n 1
+          apksigner verify --print-certs "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
 
       - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
         shell: bash
