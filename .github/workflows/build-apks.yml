@@ -701,9 +701,8 @@ jobs:
           else
             APK_ROOT="$TV_DIR/app/build/outputs/apk"
           fi
-          apk=$(find "$APK_ROOT" -type f -name '*.apk' -print -quit)
-          test -n "$apk"
-          cp "$apk" "dist/R15 TV-leanback-armeabi-v7a.apk"
+          apk="$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
+          test -s "$apk"
 
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
