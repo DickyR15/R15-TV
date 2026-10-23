@@ -560,8 +560,8 @@ jobs:
           diagnostic_exception_trace = ref_name in ("diagnostic/live-exception-trace", "diagnostic/live-v7a-fixed-debug-sign")
           diagnostic = diagnostic_exoplayer or diagnostic_static_wallpaper or diagnostic_surfaceview or diagnostic_soft_ui_surfaceview or diagnostic_exception_trace
           if diagnostic_exception_trace:
-              application_id = "com.dicky.r15tv"
-              app_label = "R15 TV"
+              application_id = "com.dicky.r15tv.diagtrace"
+              app_label = "R15 TV 崩潰追蹤診斷"
           elif diagnostic_soft_ui_surfaceview:
               application_id = "com.dicky.r15tv.diagsoftui"
               app_label = "R15 TV 軟體介面診斷"
