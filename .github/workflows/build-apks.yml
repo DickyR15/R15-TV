@@ -330,6 +330,8 @@ jobs:
             "build-tools;36.0.0" \
             "cmake;3.22.1" \
             "ndk;${NDK_VERSION}"
+          # Android setup installs build-tools but does not always add its tools to PATH.
+          echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
 
       - name: Build official FongMi Media3 and MPV AAR dependencies
         working-directory: sources/media
