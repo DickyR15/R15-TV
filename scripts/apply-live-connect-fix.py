@@ -432,6 +432,76 @@ def enable_jetifier(path: Path) -> None:
 
 
 
+def patch_tvbus_core_reload(tv: Path) -> None:
+    """Avoid TVBus killing the app process when its core signature changes."""
+    path = tv / "app/src/main/java/com/fongmi/android/tv/player/extractor/TVBus.java"
+    if not path.is_file():
+        raise SystemExit(f"Missing upstream TVBus extractor source: {path}")
+    text = path.read_text(encoding="utf-8")
+    if "import android.util.Log;" not in text:
+        import_anchor = "import android.net.Uri;\n"
+        if text.count(import_anchor) != 1:
+            raise SystemExit(f"{path}: cannot safely add Log import")
+        text = text.replace(import_anchor, import_anchor + "import android.util.Log;\n", 1)
+
+    old_fetch = """    @Override
+    public String fetch(String url) throws Exception {
+        Core c = LiveConfig.get().getHome().getCore();
+        if (core != null && !core.equals(c)) change();
+        if (tvcore == null) init(core = c);
+        latch = new CountDownLatch(1);
+        tvcore.start(url);
+        latch.await();
+        return check();
+    }"""
+    new_fetch = """    @Override
+    public String fetch(String url) throws Exception {
+        Core c = LiveConfig.get().getHome().getCore();
+        if (core != null && !core.equals(c)) change(c);
+        if (tvcore == null) init(core = c);
+        latch = new CountDownLatch(1);
+        tvcore.start(url);
+        latch.await();
+        return check();
+    }"""
+    if new_fetch not in text:
+        if text.count(old_fetch) != 1:
+            raise SystemExit(f"{path}: expected exactly one fetch() body")
+        text = text.replace(old_fetch, new_fetch, 1)
+
+    old_change = """    private void change() throws Exception {
+        LiveSetting.putBoot(true);
+        App.post(() -> System.exit(0), 100);
+        throw new ExtractException(ResUtil.getString(R.string.error_play_url));
+    }"""
+    new_change = """    private void change(Core next) {
+        Log.w("R15TvBusTrace", "TVBus core signature changed; recreating the native core in-process");
+        if (tvcore != null) {
+            try {
+                tvcore.stop();
+            } catch (Throwable error) {
+                Log.w("R15TvBusTrace", "Stopping the previous TVBus core failed", error);
+            }
+        }
+        tvcore = null;
+        hls = null;
+        core = next;
+        // The old code persisted a reboot flag before System.exit(0). Clear stale state
+        // because this diagnostic build now reloads TVBus without terminating the app.
+        LiveSetting.putBoot(false);
+    }"""
+    if new_change not in text:
+        if text.count(old_change) != 1:
+            raise SystemExit(f"{path}: expected exactly one forced-exit change() body")
+        text = text.replace(old_change, new_change, 1)
+
+    path.write_text(text, encoding="utf-8")
+    verified = path.read_text(encoding="utf-8")
+    if "R15TvBusTrace" not in verified or "App.post(() -> System.exit(0), 100)" in verified:
+        raise SystemExit("TVBus forced-exit diagnostic patch did not apply")
+    print("DIAGNOSTIC FIX: TVBus core changes are logged and reinitialized in-process instead of calling System.exit(0).")
+
+
 def patch_live_exception_trace(tv: Path) -> None:
     """Add diagnostic-only uncaught-exception logging and LiveActivity lifecycle checkpoints."""
     app = tv / "app/src/main/java/com/fongmi/android/tv/App.java"
@@ -638,6 +708,7 @@ def main() -> None:
     patch_live_group_selection_and_switch(tv)
     patch_force_exoplayer_diagnostic(tv)
     patch_force_static_wallpaper_diagnostic(tv)
+    patch_tvbus_core_reload(tv)
     # Preserve upstream player stop/reset/clear behavior; pause-only teardown left stale state.
     patch_android9_renderer_compat(tv)
     patch_live_activity_software_rendering_diagnostic(tv)
@@ -660,6 +731,9 @@ def main() -> None:
         raise SystemExit("R15LiveTrace instrumentation is missing")
     if "R15CrashTrace" not in (tv / "app/src/main/java/com/fongmi/android/tv/App.java").read_text(encoding="utf-8"):
         raise SystemExit("R15CrashTrace uncaught-exception logging is missing")
+    tvbus_source = (tv / "app/src/main/java/com/fongmi/android/tv/player/extractor/TVBus.java").read_text(encoding="utf-8")
+    if "R15TvBusTrace" not in tvbus_source or "App.post(() -> System.exit(0), 100)" in tvbus_source:
+        raise SystemExit("TVBus in-process core reload fix is missing")
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
         if 'android:hardwareAccelerated="false"' not in manifest.read_text(encoding="utf-8"):
