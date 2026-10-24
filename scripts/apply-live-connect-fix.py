@@ -593,6 +593,62 @@ def patch_live_exception_trace(tv: Path) -> None:
             raise SystemExit(f"{playback}: expected exactly one bindPlaybackService() body")
         playback_text = playback_text.replace(old_bind, new_bind, 1)
 
+    old_claim = """    private void claimBinding() {
+        if (mService == null) return;
+        mService.claimBinding(getNavigationCallback(), this::closePiP);
+        mService.setSessionActivity(buildSessionIntent());
+    }"""
+    new_claim = """    private void claimBinding() {
+        Log.i("R15LiveTrace", "claimBinding ENTER");
+        if (mService == null) {
+            Log.w("R15LiveTrace", "claimBinding skipped: service is null");
+            return;
+        }
+        Log.i("R15LiveTrace", "claimBinding before service.claimBinding");
+        mService.claimBinding(getNavigationCallback(), this::closePiP);
+        Log.i("R15LiveTrace", "claimBinding after service.claimBinding");
+        mService.setSessionActivity(buildSessionIntent());
+        Log.i("R15LiveTrace", "claimBinding EXIT");
+    }"""
+    if new_claim not in playback_text:
+        if playback_text.count(old_claim) != 1:
+            raise SystemExit(f"{playback}: expected exactly one claimBinding() body")
+        playback_text = playback_text.replace(old_claim, new_claim, 1)
+
+    old_activate = """    private void activateService() {
+        if (!canActivate()) return;
+        claimBinding();
+        if (!isRedirect()) updateNavigationKey();
+        dispatchPendingObservers();
+        initService();
+    }"""
+    new_activate = """    private void activateService() {
+        Log.i("R15LiveTrace", "activateService ENTER");
+        boolean allowed = canActivate();
+        Log.i("R15LiveTrace", "activateService canActivate=" + allowed);
+        if (!allowed) return;
+        Log.i("R15LiveTrace", "activateService before claimBinding");
+        claimBinding();
+        Log.i("R15LiveTrace", "activateService after claimBinding");
+        boolean redirect = isRedirect();
+        Log.i("R15LiveTrace", "activateService isRedirect=" + redirect);
+        if (!redirect) {
+            Log.i("R15LiveTrace", "activateService before updateNavigationKey");
+            updateNavigationKey();
+            Log.i("R15LiveTrace", "activateService after updateNavigationKey");
+        }
+        Log.i("R15LiveTrace", "activateService before dispatchPendingObservers");
+        dispatchPendingObservers();
+        Log.i("R15LiveTrace", "activateService after dispatchPendingObservers");
+        Log.i("R15LiveTrace", "activateService before initService");
+        initService();
+        Log.i("R15LiveTrace", "activateService EXIT");
+    }"""
+    if new_activate not in playback_text:
+        if playback_text.count(old_activate) != 1:
+            raise SystemExit(f"{playback}: expected exactly one activateService() body")
+        playback_text = playback_text.replace(old_activate, new_activate, 1)
+
     old_connected = """    public void onServiceConnected(ComponentName name, IBinder binder) {
         mService = ((PlaybackService.LocalBinder) binder).getService();
         mService.addPlayerCallback(mPlayerCallback);
