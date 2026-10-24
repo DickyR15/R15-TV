@@ -480,7 +480,7 @@ jobs:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
 
-      - name: Configure Leanback debug APK signing
+      - name: Configure Leanback non-debuggable diagnostic APK signing
         working-directory: sources/TV
         run: |
           set -euo pipefail
@@ -490,15 +490,15 @@ jobs:
           path = Path("app/build.gradle")
           text = path.read_text(encoding="utf-8")
           anchor = "    buildTypes {\n"
-          inserted = "    buildTypes {\n        debug {\n            debuggable true\n            minifyEnabled false\n            shrinkResources false\n            signingConfig signingConfigs.release\n        }\n"
-          if "debuggable true" not in text:
+          inserted = "    buildTypes {\n        debug {\n            debuggable false\n            minifyEnabled false\n            shrinkResources false\n            signingConfig signingConfigs.release\n        }\n"
+          if "debuggable false" not in text:
               if text.count(anchor) != 1:
                   raise SystemExit(f"{path}: expected exactly one buildTypes block")
               text = text.replace(anchor, inserted, 1)
               path.write_text(text, encoding="utf-8")
-          if "debuggable true" not in path.read_text(encoding="utf-8"):
-              raise SystemExit("Persistent-signed debug build type was not configured")
-          print("Leanback debug variant is debuggable and signed by the persistent r15tv keystore.")
+          if "debuggable false" not in path.read_text(encoding="utf-8"):
+              raise SystemExit("Non-debuggable diagnostic build type was not configured")
+          print("Leanback diagnostic variant is non-debuggable, signed with the persistent R15 TV key, and keeps minification disabled for traceability.")
           PY
 
       - name: Record exact upstream source revision
@@ -516,7 +516,7 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build only R15 TV Leanback armeabi-v7a debug APK
+      - name: Build only R15 TV Leanback armeabi-v7a non-debuggable diagnostic APK
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -533,7 +533,7 @@ jobs:
             fi
           done < <(find app/build/outputs/apk/leanback -type f -name '*.apk' -print)
           if [[ -z "$found" ]]; then
-            echo "Cannot find the Leanback armeabi-v7a debug split; candidates:" >&2
+            echo "Cannot find the Leanback armeabi-v7a diagnostic APK; candidates:" >&2
             find app/build/outputs/apk -type f -name '*.apk' -print >&2
             exit 1
           fi
@@ -559,6 +559,11 @@ jobs:
           badging=$(aapt dump badging "$apk" | head -n 1)
           grep -Fq "package: name='com.dicky.r15tv.diagtrace'" <<<"$badging"
           grep -Fq "native-code: 'armeabi-v7a'" < <(aapt dump badging "$apk")
+          if aapt dump badging "$apk" | grep -Fq "application-debuggable"; then
+            echo "Diagnostic APK must be non-debuggable so Android can use its normal install/runtime compilation path." >&2
+            exit 1
+          fi
+          echo "Verified diagnostic APK is non-debuggable (no application-debuggable flag)."
           apksigner verify --print-certs "$apk" > "$GITHUB_WORKSPACE/apk-signer.txt"
           cmp -s "$GITHUB_WORKSPACE/dist-signer-sha256.txt" <(grep "Signer #1 certificate SHA-256 digest:" "$GITHUB_WORKSPACE/apk-signer.txt" | sed -E 's/.*digest: //')
           echo "Verified package ID, ARMv7 native ABI, OpenCC 1.4.2, subtitle metadata and signer."
