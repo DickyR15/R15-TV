@@ -615,7 +615,7 @@ jobs:
           if diagnostic_soft_ui_surfaceview:
               print("DIAGNOSTIC ONLY: LiveActivity UI hardware acceleration is disabled; video uses SurfaceView; hardware acceleration remains enabled for other activities.")
           if diagnostic_exception_trace:
-              print("DIAGNOSTIC ONLY: LiveActivity uses software UI rendering and SurfaceView; uncaught exceptions and lifecycle checkpoints are logged under R15CrashTrace/R15LiveTrace.")
+              print("DIAGNOSTIC ONLY: Android 9 and older use TextureView with LiveActivity hardware acceleration enabled; uncaught exceptions and lifecycle checkpoints are logged under R15CrashTrace/R15LiveTrace.")
           if diagnostic_static_wallpaper:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
