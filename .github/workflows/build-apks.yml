@@ -124,6 +124,7 @@ jobs:
           cache-dependency-path: sources/TV/**/*.gradle*
       - name: Reverse engineer official TV-AutoBuild 170 reference APK
         continue-on-error: true
+        timeout-minutes: 4
         run: |
           set -euo pipefail
           mkdir -p build/autobuild170
