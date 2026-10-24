@@ -263,12 +263,13 @@ jobs:
           Test ARM64 APK on ARM64 Android TV hardware; the ARMv7 APK is for compatible 32-bit devices/emulators and may use translation on x86 emulators.
           EOF_INFO
 
-      - name: Upload diagnostic APK
+      - name: Upload ARM64 and ARMv7 diagnostic APKs
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-Chaquopy-Loader-Mutex-Diagnostic
+          name: R15-TV-Chaquopy-Loader-Diagnostics-ARM64-ARMv7
           path: |
-            dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk
+            dist/R15-TV-Chaquopy-Loader-Lock-arm64-v8a.apk
+            dist/R15-TV-Chaquopy-Loader-Lock-armeabi-v7a.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
