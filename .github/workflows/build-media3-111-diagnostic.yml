@@ -1,4 +1,4 @@
-name: R15 TV Media3 1.11.1 Runtime Diagnostic
+name: R15 TV Chaquopy Loader Mutex Diagnostic
 run-name: R15 TV Media3 1.11.1 Runtime Diagnostic
 
 on:
@@ -18,10 +18,9 @@ concurrency:
 
 env:
   TV_REPOSITORY: FongMi/TV
-  TV_SHA: 9c845a913337b2d994343b7885159c0a84681b93
+  TV_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
-  MEDIA3_TAG: 1.11.1
   NDK_VERSION: 29.0.14206865
 
 jobs:
@@ -76,9 +75,16 @@ jobs:
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
-          echo "This source revision uses the newer runtime-module architecture; the app no longer packages the old in-process Chaquopy runtime dependency."
+          echo "Diagnostic target: legacy 5.6.1 source with in-process Chaquopy startup; test the startup serialization patch against the observed mutex abort."
 
-      - name: Fetch FongMi Media3 fork and merge the official 1.11.1 release
+      - name: Serialize Chaquopy startup and add diagnostics
+        run: |
+          set -euo pipefail
+          python3 -m py_compile scripts/serialize-chaquopy-loader-init.py
+          python3 scripts/serialize-chaquopy-loader-init.py --tv-dir sources/TV
+          grep -n -F "PYTHON_START_LOCK" sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
+
+      - name: Fetch compatible FongMi Media3 1.11.0 fork
         run: |
           set -euo pipefail
           mkdir -p sources/media
@@ -86,58 +92,11 @@ jobs:
           git -C sources/media config user.name "R15 TV Diagnostic Builder"
           git -C sources/media config user.email "actions@users.noreply.github.com"
           git -C sources/media remote add fongmi "https://github.com/${MEDIA_REPOSITORY}.git"
-          git -C sources/media fetch --depth=500 fongmi "$MEDIA_SHA"
+          git -C sources/media fetch --depth=1 fongmi "$MEDIA_SHA"
           git -C sources/media checkout --detach FETCH_HEAD
           test "$(git -C sources/media rev-parse HEAD)" = "$MEDIA_SHA"
-
-          git -C sources/media remote add androidx https://github.com/androidx/media.git
-          git -C sources/media fetch --depth=500 androidx "refs/tags/${MEDIA3_TAG}"
-          upstream_sha=$(git -C sources/media rev-parse 'FETCH_HEAD^{commit}')
-          if ! git -C sources/media merge-base HEAD "$upstream_sha" >/dev/null; then
-            echo "FongMi Media3 branch and AndroidX tag do not have a reachable common ancestor at this fetch depth." >&2
-            exit 1
-          fi
-
-          echo "FongMi base: $(git -C sources/media rev-parse HEAD)"
-          echo "AndroidX Media3 ${MEDIA3_TAG}: $upstream_sha"
-          if ! git -C sources/media merge --no-edit -X ours "$upstream_sha"; then
-            conflicts=$(git -C sources/media diff --name-only --diff-filter=U)
-            if [[ "$conflicts" == "libraries/decoder_ffmpeg/src/main/jni/ffmpeg_jni.cc" ]]; then
-              echo "Keeping the FongMi FFmpeg JNI deletion; preserving its custom FFmpeg integration."
-              git -C sources/media rm -f libraries/decoder_ffmpeg/src/main/jni/ffmpeg_jni.cc
-              git -C sources/media commit -m "Merge AndroidX Media3 1.11.1 preserving FongMi FFmpeg JNI layout"
-            else
-              echo "Unexpected unresolved Media3 merge conflicts:" >&2
-              printf "%s\n" "$conflicts" >&2
-              git -C sources/media status --short >&2
-              exit 1
-            fi
-          fi
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          path = Path("sources/media/gradle/libs.versions.toml")
-          text = path.read_text(encoding="utf-8")
-          expected = {
-              r'(?m)^releaseVersion = "[^"]+"$': 'releaseVersion = "1.11.1"',
-              r'(?m)^releaseVersionCode = "[^"]+"$': 'releaseVersionCode = "1011001300"',
-          }
-          for pattern, replacement in expected.items():
-              text, count = re.subn(pattern, replacement, text, count=1)
-              if count != 1:
-                  raise SystemExit(f"Could not set Media3 release metadata: {pattern}")
-          path.write_text(text, encoding="utf-8")
-          verify = path.read_text(encoding="utf-8")
-          if 'releaseVersion = "1.11.1"' not in verify or 'releaseVersionCode = "1011001300"' not in verify:
-              raise SystemExit("Media3 1.11.1 version metadata validation failed")
-          PY
-          grep -R -n -m 3 "setParseHagcMetadata" sources/media/libraries/common sources/media/libraries/exoplayer sources/media/libraries/extractor || true
-          echo "Merged official Media3 1.11.1 into the FongMi custom tree. FongMi-specific changes are retained when merge hunks conflict."
-          git -C sources/media log -1 --oneline
-
-      - name: Reconcile Media3 1.11.1 audio-buffer merge
-        run: python3 scripts/reconcile-media3-111-audio-renderer.py --media-dir sources/media
+          grep -Fq 'releaseVersion = "1.11.0"' sources/media/gradle/libs.versions.toml
+          echo "Pinned compatible media source: FongMi/media@$MEDIA_SHA (Media3 1.11.0)."
       - name: Build Media3 and MPV release AARs
         working-directory: sources/media
         timeout-minutes: 80
@@ -231,7 +190,7 @@ jobs:
               raise SystemExit(f"Expected one app id/version anchor, found {(n1,n2,n3)}")
           gradle_file.write_text(app_id, encoding="utf-8")
 
-          label = "R15 TV Media3 1.11.1 診斷"
+          label = "R15 TV Python 啟動診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = path.read_text(encoding="utf-8")
               updated = re.sub(
@@ -247,27 +206,6 @@ jobs:
           print("Label: " + label)
           print("Source TV commit: 9c845a913337b2d994343b7885159c0a84681b93")
           print("Media3 target: 1.11.1")
-          PY
-
-      - name: Keep a static Live PlayerView surface for Android 9 diagnostic
-        working-directory: sources/TV
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("app/src/leanback/res/layout/activity_live.xml")
-          text = path.read_text(encoding="utf-8")
-          current = 'app:surface_type="none"'
-          diagnostic = 'app:surface_type="surface_view"'
-          if diagnostic not in text:
-              count = text.count(current)
-              if count != 1:
-                  raise SystemExit(f"{path}: expected one surface_type=none anchor, found {count}")
-              text = text.replace(current, diagnostic, 1)
-              path.write_text(text, encoding="utf-8")
-          if diagnostic not in path.read_text(encoding="utf-8"):
-              raise SystemExit("Static SurfaceView diagnostic not applied")
           PY
 
       - name: Build Android TV ARMv7 diagnostic APK
@@ -297,7 +235,7 @@ jobs:
           unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
           sha256sum "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | tee "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
-          Build: R15 TV Media3 1.11.1 Runtime Diagnostic
+          Build: R15 TV Chaquopy Loader Mutex Diagnostic
           TV source: FongMi/TV@$TV_SHA
           Media3: AndroidX media tag $MEDIA3_TAG merged into FongMi/media@$MEDIA_SHA
           Package: com.dicky.r15tv.diag111
