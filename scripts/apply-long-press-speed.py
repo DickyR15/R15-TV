@@ -129,25 +129,35 @@ def patch_java(path: Path, mobile: bool) -> None:
     # Upstream 5.6.1 used a scaleText row; 5.8.x uses a renderText row and no scaleText.
     scale_init = "        mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);\n"
     current_init = "        mBinding.bufferText.setText(String.valueOf(PlayerSetting.getBuffer()));\n"
-    if "setLongPressSpeedText();" not in text:
-        if scale_init in text:
+    if scale_init in text:
+        preferred_click_kind = "scale"
+        if "setLongPressSpeedText();" not in text:
             text = replace_once(text, scale_init, scale_init + "        setLongPressSpeedText();\n", path)
-        elif current_init in text:
+    elif current_init in text:
+        # In older upstream source both scale and render rows exist; the buffer label
+        # identifies this layout family, so attach the new setting after the render row.
+        preferred_click_kind = "render"
+        if "setLongPressSpeedText();" not in text:
             text = replace_once(text, current_init, current_init + "        setLongPressSpeedText();\n", path)
-        else:
-            raise SystemExit(f"{path}: could not locate a version-compatible initView() label anchor")
+    else:
+        raise SystemExit(f"{path}: could not locate a version-compatible initView() label anchor")
 
     click_anchors = [
         "        mBinding.scale.setOnClickListener(this::onScale);\n" if mobile
         else "        mBinding.scale.setOnClickListener(this::setScale);\n",
         "        mBinding.render.setOnClickListener(this::setRender);\n",
     ]
+    preferred_anchor = click_anchors[0] if preferred_click_kind == "scale" else click_anchors[1]
     click_line = "        mBinding.longPress.setOnClickListener(this::setLongPressSpeed);\n"
     if click_line not in text:
-        matches = [anchor for anchor in click_anchors if anchor in text]
-        if len(matches) != 1:
-            raise SystemExit(f"{path}: expected one version-compatible render/scale click anchor, found {len(matches)}")
-        text = replace_once(text, matches[0], matches[0] + click_line, path)
+        # Prefer the row family matched above. Older 5.6/5.8 hybrids can expose both
+        # anchors, so do not mistake the unrelated scale row for an ambiguity.
+        if preferred_anchor not in text:
+            matches = [anchor for anchor in click_anchors if anchor in text]
+            if len(matches) != 1:
+                raise SystemExit(f"{path}: expected preferred {preferred_click_kind} click anchor or a unique fallback, found {len(matches)}")
+            preferred_anchor = matches[0]
+        text = replace_once(text, preferred_anchor, preferred_anchor + click_line, path)
 
     if "private void setLongPressSpeed(View view)" not in text:
         method_anchor = "    private void onBuffer(View view) {\n"
