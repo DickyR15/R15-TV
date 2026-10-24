@@ -167,7 +167,7 @@ jobs:
             -dname "CN=R15 TV 5.8.1 Clean Baseline, O=R15 TV, C=TW"
           cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$ANDROID_HOME
-          storeFile=../r15tv-diag111.jks
+          storeFile=../r15tv-baseline581.jks
           keyAlias=r15tv
           storePassword=baseline581-local-only
           keyPassword=baseline581-local-only
