@@ -100,7 +100,19 @@ jobs:
 
           echo "FongMi base: $(git -C sources/media rev-parse HEAD)"
           echo "AndroidX Media3 ${MEDIA3_TAG}: $upstream_sha"
-          git -C sources/media merge --no-edit -X ours "$upstream_sha"
+          if ! git -C sources/media merge --no-edit -X ours "$upstream_sha"; then
+            conflicts=$(git -C sources/media diff --name-only --diff-filter=U)
+            if [[ "$conflicts" == "libraries/decoder_ffmpeg/src/main/jni/ffmpeg_jni.cc" ]]; then
+              echo "Keeping the FongMi FFmpeg JNI deletion; preserving its custom FFmpeg integration."
+              git -C sources/media rm -f libraries/decoder_ffmpeg/src/main/jni/ffmpeg_jni.cc
+              git -C sources/media commit -m "Merge AndroidX Media3 1.11.1 preserving FongMi FFmpeg JNI layout"
+            else
+              echo "Unexpected unresolved Media3 merge conflicts:" >&2
+              printf "%s\n" "$conflicts" >&2
+              git -C sources/media status --short >&2
+              exit 1
+            fi
+          fi
           python3 - <<'PY'
           from pathlib import Path
           import re
