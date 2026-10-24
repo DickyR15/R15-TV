@@ -1,5 +1,5 @@
-name: R15 TV 5.8.1 LDPlayer Crash Diagnostic
-run-name: R15 TV 5.8.1 LDPlayer Crash Diagnostic
+name: R15 TV 5.8.1 Clean Baseline Diagnostic
+run-name: R15 TV 5.8.1 Clean Baseline Diagnostic
 
 on:
   push:
@@ -13,19 +13,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-581-ldplayer-crash-${{ github.run_id }}
+  group: r15tv-581-clean-baseline-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
   TV_REPOSITORY: FongMi/TV
-  TV_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
+  TV_SHA: 412e7d6b32ca545fbffc216b12b854a85a305ed1
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   NDK_VERSION: 29.0.14206865
 
 jobs:
   build:
-    name: Build FongMi TV 5.8.x with LDPlayer crash diagnostics
+    name: Build exact FongMi TV 5.8.1 baseline without local startup patches
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -74,15 +74,25 @@ jobs:
           test "$(git -C sources/TV rev-parse HEAD)" = "$TV_SHA"
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          grep -Fq 'versionCode 581' sources/TV/app/build.gradle
+          grep -Fq 'versionName "5.8.1"' sources/TV/app/build.gradle
+          grep -Fq 'RuntimeModule.PYTHON.require();' sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
+          grep -Fq 'synchronized (Python.class)' sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
           echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
-          echo "Use FongMi 5.8.x baseline; preserve same-process PlaybackService LocalBinder semantics. Test UI software rendering for the LDPlayer EGL/RenderThread crash."
+          echo "Verified exact upstream 5.8.1; upstream Chaquopy lock and PlaybackService process are preserved."
 
-      - name: Serialize Chaquopy startup and add diagnostics
+      - name: Verify upstream Chaquopy initialization is preserved
         run: |
           set -euo pipefail
-          python3 -m py_compile scripts/serialize-chaquopy-loader-init.py
-          python3 scripts/serialize-chaquopy-loader-init.py --tv-dir sources/TV
-          grep -n -F "PYTHON_START_LOCK" sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
+          loader=sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
+          grep -n -F "RuntimeModule.PYTHON.require();" "$loader"
+          grep -n -F "synchronized (Python.class)" "$loader"
+          grep -n -F 'Python.getInstance().getModule("app")' "$loader"
+          if grep -q "R15ChaquopyInitTrace\|PYTHON_START_LOCK" "$loader"; then
+            echo "Unexpected local Chaquopy mutation found in source." >&2
+            exit 1
+          fi
+          echo "Clean baseline: no local Chaquopy startup patch applied."
 
       - name: Fetch compatible FongMi Media3 1.11.0 fork
         run: |
@@ -97,7 +107,7 @@ jobs:
           test "$(git -C sources/media rev-parse HEAD)" = "$MEDIA_SHA"
           grep -Fq 'releaseVersion = "1.11.0"' sources/media/gradle/libs.versions.toml
           echo "Pinned compatible media source: FongMi/media@$MEDIA_SHA (Media3 1.11.0)."
-      - name: Build Media3 and MPV release AARs
+      - name: Build compatible Media3 and MPV release AARs for the 5.8.1 source
         working-directory: sources/media
         timeout-minutes: 80
         env:
@@ -151,16 +161,16 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/sources"
-          keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-diag111.jks" \
-            -storepass "diag111-local-only" -keypass "diag111-local-only" -alias r15tv \
+          keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-baseline581.jks" \
+            -storepass "baseline581-local-only" -keypass "baseline581-local-only" -alias r15tv \
             -keyalg RSA -keysize 2048 -validity 3650 \
-            -dname "CN=R15 TV Chaquopy Loader Diagnostic, O=R15 TV, C=TW"
+            -dname "CN=R15 TV 5.8.1 Clean Baseline, O=R15 TV, C=TW"
           cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$ANDROID_HOME
           storeFile=../r15tv-diag111.jks
           keyAlias=r15tv
-          storePassword=diag111-local-only
-          keyPassword=diag111-local-only
+          storePassword=baseline581-local-only
+          keyPassword=baseline581-local-only
           EOF_PROPERTIES
           python3 - <<'PY'
           from pathlib import Path
@@ -170,19 +180,19 @@ jobs:
           text = gradle_file.read_text(encoding="utf-8")
           app_id, n1 = re.subn(
               r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$',
-              r'\g<1>"com.dicky.r15tv.diag581"',
+              r'\g<1>"com.dicky.r15tv.base581"',
               text,
               count=1,
           )
           app_id, n2 = re.subn(
               r'(?m)^(\s*versionCode\s+)\d+\s*$',
-              r'\g<1>581102426',
+              r'\g<1>581102526',
               app_id,
               count=1,
           )
           app_id, n3 = re.subn(
               r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
-              r'\g<1>"5.8.1-r15-ldplayer-egl-test"',
+              r'\g<1>"5.8.1-r15-clean-baseline"',
               app_id,
               count=1,
           )
@@ -190,23 +200,10 @@ jobs:
               raise SystemExit(f"Expected one app id/version anchor, found {(n1,n2,n3)}")
           gradle_file.write_text(app_id, encoding="utf-8")
 
-          # LDPlayer logs show EGL_NOT_INITIALIZED followed by a RenderThread abort.
-          # Disable hardware acceleration for UI only. PlaybackService must remain
-          # in the default process because activities cast its binder to LocalBinder.
-          manifest_file = Path("app/src/main/AndroidManifest.xml")
-          manifest = manifest_file.read_text(encoding="utf-8")
-          manifest, hardware_count = re.subn(
-              r'(?s)(<application\b[^>]*android:hardwareAccelerated=")true(")',
-              r'\g<1>false\2',
-              manifest,
-              count=1,
-          )
-          if hardware_count != 1:
-              raise SystemExit(f"Expected one application hardwareAccelerated=true, got {hardware_count}")
-          manifest_file.write_text(manifest, encoding="utf-8")
-          print("EGL test: application hardware acceleration disabled; PlaybackService remains in default process.")
+          # Do not alter upstream AndroidManifest.xml or PlaybackService process behavior.
+          print("Clean baseline: upstream manifest and PlaybackService process configuration preserved.")
 
-          label = "R15 TV 5.8.1 雷電閃退診斷"
+          label = "R15 TV 5.8.1 原始基底診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = path.read_text(encoding="utf-8")
               updated = re.sub(
@@ -218,13 +215,13 @@ jobs:
               )
               if updated != xml:
                   path.write_text(updated, encoding="utf-8")
-          print("Package: com.dicky.r15tv.diag581")
+          print("Package: com.dicky.r15tv.base581")
           print("Label: " + label)
-          print("Source TV commit: 2d0bbcf0556b4ac3ab6b3b307436d70d78c78c24 (5.8.x branch baseline)")
+          print("Source TV commit: 412e7d6b32ca545fbffc216b12b854a85a305ed1 (exact 5.8.1 source)")
           print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
-      - name: Build Android TV ARM64 and ARMv7 LDPlayer diagnostic APKs
+      - name: Build Android TV ARM64 and ARMv7 clean baseline APKs
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -259,35 +256,39 @@ jobs:
               exit 1
             fi
 
-            output="$GITHUB_WORKSPACE/dist/R15-TV-5.8.1-LDPlayer-Crash-${abi}.apk"
+            output="$GITHUB_WORKSPACE/dist/R15-TV-5.8.1-Clean-Baseline-${abi}.apk"
             cp "$apk" "$output"
             badging=$(aapt dump badging "$output")
-            grep -Fq "package: name='com.dicky.r15tv.diag581'" <<<"$badging"
+            grep -Fq "package: name='com.dicky.r15tv.base581'" <<<"$badging"
             grep -Fq "native-code: '$abi'" <<<"$badging"
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
+            grep -Fq "versionName='5.8.1-r15-clean-baseline'" <<<"$badging"
             manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
-            grep -Eq 'android:hardwareAccelerated.*(false|0x0)' <<<"$manifest_dump"
+            if grep -Eq 'android:process.*:playback' <<<"$manifest_dump"; then
+              echo "Unexpected cross-process PlaybackService override." >&2
+              exit 1
+            fi
             sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
             echo "Built and verified $abi: $output"
           done
 
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
-          Build: R15 TV 5.8.1 LDPlayer Crash Diagnostic
-          TV source: FongMi/TV@$TV_SHA
+          Build: R15 TV 5.8.1 Clean Baseline Diagnostic
+          TV source: FongMi/TV@$TV_SHA (versionCode 581, versionName 5.8.1)
           Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
-          Package: com.dicky.r15tv.diag581
-          Variants: Leanback ARM64 and ARMv7, debug-signed LDPlayer stability diagnostic only
-          Goal: start from FongMi 5.8.x source, retain PlaybackService in the app process, preserve Chaquopy initialization synchronization, and test UI software rendering against LDPlayer EGL/RenderThread crashes.
-          Test armeabi-v7a first on LDPlayer Android 9 API 28. This diagnostic package is side-by-side and does not inherit original app settings.
+          Package: com.dicky.r15tv.base581
+          Variants: Leanback ARM64 and ARMv7, debug-signed clean source baseline only
+          Goal: exact FongMi/TV 5.8.1 source; no local Loader.java or AndroidManifest.xml modifications. Isolates whether the previous crash was caused by the legacy source/patch workflow.
+          Test armeabi-v7a first on LDPlayer Android 9 API 28. This clean-baseline package is side-by-side and does not inherit original app settings.
           EOF_INFO
 
       - name: Upload ARM64 and ARMv7 diagnostic APKs
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-5.8.1-LDPlayer-Crash-ARM64-ARMv7
+          name: R15-TV-5.8.1-Clean-Baseline-ARM64-ARMv7
           path: |
-            dist/R15-TV-5.8.1-LDPlayer-Crash-arm64-v8a.apk
-            dist/R15-TV-5.8.1-LDPlayer-Crash-armeabi-v7a.apk
+            dist/R15-TV-5.8.1-Clean-Baseline-arm64-v8a.apk
+            dist/R15-TV-5.8.1-Clean-Baseline-armeabi-v7a.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
