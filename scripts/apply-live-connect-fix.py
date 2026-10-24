@@ -365,7 +365,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
     print("Applied TextureView diagnostic on Android 9 and older; Android 10+ keeps the saved renderer.")
 
 def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
-    """Disable LiveActivity hardware acceleration to isolate LDPlayer RenderThread failures."""
+    """Disable hardware acceleration on Android 9 only; re-enable it on Android 10+ before inflating views."""
     pattern = re.compile(r'<activity\b[^>]*android:name="\.ui\.activity\.LiveActivity"[^>]*>')
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
@@ -386,9 +386,54 @@ def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
         updated = manifest.read_text(encoding="utf-8")
         checked = list(pattern.finditer(updated))
         if len(checked) != 1 or 'android:hardwareAccelerated="false"' not in checked[0].group(0):
-            raise SystemExit(f"{manifest}: LiveActivity hardware-acceleration-off diagnostic setting was not applied")
-    print("DIAGNOSTIC BUILD: LiveActivity hardware acceleration is disabled to test the RenderThread/EGL crash; other activities retain their upstream settings.")
+            raise SystemExit(f"{manifest}: LiveActivity manifest acceleration baseline was not applied")
 
+        live = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        if not live.is_file():
+            raise SystemExit(f"Missing {flavor} LiveActivity source: {live}")
+        java = live.read_text(encoding="utf-8")
+        if "import android.os.Build;" not in java:
+            anchor = "import android.os.Bundle;\n"
+            if java.count(anchor) != 1:
+                raise SystemExit(f"{live}: cannot safely add Build import")
+            java = java.replace(anchor, anchor + "import android.os.Build;\n", 1)
+        if "import android.view.WindowManager;" not in java:
+            anchor = "import android.view.ViewGroup;\n"
+            if java.count(anchor) != 1:
+                raise SystemExit(f"{live}: cannot safely add WindowManager import")
+            java = java.replace(anchor, anchor + "import android.view.WindowManager;\n", 1)
+
+        marker = "    // R15_RENDER_COMPAT_ONCREATE"
+        method = """    // R15_RENDER_COMPAT_ONCREATE
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        // Keep hardware acceleration disabled for Android 9 / LDPlayer compatibility.
+        // Real Android 10+ devices retain the normal accelerated UI and video overlays.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            getWindow().setFlags(
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED,
+                    WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED);
+        }
+        super.onCreate(savedInstanceState);
+    }
+
+"""
+        if marker not in java:
+            class_anchor = "public class LiveActivity "
+            class_pos = java.find(class_anchor)
+            if class_pos < 0:
+                raise SystemExit(f"{live}: cannot locate LiveActivity class declaration")
+            brace = java.find("{", class_pos)
+            if brace < 0:
+                raise SystemExit(f"{live}: cannot locate LiveActivity class body")
+            java = java[:brace + 1] + "\n\n" + method + java[brace + 1:]
+        elif "Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q" not in java or "WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED" not in java:
+            raise SystemExit(f"{live}: existing conditional render setup is incomplete")
+        live.write_text(java, encoding="utf-8")
+        verified = live.read_text(encoding="utf-8")
+        if marker not in verified or "Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q" not in verified:
+            raise SystemExit(f"{live}: conditional Android 10+ hardware acceleration setup was not applied")
+    print("DIAGNOSTIC BUILD: Android 9 LiveActivity uses software UI rendering and TextureView; Android 10+ re-enables hardware acceleration before view inflation.")
 
 def patch_live_player_keep_frame(tv: Path) -> None:
     """Keep the previous decoded frame visible while a live channel/source resets."""
@@ -793,7 +838,11 @@ def main() -> None:
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
         if 'android:hardwareAccelerated="false"' not in manifest.read_text(encoding="utf-8"):
-            raise SystemExit(f"{flavor} LiveActivity hardware-acceleration-off diagnostic setting is missing")
+            raise SystemExit(f"{flavor} LiveActivity hardware-acceleration-off baseline is missing")
+        live = tv / "app" / "src" / flavor / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "LiveActivity.java"
+        source = live.read_text(encoding="utf-8")
+        if "Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q" not in source or "WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED" not in source:
+            raise SystemExit(f"{flavor} LiveActivity Android 10+ hardware acceleration restore is missing")
     if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
         raise SystemExit("Bottom subtitle settings control is missing")
     if "android.enableJetifier=true" not in gradle_properties.read_text(encoding="utf-8"):
@@ -803,7 +852,7 @@ def main() -> None:
     if "AiSubtitleOverlay.handleLiveSubtitleClick" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Quick subtitle toggle is not wired")
     print("Applied home label/icon and quick subtitle controls.")
-    print("Applied Android 9 TextureView selection plus hardware-acceleration-off probe for LiveActivity.")
+    print("Applied Android 9 TextureView/software-rendering probe while preserving hardware acceleration on Android 10+.")
 
 
 if __name__ == "__main__":
