@@ -422,12 +422,23 @@ def patch_live_source_options(tv: Path) -> None:
             import_anchor + "import org.json.JSONObject;\n", live_config
         )
 
-    parse_anchor = """        LiveParser.text(live, text);
-        setHome(config, live, false);"""
-    parse_replacement = parse_anchor + """
-        applyR15SourceOptions(config, live);"""
+    parse_anchors = [
+        """        LiveParser.text(live, text);
+        setHome(config, live, false);""",
+        """        LiveParser.text(live, text);
+        setHome(config, live, true);""",
+    ]
     if "applyR15SourceOptions(config, live);" not in config_text:
-        config_text = replace_once(config_text, parse_anchor, parse_replacement, live_config)
+        matched = next((anchor for anchor in parse_anchors if config_text.count(anchor) == 1), None)
+        if matched is None:
+            raise SystemExit(f"{live_config}: cannot find a supported LiveConfig parse anchor")
+        config_text = replace_once(
+            config_text,
+            matched,
+            matched + """
+        applyR15SourceOptions(config, live);""",
+            live_config,
+        )
 
     json_home_anchor = """        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);"""
     json_home_replacement = json_home_anchor + """
