@@ -340,7 +340,7 @@ def patch_refresh_without_clearing(tv: Path) -> None:
 
 
 def patch_android9_renderer_compat(tv: Path) -> None:
-    """Prefer SurfaceView on Android 9 and older; keep stock rendering on newer TVs."""
+    """Use TextureView on Android 9 and older to probe native Surface teardown crashes."""
     path = tv / "app" / "src" / "main" / "java" / "com" / "fongmi" / "android" / "tv" / "ui" / "activity" / "PlaybackActivity.java"
     if not path.is_file():
         raise SystemExit(f"Missing shared PlaybackActivity source: {path}")
@@ -353,7 +353,7 @@ def patch_android9_renderer_compat(tv: Path) -> None:
         text = text.replace(anchor, "import android.os.Build;\n" + anchor, 1)
 
     old = "playerView.setRender(PlayerSetting.getRender());"
-    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE : PlayerSetting.getRender());"
+    new = "playerView.setRender(Build.VERSION.SDK_INT <= Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE : PlayerSetting.getRender());"
     if new not in text:
         count = text.count(old)
         if count != 1:
@@ -362,10 +362,10 @@ def patch_android9_renderer_compat(tv: Path) -> None:
     path.write_text(text, encoding="utf-8")
     if new not in path.read_text(encoding="utf-8"):
         raise SystemExit("Android 9 SurfaceView compatibility setting was not applied")
-    print("Applied SurfaceView compatibility on Android 9 and older; Android 10+ keeps the saved renderer.")
+    print("Applied TextureView diagnostic on Android 9 and older; Android 10+ keeps the saved renderer.")
 
 def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
-    """Disable hardware acceleration only for LiveActivity while keeping video on SurfaceView."""
+    """Enable hardware acceleration for TextureView playback in the diagnostic activity."""
     pattern = re.compile(r'<activity\b[^>]*android:name="\.ui\.activity\.LiveActivity"[^>]*>')
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
@@ -378,16 +378,16 @@ def patch_live_activity_software_rendering_diagnostic(tv: Path) -> None:
         tag = matches[0].group(0)
         attr = re.compile(r'android:hardwareAccelerated="[^"]*"')
         if attr.search(tag):
-            patched_tag = attr.sub('android:hardwareAccelerated="false"', tag, count=1)
+            patched_tag = attr.sub('android:hardwareAccelerated="true"', tag, count=1)
         else:
-            patched_tag = tag[:-2] + '\n            android:hardwareAccelerated="false" />' if tag.endswith("/>") else tag[:-1] + '\n            android:hardwareAccelerated="false">'
+            patched_tag = tag[:-2] + '\n            android:hardwareAccelerated="true" />' if tag.endswith("/>") else tag[:-1] + '\n            android:hardwareAccelerated="true">'
         source = source[:matches[0].start()] + patched_tag + source[matches[0].end():]
         manifest.write_text(source, encoding="utf-8")
         updated = manifest.read_text(encoding="utf-8")
         checked = list(pattern.finditer(updated))
-        if len(checked) != 1 or 'android:hardwareAccelerated="false"' not in checked[0].group(0):
+        if len(checked) != 1 or 'android:hardwareAccelerated="true"' not in checked[0].group(0):
             raise SystemExit(f"{manifest}: LiveActivity software-rendering setting was not applied")
-    print("DIAGNOSTIC BUILD: LiveActivity window uses software UI rendering only; video output uses SurfaceView and hardware acceleration remains enabled for other activities.")
+    print("DIAGNOSTIC BUILD: LiveActivity hardware acceleration is enabled for the TextureView playback probe; other activities retain their upstream settings.")
 
 
 def patch_live_player_keep_frame(tv: Path) -> None:
@@ -725,7 +725,7 @@ def main() -> None:
         raise SystemExit("wallpaper_4 is not the default wallpaper")
     if "return MIN_WALL_TYPE;" not in wallpaper_setting.read_text(encoding="utf-8"):
         raise SystemExit("static wallpaper diagnostic override is missing")
-    if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_SURFACE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
+    if "Build.VERSION_CODES.P ? PlayerSetting.RENDER_TEXTURE" not in (tv / "app/src/main/java/com/fongmi/android/tv/ui/activity/PlaybackActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Android 9 renderer compatibility setting is missing")
     if "R15LiveTrace" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("R15LiveTrace instrumentation is missing")
@@ -736,7 +736,7 @@ def main() -> None:
         raise SystemExit("TVBus in-process core reload fix is missing")
     for flavor in ("leanback", "mobile"):
         manifest = tv / "app" / "src" / flavor / "AndroidManifest.xml"
-        if 'android:hardwareAccelerated="false"' not in manifest.read_text(encoding="utf-8"):
+        if 'android:hardwareAccelerated="true"' not in manifest.read_text(encoding="utf-8"):
             raise SystemExit(f"{flavor} LiveActivity software-rendering setting is missing")
     if 'android:id="@+id/r15Subtitle"' not in (tv / "app/src/leanback/res/layout/view_control_live_action.xml").read_text(encoding="utf-8"):
         raise SystemExit("Bottom subtitle settings control is missing")
@@ -747,7 +747,7 @@ def main() -> None:
     if "AiSubtitleOverlay.handleLiveSubtitleClick" not in (tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java").read_text(encoding="utf-8"):
         raise SystemExit("Quick subtitle toggle is not wired")
     print("Applied home label/icon and quick subtitle controls.")
-    print("Applied the Android 9 SurfaceView fallback; Android 10+ keeps the configured renderer.")
+    print("Applied the Android 9 TextureView diagnostic; Android 10+ keeps the configured renderer.")
 
 
 if __name__ == "__main__":
