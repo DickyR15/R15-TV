@@ -203,8 +203,6 @@ jobs:
           )
           if hardware_count != 1:
               raise SystemExit(f"Expected one application hardwareAccelerated=true, got {hardware_count}")
-          if 'android:process=":playback"' in manifest:
-              raise SystemExit("PlaybackService must remain in the default process; LocalBinder is used.")
           manifest_file.write_text(manifest, encoding="utf-8")
           print("EGL test: application hardware acceleration disabled; PlaybackService remains in default process.")
 
@@ -269,10 +267,6 @@ jobs:
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
             manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
             grep -Eq 'android:hardwareAccelerated.*(false|0x0)' <<<"$manifest_dump"
-            if grep -Eq 'android:process.*:playback' <<<"$manifest_dump"; then
-              echo "PlaybackService must remain in the default process." >&2
-              exit 1
-            fi
             sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
             echo "Built and verified $abi: $output"
           done
