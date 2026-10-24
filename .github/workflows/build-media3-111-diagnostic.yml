@@ -1,5 +1,5 @@
-name: R15 TV 5.8.1 Clean Baseline Diagnostic
-run-name: R15 TV 5.8.1 Clean Baseline Diagnostic
+name: R15 TV Media3-Compatible Clean Baseline Diagnostic
+run-name: R15 TV Media3-Compatible Clean Baseline Diagnostic
 
 on:
   push:
@@ -13,19 +13,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-581-clean-baseline-${{ github.run_id }}
+  group: r15tv-media3-compatible-clean-baseline-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
   TV_REPOSITORY: FongMi/TV
-  TV_SHA: 412e7d6b32ca545fbffc216b12b854a85a305ed1
+  TV_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   NDK_VERSION: 29.0.14206865
 
 jobs:
   build:
-    name: Build exact FongMi TV 5.8.1 baseline without local startup patches
+    name: Build public FongMi TV baseline compatible with pinned Media3
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -63,7 +63,7 @@ jobs:
             "ndk;${NDK_VERSION}"
           echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
 
-      - name: Fetch current public FongMi TV source
+      - name: Fetch last public FongMi TV source compatible with pinned Media3
         run: |
           set -euo pipefail
           mkdir -p sources/TV
@@ -74,27 +74,24 @@ jobs:
           test "$(git -C sources/TV rev-parse HEAD)" = "$TV_SHA"
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
-          grep -Fq 'versionCode 581' sources/TV/app/build.gradle
-          grep -Fq 'versionName "5.8.1"' sources/TV/app/build.gradle
-          grep -Fq 'RuntimeModule.PYTHON.require();' sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
-          grep -Fq 'synchronized (Python.class)' sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
+          grep -Fq 'versionCode 561' sources/TV/app/build.gradle
+          grep -Fq 'versionName "5.6.1"' sources/TV/app/build.gradle
           echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
-          echo "Verified exact upstream 5.8.1; upstream Chaquopy lock and PlaybackService process are preserved."
+          echo "Verified last public source known to compile with the pinned FongMi Media3 1.11.0 branch."
 
-      - name: Verify upstream Chaquopy initialization is preserved
+      - name: Verify pristine upstream Chaquopy initialization
         run: |
           set -euo pipefail
           loader=sources/TV/chaquo/src/main/java/com/fongmi/chaquo/Loader.java
-          grep -n -F "RuntimeModule.PYTHON.require();" "$loader"
-          grep -n -F "synchronized (Python.class)" "$loader"
-          grep -n -F 'Python.getInstance().getModule("app")' "$loader"
-          if grep -q "R15ChaquopyInitTrace\|PYTHON_START_LOCK" "$loader"; then
-            echo "Unexpected local Chaquopy mutation found in source." >&2
+          grep -Fq 'if (!Python.isStarted()) Python.start(Platform.create());' "$loader"
+          grep -Fq 'Python.getInstance().getModule("app")' "$loader"
+          if grep -q "R15ChaquopyInitTrace\|PYTHON_START_LOCK\|synchronized (Python.class)" "$loader"; then
+            echo "Unexpected local Chaquopy startup mutation found in source." >&2
             exit 1
           fi
-          echo "Clean baseline: no local Chaquopy startup patch applied."
+          echo "Clean control: using unmodified upstream Loader.java."
 
-      - name: Fetch current FongMi Media3 fork compatible with the pinned 5.8.1 source
+      - name: Fetch pinned FongMi Media3 fork compatible with the clean baseline
         run: |
           set -euo pipefail
           mkdir -p sources/media
@@ -161,13 +158,13 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p "$GITHUB_WORKSPACE/sources"
-          keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-baseline581.jks" \
+          keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-baseline561.jks" \
             -storepass "baseline581-local-only" -keypass "baseline581-local-only" -alias r15tv \
             -keyalg RSA -keysize 2048 -validity 3650 \
-            -dname "CN=R15 TV 5.8.1 Clean Baseline, O=R15 TV, C=TW"
+            -dname "CN=R15 TV Media3-Compatible Clean Baseline, O=R15 TV, C=TW"
           cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$ANDROID_HOME
-          storeFile=../r15tv-baseline581.jks
+          storeFile=../r15tv-baseline561.jks
           keyAlias=r15tv
           storePassword=baseline581-local-only
           keyPassword=baseline581-local-only
@@ -180,19 +177,19 @@ jobs:
           text = gradle_file.read_text(encoding="utf-8")
           app_id, n1 = re.subn(
               r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$',
-              r'\g<1>"com.dicky.r15tv.base581"',
+              r'\g<1>"com.dicky.r15tv.base561"',
               text,
               count=1,
           )
           app_id, n2 = re.subn(
               r'(?m)^(\s*versionCode\s+)\d+\s*$',
-              r'\g<1>581102526',
+              r'\g<1>561102526',
               app_id,
               count=1,
           )
           app_id, n3 = re.subn(
               r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
-              r'\g<1>"5.8.1-r15-clean-baseline"',
+              r'\g<1>"5.6.1-r15-clean-baseline"',
               app_id,
               count=1,
           )
@@ -203,7 +200,7 @@ jobs:
           # Do not alter upstream AndroidManifest.xml or PlaybackService process behavior.
           print("Clean baseline: upstream manifest and PlaybackService process configuration preserved.")
 
-          label = "R15 TV 5.8.1 原始基底診斷"
+          label = "R15 TV Media3 相容基準診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = path.read_text(encoding="utf-8")
               updated = re.sub(
@@ -215,13 +212,13 @@ jobs:
               )
               if updated != xml:
                   path.write_text(updated, encoding="utf-8")
-          print("Package: com.dicky.r15tv.base581")
+          print("Package: com.dicky.r15tv.base561")
           print("Label: " + label)
-          print("Source TV commit: 412e7d6b32ca545fbffc216b12b854a85a305ed1 (exact 5.8.1 source)")
+          print("Source TV commit: fe6a5b235477c02633cf3bc50d4cd83414a521b4 (5.6.1, last known compatible public baseline)")
           print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
-      - name: Build Android TV ARM64 and ARMv7 clean baseline APKs
+      - name: Build Android TV ARM64 and ARMv7 compatible clean baseline APKs
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -256,13 +253,13 @@ jobs:
               exit 1
             fi
 
-            output="$GITHUB_WORKSPACE/dist/R15-TV-5.8.1-Clean-Baseline-${abi}.apk"
+            output="$GITHUB_WORKSPACE/dist/R15-TV-5.6.1-Clean-Baseline-${abi}.apk"
             cp "$apk" "$output"
             badging=$(aapt dump badging "$output")
-            grep -Fq "package: name='com.dicky.r15tv.base581'" <<<"$badging"
+            grep -Fq "package: name='com.dicky.r15tv.base561'" <<<"$badging"
             grep -Fq "native-code: '$abi'" <<<"$badging"
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
-            grep -Fq "versionName='5.8.1-r15-clean-baseline'" <<<"$badging"
+            grep -Fq "versionName='5.6.1-r15-clean-baseline'" <<<"$badging"
             manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
             if grep -Eq 'android:process.*:playback' <<<"$manifest_dump"; then
               echo "Unexpected cross-process PlaybackService override." >&2
@@ -273,22 +270,22 @@ jobs:
           done
 
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
-          Build: R15 TV 5.8.1 Clean Baseline Diagnostic
-          TV source: FongMi/TV@$TV_SHA (versionCode 581, versionName 5.8.1)
+          Build: R15 TV Media3-Compatible Clean Baseline Diagnostic
+          TV source: FongMi/TV@$TV_SHA (versionCode 561, versionName 5.6.1)
           Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
-          Package: com.dicky.r15tv.base581
+          Package: com.dicky.r15tv.base561
           Variants: Leanback ARM64 and ARMv7, debug-signed clean source baseline only
-          Goal: exact FongMi/TV 5.8.1 source; no local Loader.java or AndroidManifest.xml modifications. Isolates whether the previous crash was caused by the legacy source/patch workflow.
-          Test armeabi-v7a first on LDPlayer Android 9 API 28. This clean-baseline package is side-by-side and does not inherit original app settings.
+          Goal: exact public FongMi/TV 5.6.1 source with no local Loader.java or AndroidManifest.xml modifications. This is the latest known-good control for the pinned public FongMi/media branch; it does not claim to reproduce 5.8.1 behavior because the public Media3 fork is missing APIs used by later TV source.
+          Test armeabi-v7a first on LDPlayer Android 9 API 28. This clean control package is side-by-side and does not inherit original app settings.
           EOF_INFO
 
       - name: Upload ARM64 and ARMv7 diagnostic APKs
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-5.8.1-Clean-Baseline-ARM64-ARMv7
+          name: R15-TV-5.6.1-Clean-Baseline-ARM64-ARMv7
           path: |
-            dist/R15-TV-5.8.1-Clean-Baseline-arm64-v8a.apk
-            dist/R15-TV-5.8.1-Clean-Baseline-armeabi-v7a.apk
+            dist/R15-TV-5.6.1-Clean-Baseline-arm64-v8a.apk
+            dist/R15-TV-5.6.1-Clean-Baseline-armeabi-v7a.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
