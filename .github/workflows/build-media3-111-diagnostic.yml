@@ -208,7 +208,7 @@ jobs:
           print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
-      - name: Build Android TV ARMv7 diagnostic APK
+      - name: Build Android TV ARM64 and ARMv7 diagnostic APKs
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -216,31 +216,51 @@ jobs:
           set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:assembleLeanbackDebug
-          apk=""
-          while IFS= read -r -d '' candidate; do
-            if aapt dump badging "$candidate" | grep -Fq "native-code: 'armeabi-v7a'"; then
-              apk="$candidate"
-              break
-            fi
-          done < <(find app/build/outputs/apk -type f -name '*.apk' -print0)
-          if [[ -z "$apk" ]]; then
-            echo "Could not find the Leanback armeabi-v7a APK." >&2
-            find app/build/outputs/apk -type f -name '*.apk' -print >&2 || true
-            exit 1
-          fi
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp "$apk" "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk"
-          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | head -n 5
-          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | grep -Fq "package: name='com.dicky.r15tv.diag111'"
-          unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
-          sha256sum "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | tee "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
+          : > "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
+
+          for abi in arm64-v8a armeabi-v7a; do
+            apk=""
+            while IFS= read -r -d '' candidate; do
+              badging=$(aapt dump badging "$candidate")
+              # Prefer ABI-split APKs so a native TV device can be tested without Houdini.
+              if grep -Fq "native-code: '$abi'" <<<"$badging"; then
+                native_line=$(grep -F "native-code:" <<<"$badging" | head -n 1 || true)
+                if [[ "$native_line" == "native-code: '$abi'" ]]; then
+                  apk="$candidate"
+                  break
+                fi
+              fi
+            done < <(find app/build/outputs/apk -type f -name '*.apk' -print0)
+
+            if [[ -z "$apk" ]]; then
+              echo "Could not find an APK containing only the $abi ABI." >&2
+              echo "Built APK candidates:" >&2
+              while IFS= read -r candidate; do
+                echo "--- $candidate" >&2
+                aapt dump badging "$candidate" | grep -E "^(package:|native-code:)" >&2 || true
+              done < <(find app/build/outputs/apk -type f -name '*.apk' -print)
+              exit 1
+            fi
+
+            output="$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-${abi}.apk"
+            cp "$apk" "$output"
+            badging=$(aapt dump badging "$output")
+            grep -Fq "package: name='com.dicky.r15tv.diag111'" <<<"$badging"
+            grep -Fq "native-code: '$abi'" <<<"$badging"
+            unzip -Z1 "$output" | grep -Fq "lib/$abi/"
+            sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
+            echo "Built and verified $abi: $output"
+          done
+
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
           Build: R15 TV Chaquopy Loader Mutex Diagnostic
           TV source: FongMi/TV@$TV_SHA
           Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
           Package: com.dicky.r15tv.diag111
-          Variant: Leanback ARMv7, debug-signed diagnostic only
-          Goal: test whether serializing in-process Chaquopy startup avoids the observed destroyed-mutex abort; includes startup trace markers.
+          Variants: Leanback ARM64 and ARMv7, debug-signed diagnostic only
+          Goal: test serialized Chaquopy startup and trace native startup failures.
+          Test ARM64 APK on ARM64 Android TV hardware; the ARMv7 APK is for compatible 32-bit devices/emulators and may use translation on x86 emulators.
           EOF_INFO
 
       - name: Upload diagnostic APK
