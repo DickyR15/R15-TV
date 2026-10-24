@@ -91,27 +91,47 @@ def set_app_name(main_dir: Path) -> int:
 
 
 def force_zh_tw(app_java: Path) -> bool:
+    """Force the app context to Taiwan Traditional Chinese across supported upstream App.java layouts."""
     source = app_java.read_text(encoding="utf-8")
-    old = """    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-        Init.set(base);
-    }"""
-    new = """    @Override
-    protected void attachBaseContext(Context base) {
-        // Always render the UI in Taiwan Traditional Chinese, independent of device locale.
-        android.content.res.Configuration configuration =
+    locale_marker = 'configuration.setLocale(new java.util.Locale("zh", "TW"));'
+    if locale_marker in source:
+        return False
+
+    signature = "protected void attachBaseContext(Context base) {"
+    method_start = source.find(signature)
+    if method_start < 0 or source.count(signature) != 1:
+        raise SystemExit(f"{app_java}: expected exactly one attachBaseContext(Context base) method")
+    body_start = method_start + len(signature)
+    body_end = source.find("\n    }", body_start)
+    if body_end < 0:
+        raise SystemExit(f"{app_java}: cannot find attachBaseContext() end")
+    body = source[body_start:body_end]
+
+    super_call = "super.attachBaseContext(base);"
+    if body.count(super_call) != 1:
+        raise SystemExit(f"{app_java}: expected exactly one super.attachBaseContext(base) call")
+    if body.count("Init.set(base);") == 1:
+        runtime_init = "Init.set(base);"
+        runtime_init_new = "Init.set(localized);"
+    elif body.count("Runtime.set(base);") == 1:
+        runtime_init = "Runtime.set(base);"
+        runtime_init_new = "Runtime.set(localized);"
+    else:
+        raise SystemExit(f"{app_java}: cannot identify upstream Init/Runtime context initialization")
+
+    localized_context = """android.content.res.Configuration configuration =
                 new android.content.res.Configuration(base.getResources().getConfiguration());
         configuration.setLocale(new java.util.Locale("zh", "TW"));
         Context localized = base.createConfigurationContext(configuration);
-        super.attachBaseContext(localized);
-        Init.set(localized);
-    }"""
-    if new in source:
-        return False
-    if source.count(old) != 1:
-        raise SystemExit(f"{app_java}: expected exactly one App.attachBaseContext anchor")
-    app_java.write_text(source.replace(old, new, 1), encoding="utf-8")
+        super.attachBaseContext(localized);"""
+    body = body.replace(super_call, localized_context, 1)
+    body = body.replace(runtime_init, runtime_init_new, 1)
+    source = source[:body_start] + body + source[body_end:]
+    app_java.write_text(source, encoding="utf-8")
+
+    verified = app_java.read_text(encoding="utf-8")
+    if locale_marker not in verified or "super.attachBaseContext(localized);" not in verified or runtime_init_new not in verified:
+        raise SystemExit(f"{app_java}: zh-TW context patch failed verification")
     return True
 
 
