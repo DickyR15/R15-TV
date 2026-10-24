@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Serialize Chaquopy's in-process Python startup for older FongMi TV sources."""
+"""Serialize Chaquopy's in-process Python startup and trace failures in older FongMi TV sources."""
 from __future__ import annotations
 
 import argparse
@@ -15,12 +15,21 @@ def main() -> None:
     if "PYTHON_START_LOCK" in source and "R15ChaquopyInitTrace" in source:
         print("Chaquopy startup lock and trace are already installed.")
         return
+
     old_import = "import com.chaquo.python.Python;\nimport com.github.catvod.utils.Path;"
     new_import = "import android.util.Log;\nimport com.chaquo.python.Python;\nimport com.github.catvod.utils.Path;"
     if old_import not in source:
         raise SystemExit(f"{path}: expected upstream imports not found")
     source = source.replace(old_import, new_import, 1)
-    old_class = "public class Loader {\n\n    private final PyObject app;\n\n    public Loader() {\n        if (!Python.isStarted()) Python.start(Platform.create());\n        app = Python.getInstance().getModule(\"app\");\n    }"
+
+    old_class = """public class Loader {
+
+    private final PyObject app;
+
+    public Loader() {
+        if (!Python.isStarted()) Python.start(Platform.create());
+        app = Python.getInstance().getModule("app");
+    }"""
     new_class = '''public class Loader {
 
     private static final String TAG = "R15ChaquopyInitTrace";
@@ -32,13 +41,18 @@ def main() -> None:
         synchronized (PYTHON_START_LOCK) {
             Log.i(TAG, "Loader constructor thread=" + Thread.currentThread().getName()
                     + ", pythonStarted=" + Python.isStarted());
-            if (!Python.isStarted()) {
-                Log.i(TAG, "Starting Chaquopy Python runtime");
-                Python.start(Platform.create());
-                Log.i(TAG, "Chaquopy Python runtime started");
+            try {
+                if (!Python.isStarted()) {
+                    Log.i(TAG, "Starting Chaquopy Python runtime");
+                    Python.start(Platform.create());
+                }
+                Log.i(TAG, "Chaquopy Python runtime ready; pythonStarted=" + Python.isStarted());
+                app = Python.getInstance().getModule("app");
+                Log.i(TAG, "Python app module acquired");
+            } catch (RuntimeException | Error e) {
+                Log.e(TAG, "Chaquopy initialization failed", e);
+                throw e;
             }
-            app = Python.getInstance().getModule("app");
-            Log.i(TAG, "Python app module acquired");
         }
     }'''
     if old_class not in source:
@@ -46,9 +60,11 @@ def main() -> None:
     source = source.replace(old_class, new_class, 1)
     if source.count("PYTHON_START_LOCK") != 2 or "synchronized (PYTHON_START_LOCK)" not in source:
         raise SystemExit("Chaquopy Python startup lock did not validate")
+    if "Chaquopy initialization failed" not in source:
+        raise SystemExit("Chaquopy initialization error trace did not validate")
     path.write_text(source, encoding="utf-8")
     print("Applied a class-level lock around Python.isStarted/start, Python.getInstance, and app module initialization.")
-    print("Added thread/state trace markers so the next log can confirm whether startup overlapped.")
+    print("Added success/error trace markers around the complete startup sequence.")
 
 
 if __name__ == "__main__":
