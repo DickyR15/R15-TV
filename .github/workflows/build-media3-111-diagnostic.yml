@@ -54,7 +54,7 @@ jobs:
       - name: Install Android build packages
         run: |
           set -euo pipefail
-          yes | sdkmanager --licenses >/dev/null
+          sdkmanager --licenses </dev/null >/dev/null
           sdkmanager \
             "platform-tools" \
             "platforms;android-36" \
