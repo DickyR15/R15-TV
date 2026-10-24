@@ -40,10 +40,6 @@ jobs:
         with:
           distribution: temurin
           java-version: "21"
-          cache: gradle
-          cache-dependency-path: |
-            sources/TV/**/*.gradle*
-            sources/media/**/*.gradle*
 
       - name: Set up Python for source build tooling
         uses: actions/setup-python@v5
