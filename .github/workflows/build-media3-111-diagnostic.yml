@@ -1,0 +1,307 @@
+name: R15 TV Media3 1.11.1 Runtime Diagnostic
+run-name: R15 TV Media3 1.11.1 Runtime Diagnostic
+
+on:
+  push:
+    branches:
+      - "diagnostic/live-media3-1.11.1-runtime-fix"
+    paths:
+      - ".github/workflows/build-media3-111-diagnostic.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r15tv-media3-111-runtime-diagnostic
+  cancel-in-progress: false
+
+env:
+  TV_REPOSITORY: FongMi/TV
+  TV_SHA: 9c845a913337b2d994343b7885159c0a84681b93
+  MEDIA_REPOSITORY: FongMi/media
+  MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
+  MEDIA3_TAG: 1.11.1
+  NDK_VERSION: 29.0.14206865
+
+jobs:
+  build:
+    name: Build current FongMi TV source with Media3 1.11.1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - name: Checkout diagnostic workflow
+        uses: actions/checkout@v4
+        with:
+          ref: diagnostic/live-media3-1.11.1-runtime-fix
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+          cache: gradle
+          cache-dependency-path: |
+            sources/TV/**/*.gradle*
+            sources/media/**/*.gradle*
+
+      - name: Set up Python for source build tooling
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android build packages
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager \
+            "platform-tools" \
+            "platforms;android-36" \
+            "platforms;android-37.0" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;${NDK_VERSION}"
+          echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
+
+      - name: Fetch current public FongMi TV source
+        run: |
+          set -euo pipefail
+          mkdir -p sources/TV
+          git -C sources/TV init
+          git -C sources/TV remote add origin "https://github.com/${TV_REPOSITORY}.git"
+          git -C sources/TV fetch --depth=1 origin "$TV_SHA"
+          git -C sources/TV checkout --detach FETCH_HEAD
+          test "$(git -C sources/TV rev-parse HEAD)" = "$TV_SHA"
+          test -f sources/TV/app/build.gradle
+          test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
+          echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
+          echo "This source revision uses the newer runtime-module architecture; the app no longer packages the old in-process Chaquopy runtime dependency."
+
+      - name: Fetch FongMi Media3 fork and merge the official 1.11.1 release
+        run: |
+          set -euo pipefail
+          mkdir -p sources/media
+          git -C sources/media init
+          git -C sources/media config user.name "R15 TV Diagnostic Builder"
+          git -C sources/media config user.email "actions@users.noreply.github.com"
+          git -C sources/media remote add fongmi "https://github.com/${MEDIA_REPOSITORY}.git"
+          git -C sources/media fetch --depth=500 fongmi "$MEDIA_SHA"
+          git -C sources/media checkout --detach FETCH_HEAD
+          test "$(git -C sources/media rev-parse HEAD)" = "$MEDIA_SHA"
+
+          git -C sources/media remote add androidx https://github.com/androidx/media.git
+          git -C sources/media fetch --depth=500 androidx "refs/tags/${MEDIA3_TAG}"
+          upstream_sha=$(git -C sources/media rev-parse 'FETCH_HEAD^{commit}')
+          if ! git -C sources/media merge-base HEAD "$upstream_sha" >/dev/null; then
+            echo "FongMi Media3 branch and AndroidX tag do not have a reachable common ancestor at this fetch depth." >&2
+            exit 1
+          fi
+
+          echo "FongMi base: $(git -C sources/media rev-parse HEAD)"
+          echo "AndroidX Media3 ${MEDIA3_TAG}: $upstream_sha"
+          git -C sources/media merge --no-edit -X ours "$upstream_sha"
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          path = Path("sources/media/gradle/libs.versions.toml")
+          text = path.read_text(encoding="utf-8")
+          expected = {
+              r'(?m)^releaseVersion = "[^"]+"$': 'releaseVersion = "1.11.1"',
+              r'(?m)^releaseVersionCode = "[^"]+"$': 'releaseVersionCode = "1011001300"',
+          }
+          for pattern, replacement in expected.items():
+              text, count = re.subn(pattern, replacement, text, count=1)
+              if count != 1:
+                  raise SystemExit(f"Could not set Media3 release metadata: {pattern}")
+          path.write_text(text, encoding="utf-8")
+          verify = path.read_text(encoding="utf-8")
+          if 'releaseVersion = "1.11.1"' not in verify or 'releaseVersionCode = "1011001300"' not in verify:
+              raise SystemExit("Media3 1.11.1 version metadata validation failed")
+          PY
+          grep -R -n -m 3 "setParseHagcMetadata" sources/media/libraries/common sources/media/libraries/exoplayer sources/media/libraries/extractor || true
+          echo "Merged official Media3 1.11.1 into the FongMi custom tree. FongMi-specific changes are retained when merge hunks conflict."
+          git -C sources/media log -1 --oneline
+
+      - name: Build Media3 and MPV release AARs
+        working-directory: sources/media
+        timeout-minutes: 80
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
+            :lib-common:assembleRelease \
+            :lib-container:assembleRelease \
+            :lib-database:assembleRelease \
+            :lib-datasource:assembleRelease \
+            :lib-datasource-okhttp:assembleRelease \
+            :lib-datasource-rtmp:assembleRelease \
+            :lib-decoder:assembleRelease \
+            :lib-decoder-ffmpeg:assembleRelease \
+            :lib-decoder-mpegh:assembleRelease \
+            :lib-effect:assembleRelease \
+            :lib-exoplayer:assembleRelease \
+            :lib-exoplayer-dash:assembleRelease \
+            :lib-exoplayer-hls:assembleRelease \
+            :lib-exoplayer-rtsp:assembleRelease \
+            :lib-exoplayer-smoothstreaming:assembleRelease \
+            :lib-extractor:assembleRelease \
+            :lib-mpvplayer:assembleRelease \
+            :lib-session:assembleRelease \
+            :lib-ui:assembleRelease \
+            :lib-ui-danmaku:assembleRelease
+
+          target="$GITHUB_WORKSPACE/sources/TV/app/libs"
+          mkdir -p "$target"
+          copied=0
+          while IFS= read -r aar_name; do
+            [[ -n "$aar_name" ]] || continue
+            aar_path=$(find libraries -type f -name "$aar_name" -print -quit)
+            if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
+              echo "Missing expected AAR: $aar_name" >&2
+              exit 1
+            fi
+            cp "$aar_path" "$target/$aar_name"
+            copied=$((copied + 1))
+          done < move.txt
+          if [[ "$copied" -ne 20 ]]; then
+            echo "Expected 20 Media3/MPV AARs but copied $copied." >&2
+            exit 1
+          fi
+          ls -lh "$target"/lib-*-release.aar
+
+      - name: Configure isolated R15 TV diagnostic package
+        working-directory: sources/TV
+        run: |
+          set -euo pipefail
+          mkdir -p "$GITHUB_WORKSPACE/sources"
+          keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-diag111.jks" \
+            -storepass "diag111-local-only" -keypass "diag111-local-only" -alias r15tv \
+            -keyalg RSA -keysize 2048 -validity 3650 \
+            -dname "CN=R15 TV Media3 1.11.1 Diagnostic, O=R15 TV, C=TW"
+          cat > local.properties <<EOF_PROPERTIES
+          sdk.dir=$ANDROID_HOME
+          storeFile=../r15tv-diag111.jks
+          keyAlias=r15tv
+          storePassword=diag111-local-only
+          keyPassword=diag111-local-only
+          EOF_PROPERTIES
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          gradle_file = Path("app/build.gradle")
+          text = gradle_file.read_text(encoding="utf-8")
+          app_id, n1 = re.subn(
+              r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$',
+              r'\g<1>"com.dicky.r15tv.diag111"',
+              text,
+              count=1,
+          )
+          app_id, n2 = re.subn(
+              r'(?m)^(\s*versionCode\s+)\d+\s*$',
+              r'\g<1>580111024',
+              app_id,
+              count=1,
+          )
+          app_id, n3 = re.subn(
+              r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
+              r'\g<1>"5.8.0-r15-media3-1.11.1"',
+              app_id,
+              count=1,
+          )
+          if (n1, n2, n3) != (1, 1, 1):
+              raise SystemExit(f"Expected one app id/version anchor, found {(n1,n2,n3)}")
+          gradle_file.write_text(app_id, encoding="utf-8")
+
+          label = "R15 TV Media3 1.11.1 診斷"
+          for path in Path("app/src/main/res").glob("values*/strings.xml"):
+              xml = path.read_text(encoding="utf-8")
+              updated = re.sub(
+                  r'(<string\s+name="app_name"[^>]*>).*?(</string>)',
+                  lambda m: m.group(1) + label + m.group(2),
+                  xml,
+                  count=1,
+                  flags=re.DOTALL,
+              )
+              if updated != xml:
+                  path.write_text(updated, encoding="utf-8")
+          print("Package: com.dicky.r15tv.diag111")
+          print("Label: " + label)
+          print("Source TV commit: 9c845a913337b2d994343b7885159c0a84681b93")
+          print("Media3 target: 1.11.1")
+          PY
+
+      - name: Keep a static Live PlayerView surface for Android 9 diagnostic
+        working-directory: sources/TV
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("app/src/leanback/res/layout/activity_live.xml")
+          text = path.read_text(encoding="utf-8")
+          current = 'app:surface_type="none"'
+          diagnostic = 'app:surface_type="surface_view"'
+          if diagnostic not in text:
+              count = text.count(current)
+              if count != 1:
+                  raise SystemExit(f"{path}: expected one surface_type=none anchor, found {count}")
+              text = text.replace(current, diagnostic, 1)
+              path.write_text(text, encoding="utf-8")
+          if diagnostic not in path.read_text(encoding="utf-8"):
+              raise SystemExit("Static SurfaceView diagnostic not applied")
+          PY
+
+      - name: Build Android TV ARMv7 diagnostic APK
+        working-directory: sources/TV
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:assembleLeanbackDebug
+          apk=""
+          while IFS= read -r -d '' candidate; do
+            if aapt dump badging "$candidate" | grep -Fq "native-code: 'armeabi-v7a'"; then
+              apk="$candidate"
+              break
+            fi
+          done < <(find app/build/outputs/apk -type f -name '*.apk' -print0)
+          if [[ -z "$apk" ]]; then
+            echo "Could not find the Leanback armeabi-v7a APK." >&2
+            find app/build/outputs/apk -type f -name '*.apk' -print >&2 || true
+            exit 1
+          fi
+          mkdir -p "$GITHUB_WORKSPACE/dist"
+          cp "$apk" "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk"
+          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | head -n 5
+          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "package: name='com.dicky.r15tv.diag111'"
+          unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
+          sha256sum "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | tee "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
+          cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
+          Build: R15 TV Media3 1.11.1 Runtime Diagnostic
+          TV source: FongMi/TV@$TV_SHA
+          Media3: AndroidX media tag $MEDIA3_TAG merged into FongMi/media@$MEDIA_SHA
+          Package: com.dicky.r15tv.diag111
+          Variant: Leanback ARMv7, debug-signed diagnostic only
+          Goal: compare the current TV runtime architecture and Media3 1.11.1 against the previous 5.6.1-based crashing build.
+          EOF_INFO
+
+      - name: Upload diagnostic APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15-TV-Media3-1.11.1-runtime-diagnostic
+          path: |
+            dist/R15-TV-Media3-1.11.1-ARMv7.apk
+            dist/BUILD_INFO.txt
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 30
