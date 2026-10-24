@@ -844,7 +844,7 @@ def main() -> None:
     if "R15CrashTrace" not in (tv / "app/src/main/java/com/fongmi/android/tv/App.java").read_text(encoding="utf-8"):
         raise SystemExit("R15CrashTrace uncaught-exception logging is missing")
     service_source = (tv / "app/src/main/java/com/fongmi/android/tv/service/PlaybackService.java").read_text(encoding="utf-8")
-    if "R15ServiceTrace" not in service_source or "before liveMetadata.cancel" not in service_source:
+    if "R15ServiceTrace" not in service_source or "before previous binding onReplaced" not in service_source or "after ActivityBinding assignment; claimBinding EXIT" not in service_source:
         raise SystemExit("PlaybackService.claimBinding stage tracing is missing")
     tvbus_source = (tv / "app/src/main/java/com/fongmi/android/tv/player/extractor/TVBus.java").read_text(encoding="utf-8")
     if "R15TvBusTrace" not in tvbus_source or "App.post(() -> System.exit(0), 100)" in tvbus_source:
