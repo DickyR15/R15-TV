@@ -1,5 +1,5 @@
-name: R15 TV Chaquopy Loader Mutex Diagnostic
-run-name: R15 TV Chaquopy Loader Mutex Diagnostic
+name: R15 TV Emulator EGL Isolation Diagnostic
+run-name: R15 TV Emulator EGL Isolation Diagnostic
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-chaquopy-loader-mutex-diagnostic-${{ github.run_id }}
+  group: r15tv-emulator-egl-isolation-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
@@ -25,7 +25,7 @@ env:
 
 jobs:
   build:
-    name: Build legacy R15 TV with serialized Chaquopy startup
+    name: Build legacy R15 TV with emulator crash isolation
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -75,7 +75,7 @@ jobs:
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
-          echo "Diagnostic target: legacy 5.6.1 source with in-process Chaquopy startup; test the startup serialization patch against the observed mutex abort."
+          echo "Diagnostic target: preserve Chaquopy initialization lock; disable app UI hardware acceleration and isolate MediaLibraryService into :playback to test the LDPlayer EGL/RenderThread crash."
 
       - name: Serialize Chaquopy startup and add diagnostics
         run: |
@@ -170,19 +170,19 @@ jobs:
           text = gradle_file.read_text(encoding="utf-8")
           app_id, n1 = re.subn(
               r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$',
-              r'\g<1>"com.dicky.r15tv.diag111"',
+              r'\g<1>"com.dicky.r15tv.diagemu"',
               text,
               count=1,
           )
           app_id, n2 = re.subn(
               r'(?m)^(\s*versionCode\s+)\d+\s*$',
-              r'\g<1>561112024',
+              r'\g<1>561112026',
               app_id,
               count=1,
           )
           app_id, n3 = re.subn(
               r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
-              r'\g<1>"5.6.1-r15-chaquopy-lock"',
+              r'\g<1>"5.6.1-r15-emu-egl-isolation"',
               app_id,
               count=1,
           )
@@ -190,7 +190,35 @@ jobs:
               raise SystemExit(f"Expected one app id/version anchor, found {(n1,n2,n3)}")
           gradle_file.write_text(app_id, encoding="utf-8")
 
-          label = "R15 TV Python 啟動診斷"
+          # LDPlayer logs show EGL_NOT_INITIALIZED followed by a RenderThread abort.
+          # Disable accelerated window rendering and move the media library service
+          # out of the UI process as a diagnostic isolation measure.
+          manifest_file = Path("app/src/main/AndroidManifest.xml")
+          manifest = manifest_file.read_text(encoding="utf-8")
+          manifest, hardware_count = re.subn(
+              r'(?s)(<application\b[^>]*android:hardwareAccelerated=")true(")',
+              r'\g<1>false\2',
+              manifest,
+              count=1,
+          )
+          if hardware_count != 1:
+              raise SystemExit(f"Expected one application hardwareAccelerated=true, got {hardware_count}")
+          manifest, service_count = re.subn(
+              r'(?s)(<service\b(?=[^>]*android:name="\.service\.PlaybackService")[^>]*)(>)',
+              lambda match: match.group(1) + '\n            android:process=":playback"' + match.group(2),
+              manifest,
+              count=1,
+          )
+          if service_count != 1:
+              raise SystemExit(f"Expected one PlaybackService declaration, got {service_count}")
+          if 'android:hardwareAccelerated="false"' not in manifest:
+              raise SystemExit("UI hardware acceleration flag did not validate")
+          if 'android:process=":playback"' not in manifest:
+              raise SystemExit("PlaybackService process isolation did not validate")
+          manifest_file.write_text(manifest, encoding="utf-8")
+          print("EGL isolation: application hardware acceleration disabled; PlaybackService moved to :playback")
+
+          label = "R15 TV 雷電閃退診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = path.read_text(encoding="utf-8")
               updated = re.sub(
@@ -202,13 +230,13 @@ jobs:
               )
               if updated != xml:
                   path.write_text(updated, encoding="utf-8")
-          print("Package: com.dicky.r15tv.diag111")
+          print("Package: com.dicky.r15tv.diagemu")
           print("Label: " + label)
           print("Source TV commit: fe6a5b235477c02633cf3bc50d4cd83414a521b4")
           print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
-      - name: Build Android TV ARM64 and ARMv7 diagnostic APKs
+      - name: Build Android TV ARM64 and ARMv7 emulator isolation APKs
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -243,33 +271,36 @@ jobs:
               exit 1
             fi
 
-            output="$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-${abi}.apk"
+            output="$GITHUB_WORKSPACE/dist/R15-TV-Emulator-EGL-Isolation-${abi}.apk"
             cp "$apk" "$output"
             badging=$(aapt dump badging "$output")
-            grep -Fq "package: name='com.dicky.r15tv.diag111'" <<<"$badging"
+            grep -Fq "package: name='com.dicky.r15tv.diagemu'" <<<"$badging"
             grep -Fq "native-code: '$abi'" <<<"$badging"
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
+            manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
+            grep -Eq 'android:hardwareAccelerated.*false' <<<"$manifest_dump"
+            grep -Eq 'android:process.*:playback' <<<"$manifest_dump"
             sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
             echo "Built and verified $abi: $output"
           done
 
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
-          Build: R15 TV Chaquopy Loader Mutex Diagnostic
+          Build: R15 TV Emulator EGL Isolation Diagnostic
           TV source: FongMi/TV@$TV_SHA
           Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
-          Package: com.dicky.r15tv.diag111
-          Variants: Leanback ARM64 and ARMv7, debug-signed diagnostic only
-          Goal: test serialized Chaquopy startup and trace native startup failures.
+          Package: com.dicky.r15tv.diagemu
+          Variants: Leanback ARM64 and ARMv7, debug-signed emulator stability diagnostic only
+          Goal: test serialized Chaquopy startup plus disabled UI hardware acceleration and a separate playback service process to reduce emulator EGL/RenderThread crashes.
           Test ARM64 APK on ARM64 Android TV hardware; the ARMv7 APK is for compatible 32-bit devices/emulators and may use translation on x86 emulators.
           EOF_INFO
 
       - name: Upload ARM64 and ARMv7 diagnostic APKs
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-Chaquopy-Loader-Diagnostics-ARM64-ARMv7
+          name: R15-TV-Emulator-EGL-Isolation-ARM64-ARMv7
           path: |
-            dist/R15-TV-Chaquopy-Loader-Lock-arm64-v8a.apk
-            dist/R15-TV-Chaquopy-Loader-Lock-armeabi-v7a.apk
+            dist/R15-TV-Emulator-EGL-Isolation-arm64-v8a.apk
+            dist/R15-TV-Emulator-EGL-Isolation-armeabi-v7a.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
