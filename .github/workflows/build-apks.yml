@@ -110,7 +110,7 @@ jobs:
             test -f sources/TV/app/libs/forcetech-release.aar
           fi
           test -f sources/TV/LICENSE.md
-          test -f sources/TV/chaquo/requirements.txt
+          test -f sources/TV/chaquo/build.gradle
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
@@ -294,7 +294,7 @@ jobs:
         with:
           python-version: "3.10"
           cache: pip
-          cache-dependency-path: sources/TV/chaquo/requirements.txt
+          cache-dependency-path: scripts/validate-ai-subtitle-config.py
 
       - name: Install latest OpenCC tooling and validate subtitle catalogs
         run: |
