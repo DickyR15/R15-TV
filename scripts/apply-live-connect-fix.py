@@ -731,7 +731,7 @@ def patch_live_exception_trace(tv: Path) -> None:
 
 
 def patch_playback_service_claim_binding_trace(tv: Path) -> None:
-    """Trace each step inside PlaybackService.claimBinding for native process exits."""
+    """Trace each step in the pinned upstream PlaybackService.claimBinding implementation."""
     path = tv / "app/src/main/java/com/fongmi/android/tv/service/PlaybackService.java"
     if not path.is_file():
         raise SystemExit(f"Missing PlaybackService source: {path}")
@@ -742,14 +742,12 @@ def patch_playback_service_claim_binding_trace(tv: Path) -> None:
             raise SystemExit(f"{path}: cannot safely add Log import")
         text = text.replace(anchor, anchor + "import android.util.Log;\n", 1)
 
+    # The workflow intentionally pins FongMi/TV@fe6a5b2. Its implementation
+    # predates the newer liveMetadata/saveProgress/cancelNavigation calls.
     old = """    public void claimBinding(NavigationCallback owner, Runnable onReplaced) {
         if (ownsBinding(owner)) return;
-        liveMetadata.cancel();
-        saveProgress();
-        cancelNavigation();
         if (binding != null) binding.onReplaced().run();
         binding = new ActivityBinding(owner, onReplaced);
-        player.resetDecoderModesForNewSession();
     }"""
     new = """    public void claimBinding(NavigationCallback owner, Runnable onReplaced) {
         Log.i("R15ServiceTrace", "claimBinding ENTER");
@@ -757,36 +755,34 @@ def patch_playback_service_claim_binding_trace(tv: Path) -> None:
             Log.i("R15ServiceTrace", "claimBinding already owned; EXIT");
             return;
         }
-        Log.i("R15ServiceTrace", "before liveMetadata.cancel");
-        liveMetadata.cancel();
-        Log.i("R15ServiceTrace", "after liveMetadata.cancel");
-        Log.i("R15ServiceTrace", "before saveProgress");
-        saveProgress();
-        Log.i("R15ServiceTrace", "after saveProgress");
-        Log.i("R15ServiceTrace", "before cancelNavigation");
-        cancelNavigation();
-        Log.i("R15ServiceTrace", "after cancelNavigation");
         if (binding != null) {
             Log.i("R15ServiceTrace", "before previous binding onReplaced");
             binding.onReplaced().run();
             Log.i("R15ServiceTrace", "after previous binding onReplaced");
         }
+        Log.i("R15ServiceTrace", "before ActivityBinding assignment");
         binding = new ActivityBinding(owner, onReplaced);
-        Log.i("R15ServiceTrace", "after binding assignment; before decoder reset");
-        player.resetDecoderModesForNewSession();
-        Log.i("R15ServiceTrace", "after player.resetDecoderModesForNewSession");
-        Log.i("R15ServiceTrace", "claimBinding EXIT");
+        Log.i("R15ServiceTrace", "after ActivityBinding assignment; claimBinding EXIT");
     }"""
     if "R15ServiceTrace" not in text:
         count = text.count(old)
         if count != 1:
-            raise SystemExit(f"{path}: expected exactly one claimBinding() body, found {count}")
+            raise SystemExit(
+                f"{path}: expected the pinned upstream claimBinding() body exactly once, found {count}"
+            )
         text = text.replace(old, new, 1)
     path.write_text(text, encoding="utf-8")
     verified = path.read_text(encoding="utf-8")
-    if "R15ServiceTrace" not in verified or "before liveMetadata.cancel" not in verified or "after player.resetDecoderModesForNewSession" not in verified:
-        raise SystemExit("PlaybackService claimBinding stage tracing was not applied")
-    print("DIAGNOSTIC BUILD: added step-by-step R15ServiceTrace checkpoints inside PlaybackService.claimBinding.")
+    for marker in (
+        "R15ServiceTrace",
+        "before previous binding onReplaced",
+        "after previous binding onReplaced",
+        "after ActivityBinding assignment; claimBinding EXIT",
+    ):
+        if marker not in verified:
+            raise SystemExit(f"PlaybackService claimBinding trace verification failed: {marker}")
+    print("DIAGNOSTIC BUILD: added claimBinding stage logs matching pinned FongMi/TV@fe6a5b2.")
+
 
 
 def main() -> None:
