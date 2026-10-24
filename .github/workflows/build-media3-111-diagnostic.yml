@@ -176,13 +176,13 @@ jobs:
           )
           app_id, n2 = re.subn(
               r'(?m)^(\s*versionCode\s+)\d+\s*$',
-              r'\g<1>580111024',
+              r'\g<1>561112024',
               app_id,
               count=1,
           )
           app_id, n3 = re.subn(
               r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
-              r'\g<1>"5.8.0-r15-media3-1.11.1"',
+              r'\g<1>"5.6.1-r15-chaquopy-lock"',
               app_id,
               count=1,
           )
@@ -230,10 +230,10 @@ jobs:
           fi
           mkdir -p "$GITHUB_WORKSPACE/dist"
           cp "$apk" "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk"
-          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | head -n 5
-          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "package: name='com.dicky.r15tv.diag111'"
-          unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
-          sha256sum "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | tee "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
+          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | head -n 5
+          aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | grep -Fq "package: name='com.dicky.r15tv.diag111'"
+          unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
+          sha256sum "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk" | tee "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
           Build: R15 TV Chaquopy Loader Mutex Diagnostic
           TV source: FongMi/TV@$TV_SHA
@@ -248,7 +248,7 @@ jobs:
         with:
           name: R15-TV-Chaquopy-Loader-Mutex-Diagnostic
           path: |
-            dist/R15-TV-Media3-1.11.1-ARMv7.apk
+            dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
