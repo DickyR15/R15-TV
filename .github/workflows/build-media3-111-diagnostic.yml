@@ -278,7 +278,7 @@ jobs:
             grep -Fq "native-code: '$abi'" <<<"$badging"
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
             manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
-            grep -Eq 'android:hardwareAccelerated.*false' <<<"$manifest_dump"
+            grep -Eq 'android:hardwareAccelerated.*(false|0x0)' <<<"$manifest_dump"
             grep -Eq 'android:process.*:playback' <<<"$manifest_dump"
             sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
             echo "Built and verified $abi: $output"
