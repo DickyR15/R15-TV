@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-chaquopy-loader-mutex-diagnostic
+  group: r15tv-chaquopy-loader-mutex-diagnostic-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
