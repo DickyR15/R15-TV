@@ -150,6 +150,24 @@ jobs:
           python3 -m py_compile scripts/apply-live-connect-fix.py
           python3 scripts/apply-live-connect-fix.py --tv-dir sources/TV --patch-dir patches/live-sources
           echo "Connect menu label/icon and live render compatibility fixes staged."
+          # Diagnostic only: declare the Live PlayerView surface before attaching the activity.
+          # The pinned PlayerView.setRender() dynamically replaces the SurfaceView when XML uses "none".
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("sources/TV/app/src/leanback/res/layout/activity_live.xml")
+          text = path.read_text(encoding="utf-8")
+          current = 'app:surface_type="none"'
+          diagnostic = 'app:surface_type="surface_view"'
+          if diagnostic not in text:
+              if text.count(current) != 1:
+                  raise SystemExit(f"{path}: expected one no-surface attribute, found {text.count(current)}")
+              text = text.replace(current, diagnostic, 1)
+              path.write_text(text, encoding="utf-8")
+          if diagnostic not in path.read_text(encoding="utf-8"):
+              raise SystemExit(f"{path}: static SurfaceView diagnostic did not apply")
+          print("DIAGNOSTIC ONLY: Leanback LiveActivity creates its SurfaceView from XML, avoiding the initial dynamic none-to-SurfaceView swap.")
+          PY
           mkdir -p sources/TV/app/src/main/assets
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
@@ -457,7 +475,7 @@ jobs:
           if diagnostic_soft_ui_surfaceview:
               print("DIAGNOSTIC ONLY: LiveActivity UI hardware acceleration is disabled; video uses SurfaceView; hardware acceleration remains enabled for other activities.")
           if diagnostic_exception_trace:
-              print("DIAGNOSTIC ONLY: Android 9 and older use TextureView with LiveActivity hardware acceleration enabled; uncaught exceptions and lifecycle checkpoints are logged under R15CrashTrace/R15LiveTrace.")
+              print("DIAGNOSTIC ONLY: Android 9 LiveActivity uses a statically declared SurfaceView with hardware acceleration enabled; uncaught exceptions and lifecycle checkpoints are logged under R15CrashTrace/R15LiveTrace.")
           if diagnostic_static_wallpaper:
               print("DIAGNOSTIC ONLY: animated video wallpaper is disabled; Android hardware acceleration remains enabled.")
           PY
