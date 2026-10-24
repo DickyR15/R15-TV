@@ -423,22 +423,36 @@ def patch_live_source_options(tv: Path) -> None:
         )
 
     parse_anchors = [
+        """        LiveParser.text(live, content.text());
+        setHome(config, live, false);""",
         """        LiveParser.text(live, text);
         setHome(config, live, false);""",
+        """        LiveParser.text(live, content.text());
+        setHome(config, live, true);""",
         """        LiveParser.text(live, text);
         setHome(config, live, true);""",
     ]
     if "applyR15SourceOptions(config, live);" not in config_text:
         matched = next((anchor for anchor in parse_anchors if config_text.count(anchor) == 1), None)
         if matched is None:
-            raise SystemExit(f"{live_config}: cannot find a supported LiveConfig parse anchor")
-        config_text = replace_once(
-            config_text,
-            matched,
-            matched + """
+            # Upstream 5.8.1 moved URL decoding to Decoder.Content; use the exact,
+            # unique LiveParser.text call as a stable semantic insertion point.
+            parse_line = "        LiveParser.text(live, content.text());"
+            if config_text.count(parse_line) != 1:
+                raise SystemExit(f"{live_config}: cannot locate the upstream LiveParser.text call")
+            config_text = config_text.replace(
+                parse_line,
+                parse_line + "\n        applyR15SourceOptions(config, live);",
+                1,
+            )
+        else:
+            config_text = replace_once(
+                config_text,
+                matched,
+                matched + """
         applyR15SourceOptions(config, live);""",
-            live_config,
-        )
+                live_config,
+            )
 
     json_home_anchor = """        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);"""
     json_home_replacement = json_home_anchor + """
