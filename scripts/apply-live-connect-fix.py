@@ -729,6 +729,66 @@ def patch_live_exception_trace(tv: Path) -> None:
     print("DIAGNOSTIC BUILD: installed R15CrashTrace uncaught-exception logger and R15LiveTrace lifecycle/player-service checkpoints.")
 
 
+
+def patch_playback_service_claim_binding_trace(tv: Path) -> None:
+    """Trace each step inside PlaybackService.claimBinding for native process exits."""
+    path = tv / "app/src/main/java/com/fongmi/android/tv/service/PlaybackService.java"
+    if not path.is_file():
+        raise SystemExit(f"Missing PlaybackService source: {path}")
+    text = path.read_text(encoding="utf-8")
+    if "import android.util.Log;" not in text:
+        anchor = "import android.os.IBinder;\n"
+        if text.count(anchor) != 1:
+            raise SystemExit(f"{path}: cannot safely add Log import")
+        text = text.replace(anchor, anchor + "import android.util.Log;\n", 1)
+
+    old = """    public void claimBinding(NavigationCallback owner, Runnable onReplaced) {
+        if (ownsBinding(owner)) return;
+        liveMetadata.cancel();
+        saveProgress();
+        cancelNavigation();
+        if (binding != null) binding.onReplaced().run();
+        binding = new ActivityBinding(owner, onReplaced);
+        player.resetDecoderModesForNewSession();
+    }"""
+    new = """    public void claimBinding(NavigationCallback owner, Runnable onReplaced) {
+        Log.i("R15ServiceTrace", "claimBinding ENTER");
+        if (ownsBinding(owner)) {
+            Log.i("R15ServiceTrace", "claimBinding already owned; EXIT");
+            return;
+        }
+        Log.i("R15ServiceTrace", "before liveMetadata.cancel");
+        liveMetadata.cancel();
+        Log.i("R15ServiceTrace", "after liveMetadata.cancel");
+        Log.i("R15ServiceTrace", "before saveProgress");
+        saveProgress();
+        Log.i("R15ServiceTrace", "after saveProgress");
+        Log.i("R15ServiceTrace", "before cancelNavigation");
+        cancelNavigation();
+        Log.i("R15ServiceTrace", "after cancelNavigation");
+        if (binding != null) {
+            Log.i("R15ServiceTrace", "before previous binding onReplaced");
+            binding.onReplaced().run();
+            Log.i("R15ServiceTrace", "after previous binding onReplaced");
+        }
+        binding = new ActivityBinding(owner, onReplaced);
+        Log.i("R15ServiceTrace", "after binding assignment; before decoder reset");
+        player.resetDecoderModesForNewSession();
+        Log.i("R15ServiceTrace", "after player.resetDecoderModesForNewSession");
+        Log.i("R15ServiceTrace", "claimBinding EXIT");
+    }"""
+    if "R15ServiceTrace" not in text:
+        count = text.count(old)
+        if count != 1:
+            raise SystemExit(f"{path}: expected exactly one claimBinding() body, found {count}")
+        text = text.replace(old, new, 1)
+    path.write_text(text, encoding="utf-8")
+    verified = path.read_text(encoding="utf-8")
+    if "R15ServiceTrace" not in verified or "before liveMetadata.cancel" not in verified or "after player.resetDecoderModesForNewSession" not in verified:
+        raise SystemExit("PlaybackService claimBinding stage tracing was not applied")
+    print("DIAGNOSTIC BUILD: added step-by-step R15ServiceTrace checkpoints inside PlaybackService.claimBinding.")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
@@ -769,6 +829,7 @@ def main() -> None:
     patch_live_activity_software_rendering_diagnostic(tv)
     patch_live_player_keep_frame(tv)
     patch_live_exception_trace(tv)
+    patch_playback_service_claim_binding_trace(tv)
     enable_jetifier(gradle_properties)
 
     # Sanity checks: menu label/icon, default wallpaper and duplicate-ID fix.
@@ -786,6 +847,9 @@ def main() -> None:
         raise SystemExit("R15LiveTrace instrumentation is missing")
     if "R15CrashTrace" not in (tv / "app/src/main/java/com/fongmi/android/tv/App.java").read_text(encoding="utf-8"):
         raise SystemExit("R15CrashTrace uncaught-exception logging is missing")
+    service_source = (tv / "app/src/main/java/com/fongmi/android/tv/service/PlaybackService.java").read_text(encoding="utf-8")
+    if "R15ServiceTrace" not in service_source or "before liveMetadata.cancel" not in service_source:
+        raise SystemExit("PlaybackService.claimBinding stage tracing is missing")
     tvbus_source = (tv / "app/src/main/java/com/fongmi/android/tv/player/extractor/TVBus.java").read_text(encoding="utf-8")
     if "R15TvBusTrace" not in tvbus_source or "App.post(() -> System.exit(0), 100)" in tvbus_source:
         raise SystemExit("TVBus in-process core reload fix is missing")
