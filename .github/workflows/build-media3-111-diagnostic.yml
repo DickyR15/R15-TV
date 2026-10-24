@@ -1,5 +1,5 @@
 name: R15 TV Chaquopy Loader Mutex Diagnostic
-run-name: R15 TV Media3 1.11.1 Runtime Diagnostic
+run-name: R15 TV Chaquopy Loader Mutex Diagnostic
 
 on:
   push:
@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-media3-111-runtime-diagnostic
+  group: r15tv-chaquopy-loader-mutex-diagnostic
   cancel-in-progress: false
 
 env:
@@ -25,7 +25,7 @@ env:
 
 jobs:
   build:
-    name: Build current FongMi TV source with Media3 1.11.1
+    name: Build legacy R15 TV with serialized Chaquopy startup
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -154,7 +154,7 @@ jobs:
           keytool -genkeypair -noprompt -keystore "$GITHUB_WORKSPACE/sources/r15tv-diag111.jks" \
             -storepass "diag111-local-only" -keypass "diag111-local-only" -alias r15tv \
             -keyalg RSA -keysize 2048 -validity 3650 \
-            -dname "CN=R15 TV Media3 1.11.1 Diagnostic, O=R15 TV, C=TW"
+            -dname "CN=R15 TV Chaquopy Loader Diagnostic, O=R15 TV, C=TW"
           cat > local.properties <<EOF_PROPERTIES
           sdk.dir=$ANDROID_HOME
           storeFile=../r15tv-diag111.jks
@@ -204,8 +204,8 @@ jobs:
                   path.write_text(updated, encoding="utf-8")
           print("Package: com.dicky.r15tv.diag111")
           print("Label: " + label)
-          print("Source TV commit: 9c845a913337b2d994343b7885159c0a84681b93")
-          print("Media3 target: 1.11.1")
+          print("Source TV commit: fe6a5b235477c02633cf3bc50d4cd83414a521b4")
+          print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
       - name: Build Android TV ARMv7 diagnostic APK
@@ -229,7 +229,7 @@ jobs:
             exit 1
           fi
           mkdir -p "$GITHUB_WORKSPACE/dist"
-          cp "$apk" "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk"
+          cp "$apk" "$GITHUB_WORKSPACE/dist/R15-TV-Chaquopy-Loader-Lock-ARMv7.apk"
           aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | head -n 5
           aapt dump badging "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "package: name='com.dicky.r15tv.diag111'"
           unzip -Z1 "$GITHUB_WORKSPACE/dist/R15-TV-Media3-1.11.1-ARMv7.apk" | grep -Fq "lib/armeabi-v7a/"
@@ -237,16 +237,16 @@ jobs:
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
           Build: R15 TV Chaquopy Loader Mutex Diagnostic
           TV source: FongMi/TV@$TV_SHA
-          Media3: AndroidX media tag $MEDIA3_TAG merged into FongMi/media@$MEDIA_SHA
+          Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
           Package: com.dicky.r15tv.diag111
           Variant: Leanback ARMv7, debug-signed diagnostic only
-          Goal: compare the current TV runtime architecture and Media3 1.11.1 against the previous 5.6.1-based crashing build.
+          Goal: test whether serializing in-process Chaquopy startup avoids the observed destroyed-mutex abort; includes startup trace markers.
           EOF_INFO
 
       - name: Upload diagnostic APK
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-Media3-1.11.1-runtime-diagnostic
+          name: R15-TV-Chaquopy-Loader-Mutex-Diagnostic
           path: |
             dist/R15-TV-Media3-1.11.1-ARMv7.apk
             dist/BUILD_INFO.txt
