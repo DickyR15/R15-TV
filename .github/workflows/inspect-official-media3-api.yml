@@ -1,0 +1,115 @@
+name: Inspect official FongMi 5.8.1 Media3 APIs
+run-name: Inspect official 5.8.1 Media3 APIs
+
+on:
+  push:
+    branches:
+      - "diagnostic/live-v7a-fixed-debug-sign"
+    paths:
+      - ".github/workflows/inspect-official-media3-api.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  inspect:
+    name: Inspect official 5.8.1 APK and missing Media3 APIs
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Download and verify official 5.8.1 TV APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build dist
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/FongMi/Release/releases/download/5.8.1/leanback-armeabi_v7a.apk" \
+            -o build/official-5.8.1-leanback-armeabi_v7a.apk
+          echo "3c87066f36c88e02dc0e8986d2dbd19dd1930c7b383c4965fd392ef08a174959  build/official-5.8.1-leanback-armeabi_v7a.apk" | sha256sum --check
+          cp build/official-5.8.1-leanback-armeabi_v7a.apk dist/
+
+      - name: Download JADX and inspect the APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/skylot/jadx/releases/download/v1.5.6/jadx-1.5.6.zip" \
+            -o build/jadx.zip
+          unzip -q build/jadx.zip -d build/jadx
+          JADX_BIN="$(find build/jadx -type f -path '*/bin/jadx' -print -quit)"
+          test -n "$JADX_BIN"
+          chmod +x "$JADX_BIN"
+          if "$JADX_BIN" --show-bad-code -d build/official-sources build/official-5.8.1-leanback-armeabi_v7a.apk; then
+            echo "JADX decompilation completed."
+          else
+            STATUS=$?
+            if [[ "$STATUS" -eq 3 && -d build/official-sources ]]; then
+              echo "::warning::JADX reported partial decompilation (exit 3); retaining available output."
+            else
+              echo "JADX failed (exit $STATUS)." >&2
+              exit "$STATUS"
+            fi
+          fi
+
+      - name: Collect Media3 API reference sources and inventory
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+          import json
+
+          root = Path("build/official-sources")
+          out = Path("dist/official-media3-api-reference")
+          names = {
+              "AudioChannelMode.java", "AudioChannelMix.java", "AudioEffectParameters.java",
+              "DecoderMode.java", "DecoderManager.java", "DecoderFallback.java",
+              "DiscMenuController.java", "DiscMenuState.java", "MediaChapter.java",
+              "MediaEdition.java", "SubtitleContent.java", "SubtitleOffsets.java",
+              "SubtitleSelectionState.java", "VideoAdjustment.java",
+              "LibassConfiguration.java", "LibassPlaybackSession.java",
+              "LibassSubtitleController.java", "SubtitleTranscriptSession.java",
+              "SecondaryTextOutput.java", "SecondaryTextTrackSelector.java",
+              "IsoDiscPreparation.java", "IsoNavigationSession.java",
+              "NativeUdfFileSystem.java", "CmgNativeRuntime.java",
+              "FfmpegDolbyVisionP5Native.java",
+          }
+          hits = []
+          for file in root.rglob("*.java"):
+              if file.name in names and "androidx/media3/" in file.as_posix():
+                  relative = file.relative_to(root)
+                  target = out / relative
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_text(file.read_text(encoding="utf-8", errors="replace"), encoding="utf-8")
+                  hits.append({"name": file.name, "path": relative.as_posix(), "bytes": file.stat().st_size})
+          out.mkdir(parents=True, exist_ok=True)
+          (out / "inventory.json").write_text(json.dumps({
+              "officialRelease": "FongMi/Release 5.8.1",
+              "sourceApkSha256": "3c87066f36c88e02dc0e8986d2dbd19dd1930c7b383c4965fd392ef08a174959",
+              "matchingClassCount": len(hits),
+              "classes": sorted(hits, key=lambda x: x["name"])
+          }, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+          print(f"Collected {len(hits)} selected Media3 API reference classes.")
+          for item in sorted(hits, key=lambda x: x["name"]):
+              print(f"{item['name']}\t{item['bytes']}\t{item['path']}")
+          PY
+          unzip -l dist/official-5.8.1-leanback-armeabi_v7a.apk > dist/official-apk-inventory.txt
+
+      - name: Upload official APK and API reference artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: Official-FongMi-5.8.1-Media3-API-Reference
+          path: |
+            dist/official-5.8.1-leanback-armeabi_v7a.apk
+            dist/official-apk-inventory.txt
+            dist/official-media3-api-reference/
+          if-no-files-found: error
+          retention-days: 7
