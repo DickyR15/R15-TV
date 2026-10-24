@@ -206,7 +206,7 @@ jobs:
           manifest_file.write_text(manifest, encoding="utf-8")
           print("EGL test: application hardware acceleration disabled; PlaybackService remains in default process.")
 
-          label = "R15 TV 雷電閃退診斷"
+          label = "R15 TV 5.8.1 雷電閃退診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
               xml = path.read_text(encoding="utf-8")
               updated = re.sub(
