@@ -20,7 +20,7 @@ env:
   TV_REPOSITORY: FongMi/TV
   TV_SHA: 412e7d6b32ca545fbffc216b12b854a85a305ed1
   MEDIA_REPOSITORY: FongMi/media
-  MEDIA_SHA: ef58e5551f9a9d8679821b38422c06373185a04e
+  MEDIA_SHA: 2bc207851df311340767e913931ca7b28cab1794
   NDK_VERSION: 29.0.14206865
 
 jobs:
@@ -105,9 +105,9 @@ jobs:
           git -C sources/media fetch --depth=1 fongmi "$MEDIA_SHA"
           git -C sources/media checkout --detach FETCH_HEAD
           test "$(git -C sources/media rev-parse HEAD)" = "$MEDIA_SHA"
-          grep -Fq 'releaseVersion = "1.12.0"' sources/media/gradle/libs.versions.toml
-          echo "Pinned compatible media source: FongMi/media@$MEDIA_SHA (Media3 1.12.0).";
-      - name: Build FongMi Media3 1.12.0 and MPV AARs matching 5.8.1 player APIs
+          grep -Fq 'releaseVersion = "1.11.0"' sources/media/gradle/libs.versions.toml
+          echo "Pinned compatible media source: FongMi/media@$MEDIA_SHA (Media3 1.11.0).";
+      - name: Build FongMi Media3 1.11.0 and MPV AARs with verifiable upstream commit
         working-directory: sources/media
         timeout-minutes: 80
         env:
@@ -275,7 +275,7 @@ jobs:
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
           Build: R15 TV 5.8.1 Clean Baseline Diagnostic
           TV source: FongMi/TV@$TV_SHA (versionCode 581, versionName 5.8.1)
-          Media3: compatible FongMi/media@$MEDIA_SHA (1.12.0)
+          Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
           Package: com.dicky.r15tv.base581
           Variants: Leanback ARM64 and ARMv7, debug-signed clean source baseline only
           Goal: exact FongMi/TV 5.8.1 source; no local Loader.java or AndroidManifest.xml modifications. Isolates whether the previous crash was caused by the legacy source/patch workflow.
