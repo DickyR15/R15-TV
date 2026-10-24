@@ -105,7 +105,10 @@ jobs:
           test "$actual_sha" = "$EXPECTED_SHA"
           test -f sources/TV/gradlew
           test -f sources/TV/app/build.gradle
-          test -f sources/TV/app/libs/forcetech-release.aar
+          # ForceTech AAR exists in older upstream revisions but was removed from current FongMi/TV.
+          if grep -R -Fq "forcetech-release.aar" sources/TV/app/build.gradle sources/TV/app/*.gradle; then
+            test -f sources/TV/app/libs/forcetech-release.aar
+          fi
           test -f sources/TV/LICENSE.md
           test -f sources/TV/chaquo/requirements.txt
           chmod +x sources/TV/gradlew
