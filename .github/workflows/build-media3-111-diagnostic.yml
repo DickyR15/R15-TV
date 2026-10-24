@@ -1,5 +1,5 @@
-name: R15 TV Emulator EGL Isolation Diagnostic
-run-name: R15 TV Emulator EGL Isolation Diagnostic
+name: R15 TV 5.8.1 LDPlayer Crash Diagnostic
+run-name: R15 TV 5.8.1 LDPlayer Crash Diagnostic
 
 on:
   push:
@@ -13,19 +13,19 @@ permissions:
   contents: read
 
 concurrency:
-  group: r15tv-emulator-egl-isolation-${{ github.run_id }}
+  group: r15tv-581-ldplayer-crash-${{ github.run_id }}
   cancel-in-progress: false
 
 env:
   TV_REPOSITORY: FongMi/TV
-  TV_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
+  TV_SHA: 2d0bbcf0556b4ac3ab6b3b307436d70d78c78c24
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
   NDK_VERSION: 29.0.14206865
 
 jobs:
   build:
-    name: Build legacy R15 TV with emulator crash isolation
+    name: Build FongMi TV 5.8.x with LDPlayer crash diagnostics
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
@@ -75,7 +75,7 @@ jobs:
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java
           echo "TV source pinned to $TV_REPOSITORY@$TV_SHA"
-          echo "Diagnostic target: preserve Chaquopy initialization lock; disable app UI hardware acceleration and isolate MediaLibraryService into :playback to test the LDPlayer EGL/RenderThread crash."
+          echo "Use FongMi 5.8.x baseline; preserve same-process PlaybackService LocalBinder semantics. Test UI software rendering for the LDPlayer EGL/RenderThread crash."
 
       - name: Serialize Chaquopy startup and add diagnostics
         run: |
@@ -170,19 +170,19 @@ jobs:
           text = gradle_file.read_text(encoding="utf-8")
           app_id, n1 = re.subn(
               r'(?m)^(\s*applicationId\s+)"[^"]+"\s*$',
-              r'\g<1>"com.dicky.r15tv.diagemu"',
+              r'\g<1>"com.dicky.r15tv.diag581"',
               text,
               count=1,
           )
           app_id, n2 = re.subn(
               r'(?m)^(\s*versionCode\s+)\d+\s*$',
-              r'\g<1>561112026',
+              r'\g<1>581102426',
               app_id,
               count=1,
           )
           app_id, n3 = re.subn(
               r'(?m)^(\s*versionName\s+)"[^"]+"\s*$',
-              r'\g<1>"5.6.1-r15-emu-egl-isolation"',
+              r'\g<1>"5.8.1-r15-ldplayer-egl-test"',
               app_id,
               count=1,
           )
@@ -191,8 +191,8 @@ jobs:
           gradle_file.write_text(app_id, encoding="utf-8")
 
           # LDPlayer logs show EGL_NOT_INITIALIZED followed by a RenderThread abort.
-          # Disable accelerated window rendering and move the media library service
-          # out of the UI process as a diagnostic isolation measure.
+          # Disable hardware acceleration for UI only. PlaybackService must remain
+          # in the default process because activities cast its binder to LocalBinder.
           manifest_file = Path("app/src/main/AndroidManifest.xml")
           manifest = manifest_file.read_text(encoding="utf-8")
           manifest, hardware_count = re.subn(
@@ -203,20 +203,10 @@ jobs:
           )
           if hardware_count != 1:
               raise SystemExit(f"Expected one application hardwareAccelerated=true, got {hardware_count}")
-          manifest, service_count = re.subn(
-              r'(?s)(<service\b(?=[^>]*android:name="\.service\.PlaybackService")[^>]*)(>)',
-              lambda match: match.group(1) + '\n            android:process=":playback"' + match.group(2),
-              manifest,
-              count=1,
-          )
-          if service_count != 1:
-              raise SystemExit(f"Expected one PlaybackService declaration, got {service_count}")
-          if 'android:hardwareAccelerated="false"' not in manifest:
-              raise SystemExit("UI hardware acceleration flag did not validate")
-          if 'android:process=":playback"' not in manifest:
-              raise SystemExit("PlaybackService process isolation did not validate")
+          if 'android:process=":playback"' in manifest:
+              raise SystemExit("PlaybackService must remain in the default process; LocalBinder is used.")
           manifest_file.write_text(manifest, encoding="utf-8")
-          print("EGL isolation: application hardware acceleration disabled; PlaybackService moved to :playback")
+          print("EGL test: application hardware acceleration disabled; PlaybackService remains in default process.")
 
           label = "R15 TV 雷電閃退診斷"
           for path in Path("app/src/main/res").glob("values*/strings.xml"):
@@ -230,13 +220,13 @@ jobs:
               )
               if updated != xml:
                   path.write_text(updated, encoding="utf-8")
-          print("Package: com.dicky.r15tv.diagemu")
+          print("Package: com.dicky.r15tv.diag581")
           print("Label: " + label)
-          print("Source TV commit: fe6a5b235477c02633cf3bc50d4cd83414a521b4")
+          print("Source TV commit: 2d0bbcf0556b4ac3ab6b3b307436d70d78c78c24 (5.8.x branch baseline)")
           print("Media3 compatibility target: FongMi/media 1.11.0")
           PY
 
-      - name: Build Android TV ARM64 and ARMv7 emulator isolation APKs
+      - name: Build Android TV ARM64 and ARMv7 LDPlayer diagnostic APKs
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
@@ -271,36 +261,39 @@ jobs:
               exit 1
             fi
 
-            output="$GITHUB_WORKSPACE/dist/R15-TV-Emulator-EGL-Isolation-${abi}.apk"
+            output="$GITHUB_WORKSPACE/dist/R15-TV-5.8.1-LDPlayer-Crash-${abi}.apk"
             cp "$apk" "$output"
             badging=$(aapt dump badging "$output")
-            grep -Fq "package: name='com.dicky.r15tv.diagemu'" <<<"$badging"
+            grep -Fq "package: name='com.dicky.r15tv.diag581'" <<<"$badging"
             grep -Fq "native-code: '$abi'" <<<"$badging"
             unzip -Z1 "$output" | grep -Fq "lib/$abi/"
             manifest_dump=$(aapt dump xmltree "$output" AndroidManifest.xml)
             grep -Eq 'android:hardwareAccelerated.*(false|0x0)' <<<"$manifest_dump"
-            grep -Eq 'android:process.*:playback' <<<"$manifest_dump"
+            if grep -Eq 'android:process.*:playback' <<<"$manifest_dump"; then
+              echo "PlaybackService must remain in the default process." >&2
+              exit 1
+            fi
             sha256sum "$output" | tee -a "$GITHUB_WORKSPACE/dist/SHA256SUMS.txt"
             echo "Built and verified $abi: $output"
           done
 
           cat > "$GITHUB_WORKSPACE/dist/BUILD_INFO.txt" <<EOF_INFO
-          Build: R15 TV Emulator EGL Isolation Diagnostic
+          Build: R15 TV 5.8.1 LDPlayer Crash Diagnostic
           TV source: FongMi/TV@$TV_SHA
           Media3: compatible FongMi/media@$MEDIA_SHA (1.11.0)
-          Package: com.dicky.r15tv.diagemu
-          Variants: Leanback ARM64 and ARMv7, debug-signed emulator stability diagnostic only
-          Goal: test serialized Chaquopy startup plus disabled UI hardware acceleration and a separate playback service process to reduce emulator EGL/RenderThread crashes.
-          Test ARM64 APK on ARM64 Android TV hardware; the ARMv7 APK is for compatible 32-bit devices/emulators and may use translation on x86 emulators.
+          Package: com.dicky.r15tv.diag581
+          Variants: Leanback ARM64 and ARMv7, debug-signed LDPlayer stability diagnostic only
+          Goal: start from FongMi 5.8.x source, retain PlaybackService in the app process, preserve Chaquopy initialization synchronization, and test UI software rendering against LDPlayer EGL/RenderThread crashes.
+          Test armeabi-v7a first on LDPlayer Android 9 API 28. This diagnostic package is side-by-side and does not inherit original app settings.
           EOF_INFO
 
       - name: Upload ARM64 and ARMv7 diagnostic APKs
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-Emulator-EGL-Isolation-ARM64-ARMv7
+          name: R15-TV-5.8.1-LDPlayer-Crash-ARM64-ARMv7
           path: |
-            dist/R15-TV-Emulator-EGL-Isolation-arm64-v8a.apk
-            dist/R15-TV-Emulator-EGL-Isolation-armeabi-v7a.apk
+            dist/R15-TV-5.8.1-LDPlayer-Crash-arm64-v8a.apk
+            dist/R15-TV-5.8.1-LDPlayer-Crash-armeabi-v7a.apk
             dist/BUILD_INFO.txt
             dist/SHA256SUMS.txt
           if-no-files-found: error
