@@ -9,8 +9,8 @@ import com.google.mlkit.nl.translate.TranslateLanguage;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.TranslatorOptions;
-import com.github.qichuan.androidopencc.lib.ChineseConverter;
-import com.github.qichuan.androidopencc.lib.ConversionType;
+import com.zqc.opencc.android.lib.ChineseConverter;
+import com.zqc.opencc.android.lib.ConversionType;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
