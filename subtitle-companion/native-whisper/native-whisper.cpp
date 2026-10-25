@@ -28,10 +28,18 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeCreateContext(
 
     whisper_context_params context_params = whisper_context_default_params();
     context_params.use_gpu = false;
+    const auto load_started = std::chrono::steady_clock::now();
+    __android_log_print(ANDROID_LOG_INFO, R15_WHISPER_LOG_TAG, "model_load_start");
     whisper_context *context = whisper_init_from_file_with_params(path, context_params);
+    const auto load_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - load_started).count();
+    __android_log_print(ANDROID_LOG_INFO, R15_WHISPER_LOG_TAG,
+            "model_load_done ok=%d elapsed_ms=%lld",
+            context != nullptr, static_cast<long long>(load_elapsed));
     env->ReleaseStringUTFChars(model_path, path);
 
     if (context == nullptr) {
+        __android_log_print(ANDROID_LOG_ERROR, R15_WHISPER_LOG_TAG, "model_load_failed");
         throwIllegalState(env, "Whisper 無法載入模型；請重新下載 Whisper Base");
         return 0;
     }
