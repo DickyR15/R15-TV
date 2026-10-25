@@ -100,7 +100,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          set +o pipefail
           yes | sdkmanager --licenses >/dev/null
+          set -o pipefail
           sdkmanager "platform-tools" "build-tools;36.0.0"
           echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
 
