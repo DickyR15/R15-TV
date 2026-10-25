@@ -32,9 +32,9 @@ env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
   NDK_VERSION: 29.0.14206865
-  # Diagnostic-only pin: last public TV snapshot proven to compile with the pinned Media3 tree.
-  # The newer 9c845a9 TV source references Media3 APIs missing from public media commit 3c2cbe8.
-  SOURCE_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
+  # R15 TV migration: pin to the author-updated public upstream tree from the 5.8.2 era.
+  # The 5.8.2 release notes call out live/timeshift stability and updated FFmpeg/MPV.
+  SOURCE_SHA: ef58e5551f9a9d8679821b38422c06373185a04e
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
@@ -69,7 +69,7 @@ jobs:
           jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$PINNED_SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
           echo "Pinned public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${PINNED_SOURCE_SHA}"
-          echo "Reason: use the TV revision compatible with FongMi's pinned Media3/libass source."
+          echo "Reason: rebuild R15 TV from the upstream 5.8.2-era source while retaining R15 branding, Taiwan localization, AI subtitles, and settings integrations."
 
       - name: Fetch public FongMi/TV source without credentials
         env:
@@ -150,24 +150,7 @@ jobs:
           python3 -m py_compile scripts/apply-live-connect-fix.py
           python3 scripts/apply-live-connect-fix.py --tv-dir sources/TV --patch-dir patches/live-sources
           echo "Connect menu label/icon and live render compatibility fixes staged."
-          # Diagnostic only: declare the Live PlayerView surface before attaching the activity.
-          # The pinned PlayerView.setRender() dynamically replaces the SurfaceView when XML uses "none".
-          python3 - <<'PY'
-          from pathlib import Path
-
-          path = Path("sources/TV/app/src/leanback/res/layout/activity_live.xml")
-          text = path.read_text(encoding="utf-8")
-          current = 'app:surface_type="none"'
-          diagnostic = 'app:surface_type="surface_view"'
-          if diagnostic not in text:
-              if text.count(current) != 1:
-                  raise SystemExit(f"{path}: expected one no-surface attribute, found {text.count(current)}")
-              text = text.replace(current, diagnostic, 1)
-              path.write_text(text, encoding="utf-8")
-          if diagnostic not in path.read_text(encoding="utf-8"):
-              raise SystemExit(f"{path}: static SurfaceView diagnostic did not apply")
-          print("DIAGNOSTIC ONLY: Leanback LiveActivity creates its SurfaceView from XML, avoiding the initial dynamic none-to-SurfaceView swap.")
-          PY
+          # Use the upstream 5.8.2-era player/render defaults; do not force a diagnostic-only surface override.
           mkdir -p sources/TV/app/src/main/assets
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
@@ -192,63 +175,12 @@ jobs:
           # Android setup installs build-tools but does not always add its tools to PATH.
           echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
 
-      - name: Build official FongMi Media3 and MPV AAR dependencies
-        working-directory: sources/media
-        timeout-minutes: 20
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+      - name: Verify Media3 dependencies declared by upstream TV source
+        working-directory: sources/TV
         run: |
           set -euo pipefail
-          chmod +x gradlew
-          timeout 75m ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
-            :lib-common:assembleRelease \
-            :lib-container:assembleRelease \
-            :lib-database:assembleRelease \
-            :lib-datasource:assembleRelease \
-            :lib-datasource-okhttp:assembleRelease \
-            :lib-datasource-rtmp:assembleRelease \
-            :lib-decoder:assembleRelease \
-            :lib-decoder-ffmpeg:assembleRelease \
-            :lib-decoder-mpegh:assembleRelease \
-            :lib-effect:assembleRelease \
-            :lib-exoplayer:assembleRelease \
-            :lib-exoplayer-dash:assembleRelease \
-            :lib-exoplayer-hls:assembleRelease \
-            :lib-exoplayer-rtsp:assembleRelease \
-            :lib-exoplayer-smoothstreaming:assembleRelease \
-            :lib-extractor:assembleRelease \
-            :lib-mpvplayer:assembleRelease \
-            :lib-session:assembleRelease \
-            :lib-ui:assembleRelease \
-            :lib-ui-danmaku:assembleRelease
-
-          target="$GITHUB_WORKSPACE/sources/TV/app/libs"
-          mkdir -p "$target"
-          copied=0
-          while IFS= read -r aar_name; do
-            [[ -n "$aar_name" ]] || continue
-            module="${aar_name#lib-}"
-            module="${module%-release.aar}"
-            module_dir="${module//-/_}"
-            aar_path="libraries/$module_dir/buildout/outputs/aar/$aar_name"
-            if [[ ! -f "$aar_path" ]]; then
-              aar_path=$(find libraries -type f -name "$aar_name" -print -quit)
-            fi
-            if [[ -z "$aar_path" || ! -f "$aar_path" ]]; then
-              echo "Missing expected AAR: $aar_name" >&2
-              exit 1
-            fi
-            cp "$aar_path" "$target/$aar_name"
-            copied=$((copied + 1))
-          done < move.txt
-
-          if [[ "$copied" -ne 20 ]]; then
-            echo "Expected 20 Media3/MPV AARs, copied $copied." >&2
-            exit 1
-          fi
-          echo "Copied $copied pinned Media3/MPV AARs into app/libs:"
-          ls -lh "$target"/lib-*-release.aar
-          sha256sum "$target"/lib-*-release.aar
+          grep -R -n -E 'media3|mpvplayer|libass' app/build.gradle gradle/libs.versions.toml app/libs 2>/dev/null | head -120 || true
+          echo "Use the source-compatible dependencies declared by the chosen upstream TV commit; do not inject an independently built, mismatched Media3 tree."
 
       - name: Fetch official OpenCC 1.4.2 source
         env:
