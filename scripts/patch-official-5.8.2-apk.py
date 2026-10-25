@@ -126,13 +126,16 @@ def patch_apktool_metadata(decoded: Path, run_number: int) -> None:
     version_name = f"5.8.2-r15.{run_number}"
     for key, value in (("versionCode", str(version_code)), ("versionName", version_name)):
         pattern = re.compile(rf"(?m)^(\s*{key}:\s*).*$")
-        text, count = pattern.subn(lambda match: match.group(1) + "'" + value + "'", text, count=1)
+        rendered = value if key == "versionCode" else "'" + value + "'"
+        text, count = pattern.subn(lambda match: match.group(1) + rendered, text, count=1)
         if count != 1:
             raise SystemExit(f"Could not update exactly one {key} entry in apktool.yml.")
     path.write_text(text, encoding="utf-8")
     verified = path.read_text(encoding="utf-8")
-    if f"'{version_code}'" not in verified or f"'{version_name}'" not in verified:
-        raise SystemExit("apktool.yml version metadata verification failed.")
+    if not re.search(rf"(?m)^\s*versionCode:\s*{version_code}\s*$", verified):
+        raise SystemExit("apktool.yml versionCode verification failed.")
+    if f"'{version_name}'" not in verified:
+        raise SystemExit("apktool.yml versionName verification failed.")
 
 
 def patch_app_name(res_root: Path) -> None:
