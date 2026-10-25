@@ -11,6 +11,7 @@
         <package android:name="com.dicky.r15tv" />
     </queries>
     <application
+        android:name="com.dicky.r15tv.subtitle.SubtitlePocApplication"
         android:allowBackup="false"
         android:label="R15 TV AI 字幕測試"
         android:theme="@android:style/Theme.Material.NoActionBar"
