@@ -153,7 +153,6 @@ jobs:
           cp config/ai-subtitle-models.json sources/TV/app/src/main/assets/ai-subtitle-models.json
           cp config/ai-subtitle-translation-policy.json sources/TV/app/src/main/assets/ai-subtitle-translation-policy.json
           cp config/ai-subtitle-versions.json sources/TV/app/src/main/assets/ai-subtitle-versions.json
-          cp config/ai-subtitle-versions.json sources/TV/app/src/main/assets/ai-subtitle-versions.json
           echo "OpenCC 1.4.2 build tooling and Taiwan locale policy staged."
 
       - name: Set up Android SDK
@@ -450,6 +449,16 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
+      - name: Compile Java against candidate Media3 APIs before MPV native validation
+        working-directory: sources/TV
+        timeout-minutes: 25
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:compileLeanbackDebugJavaWithJavac
+          echo "Candidate Media3 Java compatibility compile passed."
       - name: Build only R15 TV Leanback armeabi-v7a non-debuggable diagnostic APK
         working-directory: sources/TV
         env:
