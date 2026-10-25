@@ -115,7 +115,7 @@ public final class AiSubtitleEngine {
             }
 
             ByteBuffer input = source.asReadOnlyBuffer().order(ByteOrder.LITTLE_ENDIAN);
-            int bytesPerSample = encoding == C.ENCODING_PCM_FLOAT ? 4 : 2;
+            int bytesPerSample = encoding == AudioFormat.ENCODING_PCM_FLOAT ? 4 : 2;
             int bytesPerFrame = bytesPerSample * channels;
             int frameCount = input.remaining() / bytesPerFrame;
             if (frameCount <= 0) return;
@@ -127,7 +127,7 @@ public final class AiSubtitleEngine {
             for (int frame = 0; frame < frameCount; frame++) {
                 float mixed = 0;
                 for (int channel = 0; channel < channels; channel++) {
-                    float sample = encoding == C.ENCODING_PCM_FLOAT
+                    float sample = encoding == AudioFormat.ENCODING_PCM_FLOAT
                             ? input.getFloat()
                             : input.getShort() / 32768.0f;
                     if (Float.isFinite(sample)) mixed += sample;
