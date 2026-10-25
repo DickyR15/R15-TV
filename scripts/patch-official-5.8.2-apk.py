@@ -116,6 +116,25 @@ def patch_manifest(decoded: Path, run_number: int) -> None:
             raise SystemExit(f"Manifest application attribute {key} was not set.")
 
 
+def patch_apktool_metadata(decoded: Path, run_number: int) -> None:
+    """Apktool rebuilds version fields from apktool.yml, not only the decoded manifest."""
+    path = decoded / "apktool.yml"
+    if not path.is_file():
+        raise SystemExit("apktool.yml is missing from the decoded official APK.")
+    text = path.read_text(encoding="utf-8")
+    version_code = 2_000_000_000 + (run_number % 99_000_000)
+    version_name = f"5.8.2-r15.{run_number}"
+    for key, value in (("versionCode", str(version_code)), ("versionName", version_name)):
+        pattern = re.compile(rf"(?m)^(\\s*{key}:\\s*).*$")
+        text, count = pattern.subn(lambda match: match.group(1) + "'" + value + "'", text, count=1)
+        if count != 1:
+            raise SystemExit(f"Could not update exactly one {key} entry in apktool.yml.")
+    path.write_text(text, encoding="utf-8")
+    verified = path.read_text(encoding="utf-8")
+    if f"'{version_code}'" not in verified or f"'{version_name}'" not in verified:
+        raise SystemExit("apktool.yml version metadata verification failed.")
+
+
 def patch_app_name(res_root: Path) -> None:
     values = res_root / "values"
     values.mkdir(parents=True, exist_ok=True)
@@ -273,6 +292,7 @@ def main() -> None:
         raise SystemExit(f"Not an apktool decoded directory: {decoded}")
 
     patch_manifest(decoded, args.run_number)
+    patch_apktool_metadata(decoded, args.run_number)
     patch_app_name(decoded / "res")
     copied = merge_cn_locale(decoded / "res")
     converter = OpenCC("s2twp")
