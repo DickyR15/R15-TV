@@ -139,12 +139,15 @@ public final class AiSubtitleOverlay {
     }
 
     public static void attach(FragmentActivity activity, PlayerView playerView) {
-        // TEMPORARY DIAGNOSTIC BUILD: isolate the repeatable RenderThread SIGABRT.
-        // The last APK reached attach_view_done before the process aborted. Skip all
-        // subtitle view creation for one build to test whether PlayerView overlay
-        // attachment is on the crash path; this is not the final subtitle implementation.
-        Log.w(TAG, "diagnostic_overlay_disabled_to_isolate_renderthread_crash");
+        // TEMPORARY DIAGNOSTIC BUILD: instantiate no subtitle views, to isolate
+        // the native RenderThread SIGABRT seen after overlay attachment in POC-104.
+        if (activity != null && playerView != null) {
+            Log.w(TAG, "diagnostic_overlay_disabled_to_isolate_renderthread_crash");
+        }
         return;
+    }
+
+    private static void attachDisabled(FragmentActivity activity, PlayerView playerView) {
         if (activity == null || playerView == null || activity.isFinishing()
                 || activity.isDestroyed()) return;
         Log.i(TAG, "attach_requested activity=" + activity.getClass().getSimpleName());
