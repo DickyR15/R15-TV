@@ -1,0 +1,39 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.dicky.r15tv.subtitle"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.dicky.r15tv.subtitlepoc"
+        minSdk 29
+        targetSdk 35
+        versionCode 1
+        versionName "0.1.0-poc"
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+
+    sourceSets {
+        main {
+            jniLibs.srcDirs = ["src/main/jniLibs"]
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+}
+
+dependencies {
+    implementation "androidx.annotation:annotation:1.9.1"
+    implementation "com.google.mlkit:translate:17.0.3"
+    implementation "com.github.qichuan:android-opencc:1.2.0"
+}
