@@ -26,6 +26,9 @@ public final class MainActivity extends Activity {
     private TextView modelView;
     private ProgressBar progress;
     private WhisperModelManager modelManager;
+    private SubtitleOverlayWindow overlayTestWindow;
+    private Button overlayTestButton;
+    private boolean overlayTestVisible;
 
     @Override
     public void onCreate(Bundle state) {
@@ -35,6 +38,17 @@ public final class MainActivity extends Activity {
         modelManager = WhisperModelManager.getInstance(this);
         buildUi();
         refreshModelState();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (statusView == null) return;
+        String lastStatus = getSharedPreferences(SubtitleCaptureService.PREFS, MODE_PRIVATE)
+                .getString(SubtitleCaptureService.PREF_STATUS, "");
+        if (!lastStatus.isEmpty() && !lastStatus.equals("字幕服務已停止。")) {
+            setStatus("字幕服務回報：" + lastStatus);
+        }
     }
 
     private void buildUi() {
@@ -54,7 +68,7 @@ public final class MainActivity extends Activity {
         layout.addView(title, matchWrap());
 
         TextView desc = new TextView(this);
-        desc.setText("獨立測試工具：先啟動音訊擷取，再切回 R15 TV 播放直播。\n使用 Whisper Base 多語辨識、ML Kit 本機翻譯與 OpenCC 臺灣繁體轉換。");
+        desc.setText("獨立測試工具：先確認浮窗可顯示，再啟動音訊擷取並切回 R15 TV 播放直播。\n使用 Whisper Base 多語辨識、ML Kit 本機翻譯與 OpenCC 臺灣繁體轉換。");
         desc.setTextColor(0xFFD3E1F5);
         desc.setTextSize(17);
         desc.setGravity(Gravity.CENTER);
@@ -75,9 +89,11 @@ public final class MainActivity extends Activity {
         layout.addView(progress, progressParams);
 
         addButton(layout, "1. 允許顯示在其他應用程式上層", v -> requestOverlayPermission());
-        addButton(layout, "2. 下載／檢查 Whisper Base 多語模型", v -> downloadModel());
-        addButton(layout, "3. 開始字幕擷取（接著切回 R15 TV 播放）", v -> requestStartCapture());
+        overlayTestButton = addButton(layout, "2. 測試字幕浮窗（不啟動音訊）", v -> toggleOverlayTest());
+        addButton(layout, "3. 下載／檢查 Whisper Base 多語模型", v -> downloadModel());
+        addButton(layout, "4. 開始字幕擷取（接著切回 R15 TV 播放）", v -> requestStartCapture());
         addButton(layout, "停止字幕擷取", v -> {
+            closeOverlayTest();
             Intent stop = new Intent(this, SubtitleCaptureService.class);
             stop.setAction(SubtitleCaptureService.ACTION_STOP);
             startService(stop);
@@ -93,7 +109,7 @@ public final class MainActivity extends Activity {
         layout.addView(statusView, matchWrap());
 
         TextView warning = new TextView(this);
-        warning.setText("注意：本測試版會要求 Android 音訊擷取及浮層授權；音訊只在裝置上辨識，翻譯模型首次使用時需下載。");
+        warning.setText("注意：本測試版會要求 Android 音訊擷取及浮層授權；音訊只在裝置上辨識，翻譯模型首次使用時需下載。若啟動失敗，錯誤會保留在本頁與系統通知中。");
         warning.setTextColor(0xFF9EACC2);
         warning.setTextSize(14);
         warning.setGravity(Gravity.CENTER);
@@ -104,7 +120,7 @@ public final class MainActivity extends Activity {
         setContentView(scroll);
     }
 
-    private void addButton(LinearLayout root, String label, View.OnClickListener action) {
+    private Button addButton(LinearLayout root, String label, View.OnClickListener action) {
         Button button = new Button(this);
         button.setText(label);
         button.setTextSize(16);
@@ -113,11 +129,41 @@ public final class MainActivity extends Activity {
         LinearLayout.LayoutParams params = matchWrap();
         params.setMargins(0, dp(5), 0, dp(5));
         root.addView(button, params);
+        return button;
     }
 
-    private LinearLayout.LayoutParams matchWrap() {
-        return new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    private void toggleOverlayTest() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
+            setStatus("尚未允許浮窗權限。請在設定頁開啟後返回，再按一次「測試字幕浮窗」。");
+            requestOverlayPermission();
+            return;
+        }
+        if (overlayTestVisible) {
+            closeOverlayTest();
+            setStatus("已關閉測試浮窗。");
+            return;
+        }
+        try {
+            overlayTestWindow = new SubtitleOverlayWindow(this);
+            overlayTestWindow.show();
+            overlayTestWindow.setStatus("浮窗測試成功｜尚未開始語音辨識");
+            overlayTestWindow.showSubtitle("這是浮窗預覽", "繁體中文字幕測試");
+            overlayTestVisible = true;
+            if (overlayTestButton != null) overlayTestButton.setText("2. 關閉字幕浮窗測試");
+            setStatus("已送出浮窗顯示要求。若沒有看到「繁體中文字幕測試」，請確認系統浮窗權限或回報此狀態。");
+        } catch (Throwable error) {
+            closeOverlayTest();
+            setStatus("浮窗測試失敗：" + readable(error));
+        }
+    }
+
+    private void closeOverlayTest() {
+        if (overlayTestWindow != null) {
+            try { overlayTestWindow.remove(); } catch (Throwable ignored) { }
+            overlayTestWindow = null;
+        }
+        overlayTestVisible = false;
+        if (overlayTestButton != null) overlayTestButton.setText("2. 測試字幕浮窗（不啟動音訊）");
     }
 
     private void requestOverlayPermission() {
@@ -208,7 +254,7 @@ public final class MainActivity extends Activity {
         start.putExtra(SubtitleCaptureService.EXTRA_PROJECTION_DATA, data);
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(start);
         else startService(start);
-        setStatus("字幕服務已啟動。按 Home 回到 R15 TV 並播放直播；字幕會浮在畫面下方。");
+        setStatus("字幕服務正在啟動；若無浮窗，請稍候返回本頁查看錯誤狀態。");
     }
 
     @Override
@@ -221,6 +267,18 @@ public final class MainActivity extends Activity {
                     ? "麥克風／播放音訊擷取權限已允許，請再按一次開始。"
                     : "未允許音訊擷取權限，無法產生字幕。");
         }
+    }
+
+    @Override
+    protected void onDestroy() {
+        closeOverlayTest();
+        super.onDestroy();
+    }
+
+    private String readable(Throwable error) {
+        String message = error.getMessage();
+        return message == null || message.trim().isEmpty()
+                ? error.getClass().getSimpleName() : message;
     }
 
     private void setStatus(String value) {
