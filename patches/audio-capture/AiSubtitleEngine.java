@@ -5,6 +5,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.media3.common.C;
 
@@ -16,6 +17,7 @@ import java.util.Locale;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -34,6 +36,8 @@ public final class AiSubtitleEngine {
         }
     }
 
+    private static final String TAG = "R15ASR";
+    private static final AtomicLong NO_ACTIVE_OFFERS = new AtomicLong();
     private static final int ASR_SAMPLE_RATE = 16000;
     // Shorter windows and hop intervals cap CPU time for live captioning on TV boxes.
     private static final int WINDOW_SAMPLES = ASR_SAMPLE_RATE * 3;
@@ -51,6 +55,12 @@ public final class AiSubtitleEngine {
     private final Object resampleLock = new Object();
     private volatile boolean running = true;
     private Thread worker;
+    private volatile long queuedChunks;
+    private volatile long queuedSamples;
+    private volatile long droppedChunks;
+    private volatile long consumedChunks;
+    private volatile long consumedSamples;
+    private long lastQueueStatsMs;
 
     // State for a lightweight streaming linear resampler, accessed only under resampleLock.
     private int sourceSampleRate = -1;
@@ -69,6 +79,10 @@ public final class AiSubtitleEngine {
         stop();
         AiSubtitleEngine engine = new AiSubtitleEngine(modelFile, sourceLanguage, listener);
         ACTIVE.set(engine);
+        Log.i(TAG, "engine_start modelExists=" + (modelFile != null && modelFile.isFile())
+                + " modelBytes=" + (modelFile != null && modelFile.isFile() ? modelFile.length() : -1)
+                + " sourceLanguage=" + engine.sourceLanguage
+                + " cpuCount=" + Runtime.getRuntime().availableProcessors());
         engine.worker = new Thread(engine::runRecognizer, "r15-ai-subtitles");
         engine.worker.setDaemon(true);
         engine.worker.start();
@@ -88,8 +102,26 @@ public final class AiSubtitleEngine {
     /** Called from the AudioRecord capture worker. Never runs inference here. */
     public static void offerPcm(ByteBuffer input, int sampleRate, int channelCount, int encoding) {
         AiSubtitleEngine engine = ACTIVE.get();
-        if (engine == null || !engine.running || input == null || sampleRate <= 0 || channelCount <= 0) return;
-        if (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT) return;
+        if (engine == null) {
+            long count = NO_ACTIVE_OFFERS.incrementAndGet();
+            if (count == 1 || count % 50 == 0) {
+                Log.w(TAG, "pcm_received_without_active_engine count=" + count);
+            }
+            return;
+        }
+        if (!engine.running || input == null || sampleRate <= 0 || channelCount <= 0) {
+            long count = NO_ACTIVE_OFFERS.incrementAndGet();
+            if (count == 1 || count % 50 == 0) {
+                Log.w(TAG, "pcm_offer_ignored count=" + count + " running=" + engine.running
+                        + " inputNull=" + (input == null) + " sampleRate=" + sampleRate
+                        + " channels=" + channelCount);
+            }
+            return;
+        }
+        if (encoding != C.ENCODING_PCM_16BIT && encoding != C.ENCODING_PCM_FLOAT) {
+            Log.e(TAG, "unsupported_pcm_encoding=" + encoding);
+            return;
+        }
         engine.convertAndQueue(input, sampleRate, channelCount, encoding);
     }
 
@@ -147,22 +179,50 @@ public final class AiSubtitleEngine {
             if (outputCount == 0 || !running) return;
             float[] chunk = outputCount == output.length ? output : Arrays.copyOf(output, outputCount);
             if (!audioQueue.offer(chunk)) {
+                droppedChunks++;
                 audioQueue.poll();
-                audioQueue.offer(chunk);
+                if (!audioQueue.offer(chunk)) {
+                    Log.e(TAG, "pcm_queue_full_drop_new_chunk samples=" + chunk.length);
+                    return;
+                }
+            }
+            queuedChunks++;
+            queuedSamples += chunk.length;
+            long now = SystemClock.elapsedRealtime();
+            if (now - lastQueueStatsMs >= 5000L) {
+                lastQueueStatsMs = now;
+                Log.i(TAG, "pcm_queued chunks=" + queuedChunks
+                        + " samples=" + queuedSamples
+                        + " lastChunkSamples=" + chunk.length
+                        + " lastChunkDbfs=" + rmsDbfs(chunk)
+                        + " queueSize=" + audioQueue.size()
+                        + " droppedChunks=" + droppedChunks
+                        + " sourceRate=" + sampleRate
+                        + " channels=" + channels);
             }
         }
     }
 
     private void runRecognizer() {
         long whisperContext = 0L;
+        long lastFlowLogMs = SystemClock.elapsedRealtime();
+        long queueTimeouts = 0L;
         try {
-            // Let video rendering and audio playback take priority on low-core TV boxes.
-            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            Log.i(TAG, "worker_enter modelExists=" + (modelFile != null && modelFile.isFile())
+                    + " modelBytes=" + (modelFile != null && modelFile.isFile() ? modelFile.length() : -1)
+                    + " sourceLanguage=" + sourceLanguage);
+            // Keep playback responsive without demoting CPU-only Whisper to background priority.
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
             if (modelFile == null || !modelFile.isFile()) {
                 throw new IllegalStateException("請先下載所選 Whisper 模型");
             }
             postStatus("正在載入 Whisper 本機模型…");
+            long modelLoadStarted = SystemClock.elapsedRealtime();
+            Log.i(TAG, "whisper_context_create_start");
             whisperContext = WhisperCpp.createContext(modelFile);
+            Log.i(TAG, "whisper_context_create_done elapsedMs="
+                    + (SystemClock.elapsedRealtime() - modelLoadStarted)
+                    + " contextNonZero=" + (whisperContext != 0L));
             postStatus("Whisper 本機引擎已啟動；固定語言：" + languageLabel(sourceLanguage));
 
             float[] ring = new float[MAX_WINDOW_SAMPLES];
@@ -180,9 +240,34 @@ public final class AiSubtitleEngine {
                     if (!running) break;
                     continue;
                 }
-                if (samples == null) continue;
+                if (samples == null) {
+                    queueTimeouts++;
+                    long now = SystemClock.elapsedRealtime();
+                    if (now - lastFlowLogMs >= 5000L) {
+                        lastFlowLogMs = now;
+                        Log.w(TAG, "waiting_for_pcm queueTimeouts=" + queueTimeouts
+                                + " queuedChunks=" + queuedChunks
+                                + " queuedSamples=" + queuedSamples
+                                + " consumedChunks=" + consumedChunks
+                                + " consumedSamples=" + consumedSamples
+                                + " queueSize=" + audioQueue.size());
+                    }
+                    continue;
+                }
                 if (samples == POISON) break;
                 if (samples.length == 0) continue;
+
+                consumedChunks++;
+                consumedSamples += samples.length;
+                long flowNow = SystemClock.elapsedRealtime();
+                if (flowNow - lastFlowLogMs >= 5000L) {
+                    lastFlowLogMs = flowNow;
+                    Log.i(TAG, "pcm_consumed queuedChunks=" + queuedChunks
+                            + " queuedSamples=" + queuedSamples
+                            + " consumedChunks=" + consumedChunks
+                            + " consumedSamples=" + consumedSamples
+                            + " queueSize=" + audioQueue.size());
+                }
 
                 for (float sample : samples) {
                     ring[writeIndex] = sample;
@@ -205,6 +290,11 @@ public final class AiSubtitleEngine {
                 // leave Tiny Q5_1 looking permanently busy on slower ARM TV hardware.
                 int inferenceThreads = Math.max(1,
                         Math.min(2, Runtime.getRuntime().availableProcessors() - 1));
+                final long inputDbfs = rmsDbfs(window);
+                Log.i(TAG, "asr_inference_start samples=" + window.length
+                        + " seconds=" + (window.length / ASR_SAMPLE_RATE)
+                        + " rmsDbfs=" + inputDbfs + " threads=" + inferenceThreads
+                        + " language=" + sourceLanguage);
                 postStatus("正在辨識直播語音…");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
@@ -223,6 +313,9 @@ public final class AiSubtitleEngine {
                     MAIN.removeCallbacks(heartbeat[0]);
                 }
                 long inferenceMs = SystemClock.elapsedRealtime() - inferenceStarted;
+                Log.i(TAG, "asr_inference_done elapsedMs=" + inferenceMs
+                        + " resultChars=" + (result == null ? -1 : result.length())
+                        + " resultNull=" + (result == null));
 
                 String detectedLanguage = "und";
                 String transcript = result == null ? "" : result.trim();
@@ -248,11 +341,13 @@ public final class AiSubtitleEngine {
                             + (window.length / ASR_SAMPLE_RATE) + " 秒音訊 · 推論 "
                             + inferenceMs + " ms");
                 } else {
-                    postStatus("已收到音訊，但尚未辨識到清楚語音；持續聆聽…");
+                    postStatus("Whisper 推論完成但沒有回傳文字 · " + inferenceMs
+                            + " ms · ASR " + inputDbfs + " dBFS；持續聆聽…");
                 }
             }
         } catch (Throwable error) {
             running = false;
+            Log.e(TAG, "recognizer_worker_failed", error);
             postStatus("Whisper 本機辨識啟動失敗：" + readableMessage(error));
         } finally {
             try {
@@ -261,6 +356,20 @@ public final class AiSubtitleEngine {
             }
             if (!running) postStatus("AI 字幕已關閉");
         }
+    }
+
+    private static long rmsDbfs(float[] samples) {
+        if (samples == null || samples.length == 0) return -120L;
+        double sumSquares = 0.0;
+        int validSamples = 0;
+        for (float sample : samples) {
+            if (!Float.isFinite(sample)) continue;
+            sumSquares += sample * sample;
+            validSamples++;
+        }
+        if (validSamples == 0) return -120L;
+        double rms = Math.sqrt(sumSquares / validSamples);
+        return Math.round(20.0 * Math.log10(Math.max(1.0e-6, rms)));
     }
 
     private static float[] snapshotTail(float[] ring, int writeIndex, int count) {

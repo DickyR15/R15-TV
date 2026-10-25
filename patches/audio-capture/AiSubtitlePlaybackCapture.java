@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.Log;
 
 import androidx.annotation.RequiresApi;
 import androidx.media3.common.C;
@@ -32,6 +33,7 @@ public final class AiSubtitlePlaybackCapture {
         void onLevel(float dbfs);
     }
 
+    private static final String TAG = "R15AudioCapture";
     private static final int SAMPLE_RATE = 48000;
     private static final int CHANNELS = 2;
     private static final int CHANNEL_MASK = AudioFormat.CHANNEL_IN_STEREO;
@@ -102,11 +104,17 @@ public final class AiSubtitlePlaybackCapture {
             if (audioRecord.getRecordingState() != AudioRecord.RECORDSTATE_RECORDING) {
                 throw new IllegalStateException("音訊擷取未進入錄音狀態");
             }
+            Log.i(TAG, "capture_started sampleRate=" + SAMPLE_RATE
+                    + " channels=" + CHANNELS
+                    + " bufferBytes=" + bufferBytes
+                    + " audioSession=" + audioRecord.getAudioSessionId());
         } catch (Exception error) {
+            Log.e(TAG, "capture_start_failed", error);
             projection.unregisterCallback(projectionCallback);
             audioRecord.release();
             throw error;
         } catch (Error error) {
+            Log.e(TAG, "capture_start_error", error);
             projection.unregisterCallback(projectionCallback);
             audioRecord.release();
             throw error;
@@ -157,12 +165,17 @@ public final class AiSubtitlePlaybackCapture {
         // Read roughly 100 ms per iteration. A bounded buffer prevents stale audio piling up.
         short[] samples = new short[SAMPLE_RATE / 10 * CHANNELS];
         byte[] pcmBytes = new byte[samples.length * 2];
+        long totalReadSamples = 0L;
+        long totalReadBlocks = 0L;
+        long lastReadLogMs = SystemClock.uptimeMillis();
+        Log.i(TAG, "read_loop_started bufferSamples=" + samples.length);
 
         while (running.get()) {
             int count;
             try {
                 count = audioRecord.read(samples, 0, samples.length, AudioRecord.READ_BLOCKING);
             } catch (Throwable error) {
+                Log.e(TAG, "audio_record_read_exception", error);
                 postStatus("音訊讀取失敗：" + readableMessage(error));
                 break;
             }
@@ -170,6 +183,7 @@ public final class AiSubtitlePlaybackCapture {
                 if (count == AudioRecord.ERROR_DEAD_OBJECT
                         || count == AudioRecord.ERROR_INVALID_OPERATION
                         || count == AudioRecord.ERROR_BAD_VALUE) {
+                    Log.e(TAG, "audio_record_read_error code=" + count);
                     postStatus("音訊擷取讀取錯誤（" + count + "）");
                     break;
                 }
@@ -185,12 +199,21 @@ public final class AiSubtitlePlaybackCapture {
                 pcmBytes[i * 2 + 1] = (byte) ((value >>> 8) & 0xff);
             }
 
+            totalReadSamples += count;
+            totalReadBlocks++;
             long now = SystemClock.uptimeMillis();
+            double rms = Math.sqrt(sumSquares / Math.max(1, count));
+            float dbfs = (float) (20.0 * Math.log10(Math.max(1e-6, rms)));
             if (now - lastLevelUpdateMs >= 900) {
                 lastLevelUpdateMs = now;
-                double rms = Math.sqrt(sumSquares / Math.max(1, count));
-                float dbfs = (float) (20.0 * Math.log10(Math.max(1e-6, rms)));
                 if (listener != null) mainHandler.post(() -> listener.onLevel(dbfs));
+            }
+            if (now - lastReadLogMs >= 5000) {
+                lastReadLogMs = now;
+                Log.i(TAG, "pcm_read blocks=" + totalReadBlocks
+                        + " samples=" + totalReadSamples
+                        + " lastCount=" + count
+                        + " dbfs=" + Math.round(dbfs));
             }
 
             try {
@@ -198,10 +221,13 @@ public final class AiSubtitlePlaybackCapture {
                         .order(ByteOrder.LITTLE_ENDIAN);
                 AiSubtitleEngine.offerPcm(chunk, SAMPLE_RATE, CHANNELS, C.ENCODING_PCM_16BIT);
             } catch (Throwable error) {
+                Log.e(TAG, "offer_pcm_failed", error);
                 postStatus("無法送入語音辨識：" + readableMessage(error));
             }
         }
 
+        Log.w(TAG, "read_loop_stopped blocks=" + totalReadBlocks
+                + " samples=" + totalReadSamples);
         stopInternal(true);
     }
 
