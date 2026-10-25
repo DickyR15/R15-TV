@@ -4,6 +4,8 @@ import android.content.Context;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.drawable.GradientDrawable;
+import android.os.Handler;
+import android.os.Looper;
 import android.view.Gravity;
 import android.view.WindowManager;
 import android.widget.LinearLayout;
@@ -12,6 +14,7 @@ import android.widget.TextView;
 public final class SubtitleOverlayWindow {
     private final Context context;
     private final WindowManager windowManager;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private LinearLayout root;
     private TextView statusView;
     private TextView sourceView;
@@ -24,6 +27,10 @@ public final class SubtitleOverlayWindow {
     }
 
     public void show() {
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::show);
+            return;
+        }
         if (attached || windowManager == null) return;
         int pad = dp(18);
         root = new LinearLayout(context);
@@ -78,38 +85,49 @@ public final class SubtitleOverlayWindow {
                 PixelFormat.TRANSLUCENT);
         params.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
         params.y = dp(95);
-        try {
-            windowManager.addView(root, params);
-            attached = true;
-        } catch (Throwable error) {
-            attached = false;
-            throw error;
-        }
+        windowManager.addView(root, params);
+        attached = true;
     }
 
     public void setStatus(String status) {
-        if (statusView != null) statusView.setText(status == null ? "" : status);
+        final String safeStatus = status == null ? "" : status;
+        runOnMain(() -> {
+            if (statusView != null) statusView.setText(safeStatus);
+        });
     }
 
     public void showSubtitle(String source, String translated) {
-        if (sourceView == null || translatedView == null) return;
-        source = source == null ? "" : source.trim();
-        translated = translated == null ? "" : translated.trim();
-        sourceView.setText(source);
-        translatedView.setText(translated);
-        sourceView.setVisibility(source.isEmpty() || source.equals(translated)
-                ? TextView.GONE : TextView.VISIBLE);
-        translatedView.setVisibility(translated.isEmpty() ? TextView.GONE : TextView.VISIBLE);
+        final String safeSource = source == null ? "" : source.trim();
+        final String safeTranslated = translated == null ? "" : translated.trim();
+        runOnMain(() -> {
+            if (sourceView == null || translatedView == null) return;
+            sourceView.setText(safeSource);
+            translatedView.setText(safeTranslated);
+            sourceView.setVisibility(safeSource.isEmpty() || safeSource.equals(safeTranslated)
+                    ? TextView.GONE : TextView.VISIBLE);
+            translatedView.setVisibility(safeTranslated.isEmpty() ? TextView.GONE : TextView.VISIBLE);
+        });
     }
 
     public void remove() {
-        if (!attached || root == null || windowManager == null) return;
-        try { windowManager.removeView(root); } catch (Throwable ignored) { }
+        if (Looper.myLooper() != Looper.getMainLooper()) {
+            mainHandler.post(this::remove);
+            return;
+        }
+        if (root == null || windowManager == null) return;
+        if (attached) {
+            try { windowManager.removeView(root); } catch (Throwable ignored) { }
+        }
         attached = false;
         root = null;
         sourceView = null;
         translatedView = null;
         statusView = null;
+    }
+
+    private void runOnMain(Runnable action) {
+        if (Looper.myLooper() == Looper.getMainLooper()) action.run();
+        else mainHandler.post(action);
     }
 
     private int dp(int value) {
