@@ -109,6 +109,12 @@ jobs:
           mkdir -p dist/ai-subtitle-companion
           cp "$apk" dist/ai-subtitle-companion/R15-TV-AI-Subtitle-Companion-POC-arm64.apk
           apkanalyzer manifest application-id "$apk" | grep -Fx "com.dicky.r15tv.subtitlepoc"
+          apkanalyzer manifest min-sdk "$apk" | grep -Fx "28"
+          merged_manifest="$(apkanalyzer manifest print "$apk")"
+          if grep -Fq "androidx.startup.InitializationProvider" <<<"$merged_manifest"; then
+            echo "Incompatible AndroidX Startup provider remains in APK manifest" >&2
+            exit 1
+          fi
           entries="$(unzip -Z1 "$apk")"
           grep -Fxq "lib/arm64-v8a/libr15whisper.so" <<<"$entries"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -Fq "android.permission.RECORD_AUDIO"
