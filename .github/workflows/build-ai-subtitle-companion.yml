@@ -1,0 +1,132 @@
+name: Build R15 TV AI Subtitle Companion POC
+run-name: R15 TV AI subtitle companion POC build
+
+on:
+  push:
+    branches:
+      - "feature/fix3-ai-subtitle-companion-poc"
+    paths:
+      - ".github/workflows/build-ai-subtitle-companion.yml"
+      - "subtitle-companion/**"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: r15-tv-ai-subtitle-companion-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  WHISPER_CPP_COMMIT: 7e26d3b0d5bced6c8217ef09710ec2f969001241
+  NDK_VERSION: 29.0.14206865
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    steps:
+      - name: Checkout companion source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: "8.11.1"
+
+      - name: Set up Android SDK
+        uses: android-actions/setup-android@v3
+        with:
+          packages: ""
+
+      - name: Install Android build tools and NDK
+        shell: bash
+        run: |
+          set -euo pipefail
+          set +o pipefail
+          yes | sdkmanager --licenses >/dev/null
+          set -o pipefail
+          sdkmanager \
+            "platforms;android-35" \
+            "build-tools;36.0.0" \
+            "cmake;3.22.1" \
+            "ndk;${NDK_VERSION}"
+          echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
+
+      - name: Fetch pinned whisper.cpp source
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build
+          git -C build init whisper.cpp
+          git -C build/whisper.cpp remote add origin https://github.com/ggml-org/whisper.cpp.git
+          git -C build/whisper.cpp fetch --depth=1 origin "$WHISPER_CPP_COMMIT"
+          git -C build/whisper.cpp checkout --detach FETCH_HEAD
+          test "$(git -C build/whisper.cpp rev-parse HEAD)" = "$WHISPER_CPP_COMMIT"
+          echo "Whisper.cpp pinned at $WHISPER_CPP_COMMIT"
+
+      - name: Build ARM64 Whisper JNI library
+        shell: bash
+        env:
+          WHISPER_SOURCE_DIR: ${{ github.workspace }}/build/whisper.cpp
+        run: |
+          set -euo pipefail
+          mkdir -p subtitle-companion/app/src/main/jniLibs/arm64-v8a
+          cmake -S subtitle-companion/native-whisper -B build/whisper-arm64 \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+            -DWHISPER_SOURCE_DIR="$WHISPER_SOURCE_DIR" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-29 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_CPU_KLEIDIAI=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DWHISPER_BUILD_SERVER=OFF
+          cmake --build build/whisper-arm64 --config Release --parallel 2
+          test -s build/whisper-arm64/libr15whisper.so
+          install -m 755 build/whisper-arm64/libr15whisper.so \
+            subtitle-companion/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
+          readelf -d build/whisper-arm64/libr15whisper.so | grep NEEDED || true
+
+      - name: Build companion APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          gradle --no-daemon --stacktrace --console=plain -p subtitle-companion :app:assembleDebug
+          apk="subtitle-companion/app/build/outputs/apk/debug/app-debug.apk"
+          test -s "$apk"
+          mkdir -p dist/ai-subtitle-companion
+          cp "$apk" dist/ai-subtitle-companion/R15-TV-AI-Subtitle-Companion-POC-arm64.apk
+          apkanalyzer manifest application-id "$apk" | grep -Fx "com.dicky.r15tv.subtitlepoc"
+          entries="$(unzip -Z1 "$apk")"
+          grep -Fxq "lib/arm64-v8a/libr15whisper.so" <<<"$entries"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -Fq "android.permission.RECORD_AUDIO"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -Fq "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
+          sha256sum dist/ai-subtitle-companion/*.apk > dist/ai-subtitle-companion/SHA256SUMS.txt
+          {
+            echo "## R15 TV AI Subtitle Companion POC"
+            echo "- Separate companion APK; the working R15 TV FIX3 APK is not modified."
+            echo "- Captures only the R15 TV app UID using Android AudioPlaybackCapture, subject to system consent and the target player's capture policy."
+            echo "- Speech recognition: local multilingual Whisper Base; English and other ML Kit-supported sources are translated locally to Chinese then converted by OpenCC S2TWP."
+            echo "- Whisper Base and translation language models are downloaded on first use; they are not bundled in the APK."
+            echo "- Tested only by CI compilation/packaging here; real-device capture, transcription latency, translation quality and overlay behavior still require Onn. 4K Pro testing."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload ARM64 companion POC and checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: R15-TV-AI-Subtitle-Companion-POC-${{ github.run_number }}
+          path: dist/ai-subtitle-companion/**
+          if-no-files-found: error
+          retention-days: 30
