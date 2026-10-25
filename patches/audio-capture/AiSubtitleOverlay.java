@@ -147,6 +147,13 @@ public final class AiSubtitleOverlay {
         return;
     }
 
+    public static void detach(PlayerView playerView) {
+        // Keep call sites source-compatible while the diagnostic build disables overlay creation.
+        if (playerView != null) {
+            Log.d(TAG, "diagnostic_overlay_detach_ignored");
+        }
+    }
+
     private static void attachDisabled(FragmentActivity activity, PlayerView playerView) {
         // Intentionally disabled in the diagnostic build.
         // The previous implementation is restored from history after crash isolation.
