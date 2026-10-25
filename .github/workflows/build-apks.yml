@@ -191,6 +191,12 @@ jobs:
         run: |
           set -euo pipefail
           chmod +x gradlew
+          cat > local.properties <<EOF
+          sdk.dir=${ANDROID_HOME}
+          storeFile=r15tv-probe.keystore
+          keyAlias=r15tv-probe
+          storePassword=probe-only
+          EOF
           ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:compileLeanbackDebugJavaWithJavac
           echo "Candidate Media3 Java compatibility compile passed."
 
