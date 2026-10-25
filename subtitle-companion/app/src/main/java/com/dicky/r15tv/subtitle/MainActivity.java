@@ -275,6 +275,11 @@ public final class MainActivity extends Activity {
         super.onDestroy();
     }
 
+    private LinearLayout.LayoutParams matchWrap() {
+        return new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
     private String readable(Throwable error) {
         String message = error.getMessage();
         return message == null || message.trim().isEmpty()
