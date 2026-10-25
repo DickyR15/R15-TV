@@ -183,6 +183,17 @@ jobs:
           grep -Fq 'androidx.media3.exoplayer.iso.IsoDiscPreparation' app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           echo "Candidate source signatures checked; Java compilation is the compatibility gate."
 
+      - name: Compile upstream Java against candidate Media3 APIs before native subtitle build
+        working-directory: sources/TV
+        timeout-minutes: 25
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
+        run: |
+          set -euo pipefail
+          chmod +x gradlew
+          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:compileLeanbackDebugJavaWithJavac
+          echo "Candidate Media3 Java compatibility compile passed."
+
       - name: Fetch official OpenCC 1.4.2 source
         env:
           EXPECTED_OPENCC_COMMIT: ${{ env.OPENCC_COMMIT }}
@@ -449,16 +460,6 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Compile Java against candidate Media3 APIs before MPV native validation
-        working-directory: sources/TV
-        timeout-minutes: 25
-        env:
-          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
-        run: |
-          set -euo pipefail
-          chmod +x gradlew
-          ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 :app:compileLeanbackDebugJavaWithJavac
-          echo "Candidate Media3 Java compatibility compile passed."
       - name: Build only R15 TV Leanback armeabi-v7a non-debuggable diagnostic APK
         working-directory: sources/TV
         env:
