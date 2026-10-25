@@ -13,6 +13,7 @@ import android.media.projection.MediaProjectionManager;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.util.Log;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.Button;
@@ -34,6 +35,7 @@ import java.util.WeakHashMap;
 
 /** Small, opt-in in-player audio-capture and local ASR proof of concept. */
 public final class AiSubtitleOverlay {
+    private static final String TAG = "R15CaptionOverlay";
     private static final Map<PlayerView, AiSubtitleOverlay> INSTANCES =
             Collections.synchronizedMap(new WeakHashMap<>());
 
@@ -53,6 +55,9 @@ public final class AiSubtitleOverlay {
     private final LinearLayout panel;
     private final ActivityResultLauncher<String> audioPermissionLauncher;
     private final ActivityResultLauncher<Intent> projectionPermissionLauncher;
+    private final android.view.View.OnAttachStateChangeListener attachStateChangeListener;
+    private final Runnable attachViewRunnable;
+    private boolean detached;
 
     private boolean enabled;
     private boolean hasTranslatedCaption;
@@ -69,6 +74,29 @@ public final class AiSubtitleOverlay {
     private AiSubtitleOverlay(FragmentActivity activity, PlayerView playerView) {
         this.activity = activity;
         this.playerView = playerView;
+        this.attachStateChangeListener = new android.view.View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(android.view.View view) {
+                Log.d(TAG, "player_view_attached");
+                if (!detached) scheduleAutoStart();
+            }
+            @Override public void onViewDetachedFromWindow(android.view.View view) {
+                Log.d(TAG, "player_view_detached");
+            }
+        };
+        // Defer adding subtitle views until the PlayerView has completed attachment.
+        // ActivityResult launchers are still registered synchronously while lifecycle is CREATED.
+        this.attachViewRunnable = () -> {
+            if (detached || activity.isFinishing() || activity.isDestroyed()) {
+                Log.d(TAG, "attach_view_skipped activity_destroyed=" + activity.isDestroyed());
+                return;
+            }
+            if (!playerView.isAttachedToWindow()) {
+                Log.d(TAG, "attach_view_skipped player_not_attached");
+                return;
+            }
+            attachView();
+        };
+        Log.i(TAG, "overlay_constructed");
         title = new TextView(activity);
         status = new TextView(activity);
         modelStatus = new TextView(activity);
@@ -111,12 +139,15 @@ public final class AiSubtitleOverlay {
     }
 
     public static void attach(FragmentActivity activity, PlayerView playerView) {
-        if (activity == null || playerView == null || activity.isFinishing()) return;
+        if (activity == null || playerView == null || activity.isFinishing()
+                || activity.isDestroyed()) return;
+        Log.i(TAG, "attach_requested activity=" + activity.getClass().getSimpleName());
         synchronized (INSTANCES) {
             if (INSTANCES.containsKey(playerView)) return;
             AiSubtitleOverlay overlay = new AiSubtitleOverlay(activity, playerView);
             INSTANCES.put(playerView, overlay);
-            overlay.attachView();
+            // Avoid mutating the PlayerView overlay during initial player/view creation.
+            playerView.post(overlay.attachViewRunnable);
         }
     }
 
@@ -126,7 +157,10 @@ public final class AiSubtitleOverlay {
         synchronized (INSTANCES) {
             overlay = INSTANCES.remove(playerView);
         }
-        if (overlay != null) overlay.detachView();
+        if (overlay != null) {
+            playerView.removeCallbacks(overlay.attachViewRunnable);
+            overlay.detachView();
+        }
     }
 
     private String selectedModelId() {
@@ -343,6 +377,9 @@ public final class AiSubtitleOverlay {
     }
 
     private void attachView() {
+        if (detached || activity.isFinishing() || activity.isDestroyed()
+                || !playerView.isAttachedToWindow()) return;
+        Log.i(TAG, "attach_view_begin");
         FrameLayout overlay = playerView.getOverlayFrameLayout();
         if (overlay == null) {
             status.setText("字幕測試：找不到播放器的疊加顯示區");
@@ -357,21 +394,18 @@ public final class AiSubtitleOverlay {
         captionParams.setMargins(dp(24), 0, dp(24), dp(28));
         overlay.addView(caption, captionParams);
 
-        // Reuse the overlay across media-item changes: the player view stays attached
-        // while the channel changes. Start once per attached PlayerView, not per stream.
-        playerView.addOnAttachStateChangeListener(new android.view.View.OnAttachStateChangeListener() {
-            @Override public void onViewAttachedToWindow(android.view.View view) {
-                scheduleAutoStart();
-            }
-            @Override public void onViewDetachedFromWindow(android.view.View view) { }
-        });
+        // Reuse the overlay across media-item changes. The listener is removed at detach.
+        playerView.addOnAttachStateChangeListener(attachStateChangeListener);
+        Log.i(TAG, "attach_view_done");
         scheduleAutoStart();
     }
 
     private void scheduleAutoStart() {
-        if (!AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
+        if (detached || activity.isFinishing() || activity.isDestroyed()
+                || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
         playerView.post(() -> playerView.postDelayed(() -> {
-            if (activity.isFinishing() || !playerView.isAttachedToWindow()
+            if (detached || activity.isFinishing() || activity.isDestroyed()
+                    || !playerView.isAttachedToWindow()
                     || !AiSubtitleSettingsActivity.isAutoStartEnabled(activity)) return;
             if (!enabled && modelManager.isDownloaded(selectedModelId()) && !modelManager.isDownloading()) {
                 ensureAutoStartCapture();
@@ -694,6 +728,12 @@ public final class AiSubtitleOverlay {
     }
 
     private void detachView() {
+        if (detached) return;
+        detached = true;
+        playerView.removeCallbacks(attachViewRunnable);
+        playerView.removeOnAttachStateChangeListener(attachStateChangeListener);
+        mainHandler.removeCallbacks(modelLoadWarning);
+        Log.i(TAG, "detach_view_begin");
         stopCapture("播放器已關閉");
         if (panel.getParent() instanceof FrameLayout) {
             ((FrameLayout) panel.getParent()).removeView(panel);
@@ -704,6 +744,7 @@ public final class AiSubtitleOverlay {
         if (entryButton.getParent() instanceof FrameLayout) {
             ((FrameLayout) entryButton.getParent()).removeView(entryButton);
         }
+        Log.i(TAG, "detach_view_done");
     }
 
     private int dp(float value) {

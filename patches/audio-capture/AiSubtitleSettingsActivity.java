@@ -31,8 +31,9 @@ import java.util.Locale;
 
 public final class AiSubtitleSettingsActivity extends BaseActivity {
     private static final String PREFS_NAME = "r15_ai_subtitle_settings";
-    // New key migrates existing installs to auto-start once the model is downloaded.
-    private static final String KEY_AUTO_START = "auto_start_v2";
+    // Keep automatic capture opt-in. Older POC builds enabled it by default during
+    // player creation, which is unsuitable for first-run testing and permission flow.
+    private static final String KEY_AUTO_START = "auto_start_v3";
     private static final String KEY_TRANSLATION_SERVICE = "translation_service";
     private static final String KEY_SUBTITLE_DISPLAY = "subtitle_display";
     private static final String KEY_ASR_LANGUAGE = "asr_language";
@@ -58,7 +59,7 @@ public final class AiSubtitleSettingsActivity extends BaseActivity {
 
     public static boolean isAutoStartEnabled(Context context) {
         return context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-                .getBoolean(KEY_AUTO_START, true);
+                .getBoolean(KEY_AUTO_START, false);
     }
 
     public static int getTranslationService(Context context) {
