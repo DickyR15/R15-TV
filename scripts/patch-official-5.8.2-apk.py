@@ -146,9 +146,15 @@ def patch_manifest(decoded: Path, run_number: int) -> None:
                 "writePermission", "permissionGroup", "targetPackage",
             }:
                 node.set(key, value.replace(SOURCE_PACKAGE, TARGET_PACKAGE))
-            elif key == ANDROID_ATTR + "name" and tag not in COMPONENTS and value.startswith(SOURCE_PACKAGE):
-                # Custom permission names and other package-qualified manifest names
-                # are not Java component classes.
+            elif key == ANDROID_ATTR + "name" and tag in {
+                "permission", "permission-tree", "permission-group",
+                "uses-permission", "uses-permission-sdk-23", "uses-permission-sdk-m",
+                "protected-broadcast",
+            } and value.startswith(SOURCE_PACKAGE):
+                # Rewrite only permission identifiers that belong to the app. Do not
+                # rewrite android:name on <meta-data>: AndroidX Startup uses that field
+                # as a Java class name (for example com.fongmi.android.tv.Startup), and
+                # the binary migration intentionally keeps Java classes in the source package.
                 node.set(key, value.replace(SOURCE_PACKAGE, TARGET_PACKAGE))
 
     application = next((n for n in list(root) if local_name(n.tag) == "application"), None)
