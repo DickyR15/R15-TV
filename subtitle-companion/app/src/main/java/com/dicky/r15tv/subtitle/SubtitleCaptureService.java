@@ -5,6 +5,7 @@ import android.app.NotificationChannel;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
+import androidx.core.app.ServiceCompat;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
@@ -175,12 +176,13 @@ public final class SubtitleCaptureService extends Service {
             channel.setDescription("使用本機辨識產生直播繁體中文字幕");
             manager.createNotificationChannel(channel);
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            startForeground(NOTIFICATION_ID, buildNotification("正在啟動字幕服務…"),
-                    ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION);
-        } else {
-            startForeground(NOTIFICATION_ID, buildNotification("正在啟動字幕服務…"));
-        }
+        // Use AndroidX compatibility API so the service never resolves an unsupported
+        // one-argument framework startForeground(Notification) method on older runtimes.
+        int foregroundType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                ? ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+                : 0;
+        ServiceCompat.startForeground(this, NOTIFICATION_ID,
+                buildNotification("正在啟動字幕服務…"), foregroundType);
         foregroundStarted = true;
     }
 
