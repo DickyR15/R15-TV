@@ -238,6 +238,13 @@ public final class MainActivity extends Activity {
     }
 
     private void requestStartCapture() {
+        // Android playback capture APIs were introduced in Android 10 (API 29).
+        // The app can still test overlays on Android 9, but must not try to start capture there.
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+            setStatus("此 Android 版本（API " + Build.VERSION.SDK_INT
+                    + "）不支援內部播放音訊擷取；需要 Android 10（API 29）以上。浮窗預覽仍可使用。");
+            return;
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !Settings.canDrawOverlays(this)) {
             setStatus("請先允許「顯示在其他應用程式上層」，完成後再按開始。");
             requestOverlayPermission();
