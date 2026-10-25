@@ -148,28 +148,8 @@ public final class AiSubtitleOverlay {
     }
 
     private static void attachDisabled(FragmentActivity activity, PlayerView playerView) {
-        if (activity == null || playerView == null || activity.isFinishing()
-                || activity.isDestroyed()) return;
-        Log.i(TAG, "attach_requested activity=" + activity.getClass().getSimpleName());
-        synchronized (INSTANCES) {
-            if (INSTANCES.containsKey(playerView)) return;
-            AiSubtitleOverlay overlay = new AiSubtitleOverlay(activity, playerView);
-            INSTANCES.put(playerView, overlay);
-            // Avoid mutating the PlayerView overlay during initial player/view creation.
-            playerView.post(overlay.attachViewRunnable);
-        }
-    }
-
-    public static void detach(PlayerView playerView) {
-        if (playerView == null) return;
-        AiSubtitleOverlay overlay;
-        synchronized (INSTANCES) {
-            overlay = INSTANCES.remove(playerView);
-        }
-        if (overlay != null) {
-            playerView.removeCallbacks(overlay.attachViewRunnable);
-            overlay.detachView();
-        }
+        // Intentionally disabled in the diagnostic build.
+        // The previous implementation is restored from history after crash isolation.
     }
 
     private String selectedModelId() {
