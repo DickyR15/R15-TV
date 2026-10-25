@@ -1,0 +1,179 @@
+name: R15 TV 5.8.2 Official APK Resource Migration
+run-name: R15 TV 5.8.2 binary-based migration
+
+on:
+  push:
+    branches:
+      - "r15-tv-5.8.2-apk-migration"
+    paths:
+      - ".github/workflows/build-official-582-apk.yml"
+      - "scripts/patch-official-5.8.2-apk.py"
+      - "patches/branding/r15_tv_icon_reference.webp"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: r15tv-official-582-migration-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  OFFICIAL_APK_URL: https://github.com/FongMi/Release/releases/download/5.8.2/leanback-arm64_v8a.apk
+  OFFICIAL_APK_SHA256: 6a374490fd61b3f43cb0a6b5d9ff2871a7c005e249d3c4d0f6f43b9ce543a827
+  APKTOOL_URL: https://github.com/iBotPeaches/Apktool/releases/download/v3.0.3/apktool_3.0.3.jar
+  APKTOOL_SHA256: dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423
+
+jobs:
+  patch:
+    name: Patch R15 identity while preserving official playback core
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - name: Checkout R15 migration scripts and artwork
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up Java 21
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install pinned APK tooling and Traditional Chinese converter
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p tools build dist
+          curl -fL --retry 3 --retry-all-errors "$APKTOOL_URL" -o tools/apktool.jar
+          echo "$APKTOOL_SHA256  tools/apktool.jar" | sha256sum --check
+          java -jar tools/apktool.jar --version
+          python -m pip install --disable-pip-version-check "Pillow==11.3.0" "opencc-python-reimplemented==0.1.7"
+          python -m py_compile scripts/patch-official-5.8.2-apk.py
+
+      - name: Download and verify official FongMi TV 5.8.2 ARM64 APK
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fL --retry 3 --retry-all-errors "$OFFICIAL_APK_URL" -o build/fongmi-official-5.8.2-arm64.apk
+          echo "$OFFICIAL_APK_SHA256  build/fongmi-official-5.8.2-arm64.apk" | sha256sum --check
+          echo "Official FongMi 5.8.2 ARM64 APK checksum verified."
+
+      - name: Decode official APK without changing playback bytecode
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -Xmx5g -jar tools/apktool.jar decode \
+            --force \
+            --output build/fongmi-decoded \
+            build/fongmi-official-5.8.2-arm64.apk
+          test -s build/fongmi-decoded/AndroidManifest.xml
+          test -d build/fongmi-decoded/res
+          test -d build/fongmi-decoded/lib/arm64-v8a
+          echo "Decoded official APK; native ARM64 libraries are present."
+
+      - name: Apply R15 branding and Taiwan Traditional Chinese resources
+        shell: bash
+        env:
+          RUN_NUMBER: ${{ github.run_number }}
+        run: |
+          set -euo pipefail
+          python scripts/patch-official-5.8.2-apk.py \
+            --decoded-dir build/fongmi-decoded \
+            --branding-image patches/branding/r15_tv_icon_reference.webp \
+            --run-number "$RUN_NUMBER"
+          cat build/fongmi-decoded/R15_APK_PATCH_INFO.txt
+
+      - name: Install Android build-tools for APK signing and verification
+        uses: android-actions/setup-android@v4
+        with:
+          packages: ""
+
+      - name: Install Android SDK build-tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          yes | sdkmanager --licenses >/dev/null
+          sdkmanager "platform-tools" "build-tools;36.0.0"
+          echo "$ANDROID_HOME/build-tools/36.0.0" >> "$GITHUB_PATH"
+
+      - name: Rebuild official APK resources
+        shell: bash
+        run: |
+          set -euo pipefail
+          java -Xmx5g -jar tools/apktool.jar build \
+            --output build/r15-unsigned.apk \
+            build/fongmi-decoded
+          test -s build/r15-unsigned.apk
+          echo "Rebuilt patched APK; installable signing and package verification are next."
+
+      - name: Sign with the persistent R15 TV signing key
+        shell: bash
+        env:
+          KEYSTORE_B64: ${{ secrets.R15TV_KEYSTORE_B64 }}
+          STORE_PASSWORD: ${{ secrets.R15TV_STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.R15TV_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$KEYSTORE_B64" || -z "$STORE_PASSWORD" || -z "$KEY_PASSWORD" ]]; then
+            echo "Missing persistent R15 signing secrets; refusing to create an APK that cannot be updated consistently." >&2
+            exit 1
+          fi
+          printf '%s' "$KEYSTORE_B64" | base64 --decode > build/r15tv.keystore
+          keytool -list -keystore build/r15tv.keystore -storepass "$STORE_PASSWORD" -alias r15tv >/dev/null
+          apksigner sign \
+            --ks build/r15tv.keystore \
+            --ks-key-alias r15tv \
+            --ks-pass "pass:$STORE_PASSWORD" \
+            --key-pass "pass:$KEY_PASSWORD" \
+            --out "dist/R15 TV-5.8.2-arm64.apk" \
+            build/r15-unsigned.apk
+          apksigner verify --verbose --print-certs "dist/R15 TV-5.8.2-arm64.apk" > dist/SIGNATURE-VERIFY.txt
+          sha256sum "dist/R15 TV-5.8.2-arm64.apk" > dist/SHA256SUMS.txt
+
+      - name: Verify package, branding, ABI, and untouched playback libraries
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk="dist/R15 TV-5.8.2-arm64.apk"
+          badging="$(aapt dump badging "$apk")"
+          grep -Fq "package: name='com.dicky.r15tv'" <<<"$badging"
+          grep -Fq "application-label:'R15 TV'" <<<"$badging"
+          grep -Fq "native-code: 'arm64-v8a'" <<<"$badging"
+          entries="$(unzip -Z1 "$apk")"
+          grep -Fq "classes.dex" <<<"$entries"
+          grep -Fq "lib/arm64-v8a/" <<<"$entries"
+          grep -Fq "res/drawable-nodpi/r15_tv_banner.png" <<<"$entries"
+          grep -Fq "R15_APK_PATCH_INFO.txt" <<<"$entries"
+          mkdir -p dist/metadata
+          cp build/fongmi-decoded/R15_APK_PATCH_INFO.txt dist/metadata/
+          cp build/fongmi-decoded/AndroidManifest.xml dist/metadata/patched-AndroidManifest.xml
+          {
+            echo "## R15 TV 5.8.2 binary-based migration"
+            echo "- Base: official FongMi TV 5.8.2 ARM64 APK"
+            echo "- Official base SHA-256: $OFFICIAL_APK_SHA256"
+            echo "- App ID: com.dicky.r15tv"
+            echo "- Playback DEX code and native libraries were not intentionally modified."
+            echo "- Changes: R15 app identity/icons/banner and zh-TW resource overlay."
+            echo "- AI live subtitles are not included in this first migration artifact."
+            echo "- Real-device playback and install testing are still required."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload first-stage R15 APK and verification metadata
+        uses: actions/upload-artifact@v7
+        with:
+          name: R15-TV-5.8.2-APK-migration-${{ github.run_number }}
+          path: |
+            dist/R15 TV-5.8.2-arm64.apk
+            dist/SHA256SUMS.txt
+            dist/SIGNATURE-VERIFY.txt
+            dist/metadata/**
+          if-no-files-found: error
+          retention-days: 30
