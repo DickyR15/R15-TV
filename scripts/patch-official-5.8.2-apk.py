@@ -61,6 +61,58 @@ def qualify_class(name: str) -> str:
     return name
 
 
+def patch_package_scoped_string_literals(decoded: Path) -> int:
+    """Repoint only app-ID/action/resource URI string constants, never Java class descriptors."""
+    prefixes = (
+        "com.fongmi.android.tv.LOCAL_BIND",
+        "com.fongmi.android.tv.RUNTIME_INSTALL_RESULT",
+        "com.fongmi.android.tv.external.TITLE",
+        "com.fongmi.android.tv.external.HEADERS",
+        "com.fongmi.android.tv.external.POSITION",
+        "com.fongmi.android.tv.external.SUBTITLE",
+        "com.fongmi.android.tv.external.RETURN_RESULT",
+        "com.fongmi.android.tv.external.FORWARD_RESULT",
+        "android.resource://com.fongmi.android.tv/",
+        "com.fongmi.android.tv:nodejs",
+    )
+    literal_re = re.compile(r'"((?:\\.|[^"\\])*)"')
+    changed = 0
+    scanned = 0
+
+    for smali_root in sorted(decoded.glob("smali*")):
+        if not smali_root.is_dir():
+            continue
+        for path in smali_root.rglob("*.smali"):
+            source = path.read_text(encoding="utf-8")
+            def patch_literal(match: re.Match[str]) -> str:
+                nonlocal changed
+                value = match.group(1)
+                updated = value
+                if value == SOURCE_PACKAGE:
+                    updated = TARGET_PACKAGE
+                else:
+                    for prefix in prefixes:
+                        if value == prefix or value.startswith(prefix):
+                            updated = value.replace(SOURCE_PACKAGE, TARGET_PACKAGE, 1)
+                            break
+                if updated != value:
+                    changed += 1
+                    return '"' + updated + '"'
+                return match.group(0)
+
+            patched = literal_re.sub(patch_literal, source)
+            scanned += 1
+            if patched != source:
+                path.write_text(patched, encoding="utf-8")
+
+    if scanned == 0:
+        raise SystemExit("No decoded smali sources found; cannot safely patch app-ID string constants.")
+    if changed == 0:
+        raise SystemExit("No package-scoped app-ID string constants were updated; refusing a blind APK rebuild.")
+    print(f"Updated {changed} app-ID/action/resource-URI string literals across {scanned} smali files; Java class descriptors and native libraries were not renamed.")
+    return changed
+
+
 def patch_manifest(decoded: Path, run_number: int) -> None:
     path = decoded / "AndroidManifest.xml"
     tree = parse_xml(path)
@@ -296,6 +348,7 @@ def main() -> None:
 
     patch_manifest(decoded, args.run_number)
     patch_apktool_metadata(decoded, args.run_number)
+    patch_package_scoped_string_literals(decoded)
     patch_app_name(decoded / "res")
     copied = merge_cn_locale(decoded / "res")
     converter = OpenCC("s2twp")
