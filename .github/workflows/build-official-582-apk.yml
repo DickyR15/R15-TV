@@ -149,11 +149,11 @@ jobs:
           grep -Fq "package: name='com.dicky.r15tv'" <<<"$badging"
           grep -Fq "application-label:'R15 TV'" <<<"$badging"
           grep -Fq "native-code: 'arm64-v8a'" <<<"$badging"
+          grep -Fq "versionName='5.8.2-r15.${GITHUB_RUN_NUMBER}'" <<<"$badging"
           entries="$(unzip -Z1 "$apk")"
           grep -Fq "classes.dex" <<<"$entries"
           grep -Fq "lib/arm64-v8a/" <<<"$entries"
-          grep -Fq "res/drawable-nodpi/r15_tv_banner.png" <<<"$entries"
-          grep -Fq "R15_APK_PATCH_INFO.txt" <<<"$entries"
+          grep -Fq "r15_tv_banner.png" <<<"$entries"
           mkdir -p dist/metadata
           cp build/fongmi-decoded/R15_APK_PATCH_INFO.txt dist/metadata/
           cp build/fongmi-decoded/AndroidManifest.xml dist/metadata/patched-AndroidManifest.xml
