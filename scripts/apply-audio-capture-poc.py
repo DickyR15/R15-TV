@@ -361,6 +361,21 @@ def patch_live_activity_software_rendering(path: Path) -> None:
 
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
+    # Diagnostic isolation: disable hardware acceleration for the entire application,
+    # not just LiveActivity. The crash can occur during activity transitions and the
+    # shared process RenderThread may still serve other hardware-accelerated windows.
+    app_start = text.find("<application")
+    app_end = text.find(">", app_start)
+    if app_start < 0 or app_end < 0:
+        raise SystemExit(f"{path}: cannot locate application manifest tag")
+    app_tag = text[app_start:app_end + 1]
+    app_attr = 'android:hardwareAccelerated="false"'
+    if app_attr not in app_tag:
+        enabled_attr = 'android:hardwareAccelerated="true"'
+        if enabled_attr not in app_tag:
+            raise SystemExit(f"{path}: application hardware acceleration attribute is missing")
+        app_tag = app_tag.replace(enabled_attr, app_attr, 1)
+        text = text[:app_start] + app_tag + text[app_end + 1:]
     permissions = [
         '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
         '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
@@ -544,7 +559,7 @@ def main() -> None:
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
     print("Applied Whisper Base subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
-    print("LiveActivity UI software-rendering diagnostic enabled; SurfaceView video/player core unchanged.")
+    print("Application-wide software UI rendering diagnostic enabled; player engine configuration unchanged.")
     print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
