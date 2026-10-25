@@ -335,6 +335,30 @@ def patch_mpv_engine(path: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
+
+def patch_live_activity_software_rendering(path: Path) -> None:
+    """Diagnostic only: bypass the Android HW-accelerated View renderer on LiveActivity."""
+    text = path.read_text(encoding="utf-8")
+    marker = 'android:name=".ui.activity.LiveActivity"'
+    marker_pos = text.find(marker)
+    if marker_pos < 0:
+        raise SystemExit(f"{path}: cannot locate LiveActivity activity declaration")
+    tag_start = text.rfind("<activity", 0, marker_pos)
+    tag_end = text.find(">", marker_pos)
+    if tag_start < 0 or tag_end < 0:
+        raise SystemExit(f"{path}: cannot locate complete LiveActivity activity tag")
+    tag = text[tag_start:tag_end + 1]
+    attr = 'android:hardwareAccelerated="false"'
+    if attr in tag:
+        return
+    if 'android:hardwareAccelerated="true"' in tag:
+        tag = tag.replace('android:hardwareAccelerated="true"', attr, 1)
+    else:
+        tag = tag.replace(marker, marker + '\\n            ' + attr, 1)
+    text = text[:tag_start] + tag + text[tag_end + 1:]
+    path.write_text(text, encoding="utf-8")
+
+
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
     permissions = [
@@ -407,6 +431,8 @@ def main() -> None:
     leanback_live = tv / "app/src/leanback/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"
     mobile_live = tv / "app/src/mobile/java/com/fongmi/android/tv/ui/activity/LiveActivity.java"
     manifest = tv / "app/src/main/AndroidManifest.xml"
+    leanback_manifest = tv / "app/src/leanback/AndroidManifest.xml"
+    mobile_manifest = tv / "app/src/mobile/AndroidManifest.xml"
     gradle = tv / "app/build.gradle"
     proguard = tv / "app/proguard-rules.pro"
     exo_util = tv / "app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java"
@@ -419,7 +445,7 @@ def main() -> None:
     setting_decode_layout = tv / "app/src/leanback/res/layout/activity_setting_decode.xml"
 
     activities = [leanback_video, mobile_video, leanback_live, mobile_live]
-    required = activities + [manifest, gradle, proguard, exo_util, player_manager, mpv_engine,
+    required = activities + [manifest, leanback_manifest, mobile_manifest, gradle, proguard, exo_util, player_manager, mpv_engine,
                              player_setting, setting_activity, setting_activity_layout,
                              setting_decode_activity, setting_decode_layout]
     for path in required:
@@ -483,6 +509,8 @@ def main() -> None:
         proguard.write_text(text, encoding="utf-8")
 
     patch_manifest(manifest)
+    patch_live_activity_software_rendering(leanback_manifest)
+    patch_live_activity_software_rendering(mobile_manifest)
     patch_player_setting(player_setting)
     patch_setting_activity(setting_activity)
     patch_setting_activity_layout(setting_activity_layout)
@@ -516,6 +544,7 @@ def main() -> None:
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
     print("Applied Whisper Base subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
+    print("LiveActivity UI software-rendering diagnostic enabled; SurfaceView video/player core unchanged.")
     print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
