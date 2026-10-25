@@ -354,7 +354,7 @@ def patch_live_activity_software_rendering(path: Path) -> None:
     if 'android:hardwareAccelerated="true"' in tag:
         tag = tag.replace('android:hardwareAccelerated="true"', attr, 1)
     else:
-        tag = tag.replace(marker, marker + '\\n            ' + attr, 1)
+        tag = tag.replace(marker, marker + chr(10) + '            ' + attr, 1)
     text = text[:tag_start] + tag + text[tag_end + 1:]
     path.write_text(text, encoding="utf-8")
 
