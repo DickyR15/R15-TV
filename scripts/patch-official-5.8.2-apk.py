@@ -125,7 +125,7 @@ def patch_apktool_metadata(decoded: Path, run_number: int) -> None:
     version_code = 2_000_000_000 + (run_number % 99_000_000)
     version_name = f"5.8.2-r15.{run_number}"
     for key, value in (("versionCode", str(version_code)), ("versionName", version_name)):
-        pattern = re.compile(rf"(?m)^(\\s*{key}:\\s*).*$")
+        pattern = re.compile(rf"(?m)^(\s*{key}:\s*).*$")
         text, count = pattern.subn(lambda match: match.group(1) + "'" + value + "'", text, count=1)
         if count != 1:
             raise SystemExit(f"Could not update exactly one {key} entry in apktool.yml.")
