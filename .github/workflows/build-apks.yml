@@ -4,7 +4,7 @@ run-name: R15 TV APK Build (manual or source update)
 on:
   push:
     branches:
-      - "diagnostic/live-v7a-fixed-debug-sign"
+      - "r15-tv-5.8.2-base"
     paths:
       - ".github/workflows/build-apks.yml"
       - "config/**"
@@ -180,7 +180,15 @@ jobs:
         run: |
           set -euo pipefail
           grep -R -n -E 'media3|mpvplayer|libass' app/build.gradle gradle/libs.versions.toml app/libs 2>/dev/null | head -120 || true
-          echo "Use the source-compatible dependencies declared by the chosen upstream TV commit; do not inject an independently built, mismatched Media3 tree."
+          aar_count=$(find app/libs -maxdepth 1 -type f -name 'lib-*-release.aar' | wc -l | tr -d ' ')
+          echo "Found $aar_count custom Media3/MPV release AARs; expected 20."
+          if [[ "$aar_count" -ne 20 ]]; then
+            echo "::error::STOP: the selected FongMi TV source uses custom Media3 APIs that are not in the public FongMi/media branch."
+            echo "::error::Upstream issue FongMi/TV#764 documents 45 missing classes; Release does not publish the matching lib-*.aar files."
+            echo "::error::Refusing to compile or ship this build with mismatched AARs; this could reproduce the live-stream crash."
+            exit 1
+          fi
+          echo "Matched Media3/MPV dependencies found; continue with R15 branding, Taiwan localization, settings, and AI subtitles."
 
       - name: Fetch official OpenCC 1.4.2 source
         env:
