@@ -28,6 +28,7 @@ public final class MainActivity extends Activity {
     private WhisperModelManager modelManager;
     private SubtitleOverlayWindow overlayTestWindow;
     private Button overlayTestButton;
+    private TextView crashView;
     private boolean overlayTestVisible;
 
     @Override
@@ -38,6 +39,7 @@ public final class MainActivity extends Activity {
         modelManager = WhisperModelManager.getInstance(this);
         buildUi();
         refreshModelState();
+        loadCrashReport();
     }
 
     @Override
@@ -49,6 +51,7 @@ public final class MainActivity extends Activity {
         if (!lastStatus.isEmpty() && !lastStatus.equals("字幕服務已停止。")) {
             setStatus("字幕服務回報：" + lastStatus);
         }
+        loadCrashReport();
     }
 
     private void buildUi() {
@@ -115,6 +118,24 @@ public final class MainActivity extends Activity {
         warning.setGravity(Gravity.CENTER);
         warning.setPadding(0, dp(12), 0, dp(8));
         layout.addView(warning, matchWrap());
+
+        crashView = new TextView(this);
+        crashView.setTextColor(0xFFFFB8B8);
+        crashView.setTextSize(13);
+        crashView.setTextIsSelectable(true);
+        crashView.setPadding(0, dp(12), 0, dp(12));
+        crashView.setVisibility(View.GONE);
+        layout.addView(crashView, matchWrap());
+
+        Button clearCrash = new Button(this);
+        clearCrash.setText("清除已保存的閃退紀錄");
+        clearCrash.setAllCaps(false);
+        clearCrash.setOnClickListener(v -> {
+            SubtitlePocApplication.clearLastCrash(this);
+            loadCrashReport();
+            setStatus("已清除本機閃退紀錄。");
+        });
+        layout.addView(clearCrash, matchWrap());
 
         scroll.addView(layout);
         setContentView(scroll);
@@ -252,9 +273,13 @@ public final class MainActivity extends Activity {
         start.setAction(SubtitleCaptureService.ACTION_START);
         start.putExtra(SubtitleCaptureService.EXTRA_RESULT_CODE, resultCode);
         start.putExtra(SubtitleCaptureService.EXTRA_PROJECTION_DATA, data);
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(start);
-        else startService(start);
-        setStatus("字幕服務正在啟動；若無浮窗，請稍候返回本頁查看錯誤狀態。");
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) startForegroundService(start);
+            else startService(start);
+            setStatus("字幕服務正在啟動；若服務異常退出，重新開啟本 App 可查看錯誤紀錄。");
+        } catch (Throwable error) {
+            setStatus("無法啟動字幕服務：" + readable(error));
+        }
     }
 
     @Override
@@ -278,6 +303,20 @@ public final class MainActivity extends Activity {
     private LinearLayout.LayoutParams matchWrap() {
         return new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+    }
+
+    private void loadCrashReport() {
+        if (crashView == null) return;
+        String report = SubtitlePocApplication.readLastCrash(this);
+        if (report == null || report.isEmpty()) {
+            crashView.setVisibility(View.GONE);
+            return;
+        }
+        crashView.setVisibility(View.VISIBLE);
+        // Show the latest part of the stack trace so it fits on TV; text remains selectable.
+        if (report.length() > 10000) report = report.substring(report.length() - 10000);
+        crashView.setText("偵測到上次閃退紀錄（可選取複製或截圖回傳）：\n" + report);
+        setStatus("偵測到上次閃退紀錄，請查看頁面下方紅色文字。");
     }
 
     private String readable(Throwable error) {
