@@ -364,7 +364,7 @@ def main() -> None:
         f"Official APK patched: package={TARGET_PACKAGE}; version=5.8.2-r15.{args.run_number}; "
         f"merged {copied} zh-CN fallback entries; translated {translated_files} Traditional-Chinese "
         f"resource XML files and {layout_files} layout XML files; replaced launcher artwork and banner. "
-        "Player DEX code and native libraries were not modified."
+        "App-ID/action/resource-URI string literals were patched in DEX; Java class names, method logic, and native libraries were not modified."
     )
     (decoded / "R15_APK_PATCH_INFO.txt").write_text(summary + "\n", encoding="utf-8")
     print(summary)
