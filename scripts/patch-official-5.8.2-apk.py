@@ -220,16 +220,16 @@ def make_brand_assets(decoded: Path, reference: Path) -> None:
     with Image.open(reference) as src:
         artwork = src.convert("RGB").resize((512, 512), Image.Resampling.LANCZOS)
 
-    # Replace raster launcher assets in place and ensure every common density exists.
+    # Remove all same-name raster variants first. Keeping both PNG and WEBP in one
+    # density directory creates duplicate Android resource configurations.
     for path in list(res.rglob("*")):
-        if not path.is_file() or path.suffix.lower() not in {".png", ".webp", ".jpg", ".jpeg"}:
+        if not path.is_file():
             continue
-        if path.stem in {"ic_launcher", "ic_launcher_round"} and path.parent.name.startswith(("mipmap-", "drawable")):
-            size = DENSITIES.get(path.parent.name, 512)
-            save_image(artwork.resize((size, size), Image.Resampling.LANCZOS), path)
+        if path.stem in {"ic_launcher", "ic_launcher_round"} and path.suffix.lower() in {".png", ".webp", ".jpg", ".jpeg"}:
+            path.unlink()
 
     # Adaptive icon XML depends on a foreground/background layout. Remove the overrides
-    # so Android uses the patched per-density raster resources.
+    # so Android uses one patched raster resource per density.
     for path in list(res.rglob("ic_launcher.xml")) + list(res.rglob("ic_launcher_round.xml")):
         if path.parent.name.startswith("mipmap-anydpi"):
             path.unlink()
