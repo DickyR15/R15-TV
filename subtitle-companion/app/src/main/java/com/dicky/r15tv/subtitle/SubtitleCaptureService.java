@@ -115,9 +115,14 @@ public final class SubtitleCaptureService extends Service {
                     if (overlay != null) overlay.setStatus(status);
                 }
                 @Override public void onLevel(float dbfs) {
-                    if (overlay != null && dbfs < -55.0f) {
-                        overlay.setStatus("未收到明顯音訊（" + Math.round(dbfs)
-                                + " dBFS）；請播放 R15 TV 直播");
+                    if (overlay == null) return;
+                    long rounded = Math.round(dbfs);
+                    if (dbfs < -55.0f) {
+                        overlay.setStatus("未收到明顯 MPV 音訊（" + rounded
+                                + " dBFS）；確認直播有聲音並保持播放");
+                    } else {
+                        overlay.setStatus("已收到 MPV 音訊（" + rounded
+                                + " dBFS）；正在辨識語音…");
                     }
                 }
             });
