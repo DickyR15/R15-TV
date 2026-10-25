@@ -184,7 +184,7 @@ public final class AiSubtitlePlaybackCapture {
             }
 
             long now = SystemClock.uptimeMillis();
-            if (now - lastLevelUpdateMs >= 900) {
+            if (now - lastLevelUpdateMs >= 2500) {
                 lastLevelUpdateMs = now;
                 double rms = Math.sqrt(sumSquares / Math.max(1, count));
                 float dbfs = (float) (20.0 * Math.log10(Math.max(1e-6, rms)));
