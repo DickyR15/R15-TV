@@ -115,15 +115,8 @@ public final class SubtitleCaptureService extends Service {
                     if (overlay != null) overlay.setStatus(status);
                 }
                 @Override public void onLevel(float dbfs) {
-                    if (overlay == null) return;
-                    long rounded = Math.round(dbfs);
-                    if (dbfs < -55.0f) {
-                        overlay.setStatus("未收到明顯 MPV 音訊（" + rounded
-                                + " dBFS）；確認直播有聲音並保持播放");
-                    } else {
-                        overlay.setStatus("已收到 MPV 音訊（" + rounded
-                                + " dBFS）；正在辨識語音…");
-                    }
+                    // Audio meter updates must not overwrite Whisper/model/inference status.
+                    if (overlay != null) overlay.setAudioLevel(dbfs);
                 }
             });
             reportStatus("字幕擷取已啟動；請按 Home 回到 R15 TV 播放直播。");

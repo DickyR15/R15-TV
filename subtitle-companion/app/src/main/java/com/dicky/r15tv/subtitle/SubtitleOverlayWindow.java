@@ -17,6 +17,7 @@ public final class SubtitleOverlayWindow {
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private LinearLayout root;
     private TextView statusView;
+    private TextView audioLevelView;
     private TextView sourceView;
     private TextView translatedView;
     private boolean attached;
@@ -50,6 +51,16 @@ public final class SubtitleOverlayWindow {
         statusView.setText("字幕測試已啟動，等待播放音訊…");
         root.addView(statusView, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        audioLevelView = new TextView(context);
+        audioLevelView.setTextColor(0xFF8AC8FF);
+        audioLevelView.setTextSize(12);
+        audioLevelView.setGravity(Gravity.CENTER);
+        audioLevelView.setText("MPV 音訊電平：等待中");
+        LinearLayout.LayoutParams levelParams = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT);
+        levelParams.topMargin = dp(2);
+        root.addView(audioLevelView, levelParams);
 
         sourceView = new TextView(context);
         sourceView.setTextColor(0xFFD9E6F7);
@@ -96,6 +107,30 @@ public final class SubtitleOverlayWindow {
         });
     }
 
+    public void setAudioLevel(float dbfs) {
+        final String label;
+        final int color;
+        if (!Float.isFinite(dbfs)) {
+            label = "MPV 音訊電平：無法讀取";
+            color = 0xFFFFC27A;
+        } else {
+            long rounded = Math.round(dbfs);
+            if (dbfs < -55.0f) {
+                label = "MPV 音訊電平：" + rounded + " dBFS（訊號偏弱）";
+                color = 0xFFFFC27A;
+            } else {
+                label = "MPV 音訊電平：" + rounded + " dBFS（已收到）";
+                color = 0xFF8DE1A5;
+            }
+        }
+        runOnMain(() -> {
+            if (audioLevelView != null) {
+                audioLevelView.setText(label);
+                audioLevelView.setTextColor(color);
+            }
+        });
+    }
+
     public void showSubtitle(String source, String translated) {
         final String safeSource = source == null ? "" : source.trim();
         final String safeTranslated = translated == null ? "" : translated.trim();
@@ -123,6 +158,7 @@ public final class SubtitleOverlayWindow {
         sourceView = null;
         translatedView = null;
         statusView = null;
+        audioLevelView = null;
     }
 
     private void runOnMain(Runnable action) {

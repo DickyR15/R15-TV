@@ -1,8 +1,12 @@
 #include <jni.h>
 #include <algorithm>
+#include <chrono>
 #include <string>
 #include <vector>
+#include <android/log.h>
 #include "whisper.h"
+
+#define R15_WHISPER_LOG_TAG "R15Whisper"
 
 namespace {
 void throwIllegalState(JNIEnv *env, const char *message) {
@@ -79,14 +83,27 @@ Java_com_fongmi_android_tv_ai_subtitle_WhisperCpp_nativeTranscribe(
     params.language = auto_language ? nullptr : language_chars;
     params.detect_language = auto_language;
 
+    const auto inference_started = std::chrono::steady_clock::now();
+    __android_log_print(ANDROID_LOG_INFO, R15_WHISPER_LOG_TAG,
+            "decode_start samples=%d seconds=%.2f language=%s threads=%d",
+            static_cast<int>(sample_count), sample_count / 16000.0f,
+            auto_language ? "auto" : language_chars, params.n_threads);
     const int result = whisper_full(context, params, samples, sample_count);
+    const auto inference_elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - inference_started).count();
+    __android_log_print(ANDROID_LOG_INFO, R15_WHISPER_LOG_TAG,
+            "decode_done rc=%d elapsed_ms=%lld segments=%d",
+            result, static_cast<long long>(inference_elapsed),
+            result == 0 ? whisper_full_n_segments(context) : 0);
     env->ReleaseFloatArrayElements(audio_data, samples, JNI_ABORT);
     if (language_chars != nullptr) {
         env->ReleaseStringUTFChars(language, language_chars);
     }
 
     if (result != 0) {
-        return env->NewStringUTF("und\n");
+        const std::string message = "Whisper 推論失敗，錯誤碼：" + std::to_string(result);
+        throwIllegalState(env, message.c_str());
+        return nullptr;
     }
 
     std::string text;

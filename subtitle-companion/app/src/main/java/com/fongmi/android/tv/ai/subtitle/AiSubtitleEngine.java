@@ -167,8 +167,9 @@ public final class AiSubtitleEngine {
     private void runRecognizer() {
         long whisperContext = 0L;
         try {
-            // Let video rendering and audio playback take priority on low-core TV boxes.
-            Process.setThreadPriority(Process.THREAD_PRIORITY_BACKGROUND);
+            // Keep video playback responsive, but do not demote CPU-only Whisper to
+            // background priority: that made real-time inference appear stalled on TV boxes.
+            Process.setThreadPriority(Process.THREAD_PRIORITY_DEFAULT);
             if (cloudMode) {
                 if (!GroqSpeechToText.hasApiKey(appContext)) {
                     throw new IllegalStateException("尚未設定 Groq API Key；請先到 AI 字幕設定儲存金鑰");
@@ -220,21 +221,28 @@ public final class AiSubtitleEngine {
 
                 float[] window = snapshotTail(ring, writeIndex, Math.min(bufferedSamples, windowSize));
                 long inferenceStarted = SystemClock.elapsedRealtime();
-                // Reserve CPU capacity for decoding and rendering on lower-power TV devices.
-                int inferenceThreads = 1;
-                postStatus(cloudMode ? "正在送出直播語音辨識…" : "正在辨識直播語音…");
+                // Two CPU threads balance recognition latency with ongoing video playback.
+                int inferenceThreads = Math.max(1,
+                        Math.min(2, Runtime.getRuntime().availableProcessors()));
+                final long inputDbfs = rmsDbfs(window);
+                postStatus((cloudMode ? "正在送出直播語音辨識" : "Whisper 本機辨識中")
+                        + " · " + (window.length / ASR_SAMPLE_RATE)
+                        + " 秒音訊 · ASR " + inputDbfs + " dBFS");
                 AtomicBoolean inferenceActive = new AtomicBoolean(true);
                 Runnable[] heartbeat = new Runnable[1];
                 heartbeat[0] = () -> {
                     if (!running || !inferenceActive.get()) return;
                     long seconds = (SystemClock.elapsedRealtime() - inferenceStarted) / 1000L;
                     postStatus((cloudMode ? "Groq 雲端辨識仍在處理" : "Whisper 本機辨識仍在運算")
-                            + " · 已等待 " + seconds + " 秒");
+                            + " · 已等待 " + seconds + " 秒 · ASR " + inputDbfs + " dBFS");
                     MAIN.postDelayed(heartbeat[0], 5000L);
                 };
                 MAIN.postDelayed(heartbeat[0], 5000L);
                 String result;
                 String detectedLanguage = "und";
+                String priorLanguage = previousLanguage;
+                String languageHint = priorLanguage.matches("[a-z]{2,3}")
+                        && !"und".equals(priorLanguage) ? priorLanguage : "auto";
                 try {
                     if (cloudMode) {
                         GroqSpeechToText.TranscriptionResult cloudResult =
@@ -242,7 +250,9 @@ public final class AiSubtitleEngine {
                         result = cloudResult.text;
                         detectedLanguage = cloudResult.language;
                     } else {
-                        result = WhisperCpp.transcribe(whisperContext, window, "auto", inferenceThreads);
+                        // Auto-detect the source language once, then reuse it for later
+                        // windows to avoid paying the language-detection cost every time.
+                        result = WhisperCpp.transcribe(whisperContext, window, languageHint, inferenceThreads);
                     }
                 } finally {
                     inferenceActive.set(false);
@@ -262,9 +272,13 @@ public final class AiSubtitleEngine {
                     }
                 }
 
+                boolean validDetectedLanguage = detectedLanguage.matches("[a-z]{2,3}")
+                        && !"und".equals(detectedLanguage);
+                if (validDetectedLanguage) previousLanguage = detectedLanguage;
+
                 if (!transcript.isEmpty()) {
                     postSubtitle(transcript);
-                    String newText = detectedLanguage.equals(previousLanguage)
+                    String newText = detectedLanguage.equals(priorLanguage)
                             ? extractNewText(previousTranscript, transcript) : transcript;
                     if (!newText.isEmpty()) postFinalSubtitle(newText, detectedLanguage);
                     previousTranscript = transcript;
@@ -273,7 +287,9 @@ public final class AiSubtitleEngine {
                             + detectedLanguage + " · " + (window.length / ASR_SAMPLE_RATE)
                             + " 秒音訊 · 推論 " + inferenceMs + " ms");
                 } else {
-                    postStatus("已收到音訊，但尚未辨識到清楚語音；持續聆聽…");
+                    postStatus((cloudMode ? "Groq 辨識已完成" : "Whisper 推論已完成")
+                            + " · " + inferenceMs + " ms · 沒有回傳文字 · ASR "
+                            + inputDbfs + " dBFS；持續聆聽");
                 }
             }
         } catch (Throwable error) {
@@ -287,6 +303,20 @@ public final class AiSubtitleEngine {
             }
             if (!running) postStatus("AI 字幕已關閉");
         }
+    }
+
+    private static long rmsDbfs(float[] samples) {
+        if (samples == null || samples.length == 0) return -120L;
+        double sumSquares = 0.0;
+        int validSamples = 0;
+        for (float sample : samples) {
+            if (!Float.isFinite(sample)) continue;
+            sumSquares += sample * sample;
+            validSamples++;
+        }
+        if (validSamples == 0) return -120L;
+        double rms = Math.sqrt(sumSquares / validSamples);
+        return Math.round(20.0 * Math.log10(Math.max(1.0e-6, rms)));
     }
 
     private static float[] snapshotTail(float[] ring, int writeIndex, int count) {
