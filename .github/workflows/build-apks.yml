@@ -589,6 +589,15 @@ jobs:
 
           base_code = int(code_match.group(1))
           base_name = name_match.group(1)
+          release_label = os.environ.get("SOURCE_RELEASE", "").strip()
+          release_version = release_label.rsplit(" ", 1)[-1] if release_label else ""
+          if re.fullmatch(r"\d+\.\d+\.\d+", release_version):
+              # The published FongMi Release 5.8.3 APKs are the selected base.
+              # The TV source Gradle file still says 5.8.2, so keep R15 metadata
+              # aligned with the explicitly pinned release rather than stale source metadata.
+              base_name = release_version
+              base_code = int(release_version.replace(".", ""))
+              print(f"Release metadata override: {release_label} -> versionCode base {base_code}")
           run_number = int(os.environ["RUN_NUMBER"])
           source_sha = os.environ["SOURCE_SHA"]
           version_code = base_code * 1_000_000 + run_number
