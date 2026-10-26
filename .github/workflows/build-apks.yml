@@ -391,44 +391,80 @@ jobs:
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
 
-      - name: Align MPV and FFmpeg AAR native libraries with FongMi 5.8.3
+      - name: Build pinned FongMi unified MPV/FFmpeg native runtime and align AARs
         shell: bash
         env:
-          MPV_NATIVE_ARTIFACT_ID: 12606075956
-          MPV_NATIVE_ARTIFACT_SHA256: e95480b3709881bcefe5dc5417b32bfa0873866da6c2aba9b1cbf15fdf05ca9a
-          MPV_NATIVE_SOURCE_SHA: 1a135480fe5944cf6c7a6ae43056ab5862af7fc1
+          MPV_ANDROID_REPOSITORY: FongMi/mpv-android
+          MPV_ANDROID_SHA: 1a135480fe5944cf6c7a6ae43056ab5862af7fc1
+          MPV_SOURCE_REPOSITORY: FongMi/mpv
+          MPV_SOURCE_SHA: dc1c13de591a73926938c7374c4cfeddef1bcaa7
+          FFMPEG_GIT_COMMIT: b25c3811f4ac6fdf9386cc7bc9e192337eb06557
+          DAV1D_GIT_COMMIT: b8b2d726b4b78a2fb174cb45baff441b5969672c
+          LIBASS_GIT_COMMIT: f61db567e6593df3470e91594bcd4ad2d0473aff
+          LIBPLACEBO_GIT_COMMIT: fdc3b46dcb401bb6d4757480729b2e4a2186aee4
+          MPV_ANDROID_ARCHES: armv7l
         run: |
           set -euo pipefail
-          mkdir -p build/fongmi-583-native
-          native_zip="build/fongmi-583-native/mpv-android-fongmi.zip"
-          base_apk="build/fongmi-583-native/leanback-armeabi_v7a.apk"
+          sudo apt-get update
+          sudo apt-get install -y autoconf pkgconf libtool ninja-build cmake python3-pip gperf nasm patch ant
+          python3 -m pip install --break-system-packages meson
 
-          # Use the pinned upstream CI artifact. The old runtime-mpv 1.0.10 APK
-          # contains split-FFmpeg libmpv and fails FongMi 5.8.3's native verifier.
-          curl -fL --retry 3 --retry-all-errors \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/FongMi/mpv-android/actions/artifacts/$MPV_NATIVE_ARTIFACT_ID/zip" \
-            -o "$native_zip"
-          echo "$MPV_NATIVE_ARTIFACT_SHA256  $native_zip" | sha256sum --check
+          native_root="$GITHUB_WORKSPACE/build/fongmi-mpv-native"
+          mpv_android="$native_root/mpv-android"
+          mkdir -p "$native_root"
+          git clone --filter=blob:none "https://github.com/$MPV_ANDROID_REPOSITORY.git" "$mpv_android"
+          git -C "$mpv_android" checkout --detach "$MPV_ANDROID_SHA"
+          mkdir -p "$mpv_android/buildscripts/deps"
+          git clone --filter=blob:none "https://github.com/$MPV_SOURCE_REPOSITORY.git" "$mpv_android/buildscripts/deps/mpv"
+          git -C "$mpv_android/buildscripts/deps/mpv" checkout --detach "$MPV_SOURCE_SHA"
 
+          cd "$mpv_android"
+          # Pin all movable upstream dependencies to the exact commits used by
+          # the successful FongMi unified-native CI build for the 5.8.3 base.
+          build_env="$native_root/build-env.txt"
+          buildscripts/include/ci.sh export > "$build_env"
+          cat "$build_env" >> "$GITHUB_ENV"
+          set -a
+          # shellcheck disable=SC1090
+          source "$build_env"
+          set +a
+
+          mkdir -p "$native_root/cache"
+          CACHE_MODE=folder CACHE_FOLDER="$native_root/cache" buildscripts/include/ci.sh install
+          MPV_ANDROID_NATIVE_ONLY=1 buildscripts/include/ci.sh build
+
+          lib_root="$mpv_android/app/src/main/libs/armeabi-v7a"
+          for name in libmpv.so libplayer.so libffmpeg.so libc++_shared.so; do
+            test -s "$lib_root/$name"
+          done
+          native_zip="$GITHUB_WORKSPACE/build/fongmi-mpv-native/native-libs-v7a.zip"
+          (cd "$mpv_android/app/src/main/libs" && zip -q -r "$native_zip" armeabi-v7a)
+          unzip -t "$native_zip" >/dev/null
+
+          base_apk="$GITHUB_WORKSPACE/build/fongmi-mpv-native/leanback-armeabi_v7a.apk"
           curl -fL --retry 3 --retry-all-errors \
             "https://github.com/FongMi/Release/releases/download/5.8.3/leanback-armeabi_v7a.apk" \
             -o "$base_apk"
           echo "2d668d426ffa974d8648ac150bca2a1a16760554f061b0a9dac49cce63cb1326  $base_apk" | sha256sum --check
-          unzip -t "$native_zip" >/dev/null
           unzip -t "$base_apk" >/dev/null
 
-          python3 -m py_compile scripts/patch-unified-mpv-native.py
-          python3 scripts/patch-unified-mpv-native.py \
-            --tv-dir sources/TV \
+          python3 -m py_compile "$GITHUB_WORKSPACE/scripts/patch-unified-mpv-native.py"
+          python3 "$GITHUB_WORKSPACE/scripts/patch-unified-mpv-native.py" \
+            --tv-dir "$GITHUB_WORKSPACE/sources/TV" \
             --native-libs-zip "$native_zip" \
             --base-apk "$base_apk"
 
-          echo "Unified native artifacts from FongMi/mpv-android@$MPV_NATIVE_SOURCE_SHA staged for Gradle verification."
-          printf 'repository=FongMi/mpv-android\nrun_id=40209432515\nartifact_id=%s\nsource_sha=%s\nartifact_sha256=%s\n' \
-            "$MPV_NATIVE_ARTIFACT_ID" "$MPV_NATIVE_SOURCE_SHA" "$MPV_NATIVE_ARTIFACT_SHA256" \
-            > build/fongmi-583-native/SOURCE.txt
-          sha256sum sources/TV/app/libs/lib-mpvplayer-release.aar sources/TV/app/libs/lib-decoder-ffmpeg-release.aar
+          echo "Unified native runtime built from pinned FongMi sources and installed into the 5.8.3 AARs."
+          sha256sum "$GITHUB_WORKSPACE/sources/TV/app/libs/lib-mpvplayer-release.aar" \
+                    "$GITHUB_WORKSPACE/sources/TV/app/libs/lib-decoder-ffmpeg-release.aar"
+          {
+            echo "## Pinned MPV/FFmpeg native build"
+            echo "- MPV Android: $MPV_ANDROID_REPOSITORY@$MPV_ANDROID_SHA"
+            echo "- MPV source: $MPV_SOURCE_REPOSITORY@$MPV_SOURCE_SHA"
+            echo "- FFMPEG_GIT_COMMIT: $FFMPEG_GIT_COMMIT"
+            echo "- Only the armv7l / armeabi-v7a native libraries are built for this APK."
+            echo "- FongMi Gradle native dependency verification remains enabled."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Fetch official OpenCC 1.4.2 source
         env:
