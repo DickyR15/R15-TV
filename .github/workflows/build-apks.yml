@@ -391,6 +391,35 @@ jobs:
           ls -lh "$target"/lib-*-release.aar
           sha256sum "$target"/lib-*-release.aar
 
+      - name: Align MPV and FFmpeg AAR native libraries with FongMi 5.8.3
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/fongmi-583-native
+          runtime_apk="build/fongmi-583-native/runtime-mpv-1.0.10-armeabi-v7a.apk"
+          base_apk="build/fongmi-583-native/leanback-armeabi_v7a.apk"
+
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/FongMi/Release/releases/download/module/runtime-mpv-1.0.10-armeabi-v7a.apk" \
+            -o "$runtime_apk"
+          echo "3d8ae87655f8647ae8a5fa359d84148fa773241dbba4fa647b0f3b6deac7f9f8  $runtime_apk" | sha256sum --check
+
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/FongMi/Release/releases/download/5.8.3/leanback-armeabi_v7a.apk" \
+            -o "$base_apk"
+          echo "2d668d426ffa974d8648ac150bca2a1a16760554f061b0a9dac49cce63cb1326  $base_apk" | sha256sum --check
+          unzip -t "$runtime_apk" >/dev/null
+          unzip -t "$base_apk" >/dev/null
+
+          python3 -m py_compile scripts/patch-unified-mpv-native.py
+          python3 scripts/patch-unified-mpv-native.py \
+            --tv-dir sources/TV \
+            --runtime-apk "$runtime_apk" \
+            --base-apk "$base_apk"
+
+          echo "Unified native artifacts patched and ready for Gradle dependency verification."
+          sha256sum sources/TV/app/libs/lib-mpvplayer-release.aar sources/TV/app/libs/lib-decoder-ffmpeg-release.aar
+
       - name: Fetch official OpenCC 1.4.2 source
         env:
           EXPECTED_OPENCC_COMMIT: ${{ env.OPENCC_COMMIT }}
