@@ -92,36 +92,37 @@ def set_app_name(main_dir: Path) -> int:
 
 def force_zh_tw(app_java: Path) -> bool:
     source = app_java.read_text(encoding="utf-8")
-    old = """    @Override
-    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-        Init.set(base);
-    }"""
-    # FongMi TV 5.8.3 declares attachBaseContext without the upstream @Override
-    # annotation. Match the actual method body as a secondary exact anchor.
-    old_without_override = """    protected void attachBaseContext(Context base) {
-        super.attachBaseContext(base);
-        Init.set(base);
-    }"""
-    new = """    @Override
+    # FongMi TV 5.8.3 moved runtime initialization into Runtime APIs and
+    # no longer calls Init.set(base). Patch the actual method body, preserving
+    # all runtime initialization calls.
+    signature = """    @Override
+    protected void attachBaseContext(Context base) {"""
+    new_body = """    @Override
     protected void attachBaseContext(Context base) {
         // Always render the UI in Taiwan Traditional Chinese, independent of device locale.
         android.content.res.Configuration configuration =
                 new android.content.res.Configuration(base.getResources().getConfiguration());
         configuration.setLocale(new java.util.Locale("zh", "TW"));
         Context localized = base.createConfigurationContext(configuration);
-        super.attachBaseContext(localized);
-        Init.set(localized);
-    }"""
-    if new in source:
+        super.attachBaseContext(localized);"""
+    if "configuration.setLocale(new java.util.Locale(\"zh\", \"TW\"));" in source:
         return False
-    if source.count(old) == 1:
-        source = source.replace(old, new, 1)
-    elif source.count(old_without_override) == 1:
-        replacement = new.replace("    @Override\n", "", 1)
-        source = source.replace(old_without_override, replacement, 1)
-    else:
-        raise SystemExit(f"{app_java}: expected one supported App.attachBaseContext anchor")
+    if source.count(signature) != 1:
+        raise SystemExit(f"{app_java}: expected one supported App.attachBaseContext signature")
+    start = source.index(signature)
+    body_end = source.index("\n    }", start)
+    existing_body = source[start:body_end + len("\n    }")]
+    existing_lines = existing_body.splitlines()
+    preserved = []
+    for line in existing_lines[2:]:
+        stripped = line.strip()
+        if stripped and stripped not in ("super.attachBaseContext(base);",):
+            preserved.append(line)
+    replacement = new_body
+    if preserved:
+        replacement += "\n" + "\n".join(preserved)
+    replacement += "\n    }"
+    source = source[:start] + replacement + source[body_end + len("\n    }"):]
     app_java.write_text(source, encoding="utf-8")
     return True
 
