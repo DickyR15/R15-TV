@@ -402,7 +402,7 @@ jobs:
           DAV1D_GIT_COMMIT: b8b2d726b4b78a2fb174cb45baff441b5969672c
           LIBASS_GIT_COMMIT: f61db567e6593df3470e91594bcd4ad2d0473aff
           LIBPLACEBO_GIT_COMMIT: fdc3b46dcb401bb6d4757480729b2e4a2186aee4
-          MPV_ANDROID_ARCHES: armv7l
+          MPV_ANDROID_ARCHES: armv7l arm64
         run: |
           set -euo pipefail
           sudo apt-get update
@@ -433,26 +433,36 @@ jobs:
           CACHE_MODE=folder CACHE_FOLDER="$native_root/cache" buildscripts/include/ci.sh install
           MPV_ANDROID_NATIVE_ONLY=1 buildscripts/include/ci.sh build
 
-          lib_root="$mpv_android/app/src/main/libs/armeabi-v7a"
-          for name in libmpv.so libplayer.so libffmpeg.so libc++_shared.so; do
-            test -s "$lib_root/$name"
+          native_root_libs="$mpv_android/app/src/main/libs"
+          for abi in armeabi-v7a arm64-v8a; do
+            lib_root="$native_root_libs/$abi"
+            for name in libmpv.so libplayer.so libffmpeg.so libc++_shared.so; do
+              test -s "$lib_root/$name"
+            done
           done
-          native_zip="$GITHUB_WORKSPACE/build/fongmi-mpv-native/native-libs-v7a.zip"
-          (cd "$mpv_android/app/src/main/libs" && zip -q -r "$native_zip" armeabi-v7a)
+          native_zip="$GITHUB_WORKSPACE/build/fongmi-mpv-native/native-libs-both-abis.zip"
+          (cd "$native_root_libs" && zip -q -r "$native_zip" armeabi-v7a arm64-v8a)
           unzip -t "$native_zip" >/dev/null
 
-          base_apk="$GITHUB_WORKSPACE/build/fongmi-mpv-native/leanback-armeabi_v7a.apk"
+          base_v7a="$GITHUB_WORKSPACE/build/fongmi-mpv-native/leanback-armeabi_v7a.apk"
+          base_arm64="$GITHUB_WORKSPACE/build/fongmi-mpv-native/leanback-arm64_v8a.apk"
           curl -fL --retry 3 --retry-all-errors \
             "https://github.com/FongMi/Release/releases/download/5.8.3/leanback-armeabi_v7a.apk" \
-            -o "$base_apk"
-          echo "2d668d426ffa974d8648ac150bca2a1a16760554f061b0a9dac49cce63cb1326  $base_apk" | sha256sum --check
-          unzip -t "$base_apk" >/dev/null
+            -o "$base_v7a"
+          echo "2d668d426ffa974d8648ac150bca2a1a16760554f061b0a9dac49cce63cb1326  $base_v7a" | sha256sum --check
+          curl -fL --retry 3 --retry-all-errors \
+            "https://github.com/FongMi/Release/releases/download/5.8.3/leanback-arm64_v8a.apk" \
+            -o "$base_arm64"
+          echo "a6b26da1cf4052dd842ea4c926f085bb1127bbfce64ddd9e3206d1f5f3bf304b  $base_arm64" | sha256sum --check
+          unzip -t "$base_v7a" >/dev/null
+          unzip -t "$base_arm64" >/dev/null
 
           python3 -m py_compile "$GITHUB_WORKSPACE/scripts/patch-unified-mpv-native.py"
           python3 "$GITHUB_WORKSPACE/scripts/patch-unified-mpv-native.py" \
             --tv-dir "$GITHUB_WORKSPACE/sources/TV" \
             --native-libs-zip "$native_zip" \
-            --base-apk "$base_apk"
+            --base-apk-v7a "$base_v7a" \
+            --base-apk-arm64 "$base_arm64"
 
           echo "Unified native runtime built from pinned FongMi sources and installed into the 5.8.3 AARs."
           sha256sum "$GITHUB_WORKSPACE/sources/TV/app/libs/lib-mpvplayer-release.aar" \
@@ -462,7 +472,7 @@ jobs:
             echo "- MPV Android: $MPV_ANDROID_REPOSITORY@$MPV_ANDROID_SHA"
             echo "- MPV source: $MPV_SOURCE_REPOSITORY@$MPV_SOURCE_SHA"
             echo "- FFMPEG_GIT_COMMIT: $FFMPEG_GIT_COMMIT"
-            echo "- Only the armv7l / armeabi-v7a native libraries are built for this APK."
+            echo "- Both native ABIs are verified in the AARs; the delivered APK remains armeabi-v7a only."
             echo "- FongMi Gradle native dependency verification remains enabled."
           } >> "$GITHUB_STEP_SUMMARY"
 
