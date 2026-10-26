@@ -126,17 +126,34 @@ def patch_java(path: Path, mobile: bool) -> None:
     if import_line not in text:
         text = replace_once(text, import_anchor, import_line + import_anchor, path)
 
-    scale_init = "        mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);\n"
+    # 5.8.2 included a scaleText row; 5.8.3 reorganized the player settings
+    # screen, so initialize against a stable method boundary instead.
+    scale_init_candidates = [
+        "        mBinding.scaleText.setText((scale = ResUtil.getStringArray(R.array.select_scale))[PlayerSetting.getScale()]);\n",
+        "        setPlaybackModeText();\n",
+    ]
     if "setLongPressSpeedText();" not in text:
-        text = replace_once(text, scale_init, scale_init + "        setLongPressSpeedText();\n", path)
+        init_anchor = next((a for a in scale_init_candidates if text.count(a) == 1), None)
+        if init_anchor is None:
+            raise SystemExit(f"{path}: no supported player-settings initialization anchor.")
+        text = replace_once(text, init_anchor, init_anchor + "        setLongPressSpeedText();\n", path)
 
-    click_anchor = (
-        "        mBinding.scale.setOnClickListener(this::onScale);\n"
-        if mobile else
-        "        mBinding.scale.setOnClickListener(this::setScale);\n"
+    click_anchors = (
+        [
+            "        mBinding.scale.setOnClickListener(this::onScale);\n",
+            "        mBinding.scale.setOnClickListener(this::setScale);\n",
+        ] if mobile else [
+            "        mBinding.scale.setOnClickListener(this::setScale);\n",
+            "        mBinding.render.setOnClickListener(this::setRender);\n",
+        ]
     )
     click_line = "        mBinding.longPress.setOnClickListener(this::setLongPressSpeed);\n"
     if click_line not in text:
+        click_anchor = next((a for a in click_anchors if text.count(a) == 1), None)
+        if click_anchor is None:
+            # If this version uses a different engine row layout, insert before
+            # the existing buffer listener, which is present in both settings hosts.
+            click_anchor = "        mBinding.buffer.setOnClickListener(this::onBuffer);\n"
         text = replace_once(text, click_anchor, click_anchor + click_line, path)
 
     if "private void setLongPressSpeed(View view)" not in text:
