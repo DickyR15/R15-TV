@@ -108,7 +108,7 @@ jobs:
           test "$actual_sha" = "$EXPECTED_SHA"
           test -f sources/TV/gradlew
           test -f sources/TV/app/build.gradle
-          test -f sources/TV/app/libs/forcetech-release.aar
+          test -f sources/TV/app/proguard-rules.pro
           test -f sources/TV/LICENSE.md
           test -f sources/TV/chaquo/requirements.txt
           chmod +x sources/TV/gradlew
