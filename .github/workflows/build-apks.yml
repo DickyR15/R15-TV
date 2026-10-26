@@ -32,8 +32,9 @@ concurrency:
 env:
   SOURCE_REPOSITORY: FongMi/TV
   SOURCE_BRANCH: fongmi
+  SOURCE_RELEASE: FongMi/Release 5.8.3
+  SOURCE_SHA: aa30eb047c749fe5a96dd47b94947cda2421354f
   NDK_VERSION: 29.0.14206865
-  SOURCE_SHA: fe6a5b235477c02633cf3bc50d4cd83414a521b4
   MEDIA_REPOSITORY: FongMi/media
   MEDIA_BRANCH: release-1.11.0-fongmi
   MEDIA_SHA: 3c2cbe8ac742c2fe15eff52f03eeb3b1b648848d
@@ -68,7 +69,8 @@ jobs:
           jq -n --arg repository "$SOURCE_REPOSITORY" --arg branch "$SOURCE_BRANCH" --arg sha "$PINNED_SOURCE_SHA" \
             '{schema:1,sources:{TV:{repository:$repository,branch:$branch,sha:$sha}}}' > build/source-refs.json
           echo "Pinned public source: ${SOURCE_REPOSITORY}:${SOURCE_BRANCH} @ ${PINNED_SOURCE_SHA}"
-          echo "Reason: use the TV revision compatible with FongMi's pinned Media3/libass source."
+          echo "Pinned source is aligned with FongMi/Release 5.8.3 TV release tag 5.8.3."
+          echo "Release link: https://github.com/FongMi/Release/releases/tag/5.8.3"
 
       - name: Fetch public FongMi/TV source without credentials
         env:
