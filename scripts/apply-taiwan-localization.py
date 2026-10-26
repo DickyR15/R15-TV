@@ -97,6 +97,12 @@ def force_zh_tw(app_java: Path) -> bool:
         super.attachBaseContext(base);
         Init.set(base);
     }"""
+    # FongMi TV 5.8.3 declares attachBaseContext without the upstream @Override
+    # annotation. Match the actual method body as a secondary exact anchor.
+    old_without_override = """    protected void attachBaseContext(Context base) {
+        super.attachBaseContext(base);
+        Init.set(base);
+    }"""
     new = """    @Override
     protected void attachBaseContext(Context base) {
         // Always render the UI in Taiwan Traditional Chinese, independent of device locale.
@@ -109,9 +115,14 @@ def force_zh_tw(app_java: Path) -> bool:
     }"""
     if new in source:
         return False
-    if source.count(old) != 1:
-        raise SystemExit(f"{app_java}: expected exactly one App.attachBaseContext anchor")
-    app_java.write_text(source.replace(old, new, 1), encoding="utf-8")
+    if source.count(old) == 1:
+        source = source.replace(old, new, 1)
+    elif source.count(old_without_override) == 1:
+        replacement = new.replace("    @Override\n", "", 1)
+        source = source.replace(old_without_override, replacement, 1)
+    else:
+        raise SystemExit(f"{app_java}: expected one supported App.attachBaseContext anchor")
+    app_java.write_text(source, encoding="utf-8")
     return True
 
 
