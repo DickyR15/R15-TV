@@ -1,17 +1,16 @@
 #!/usr/bin/env python3
-"""Replace split FFmpeg native files with the matching FongMi 5.8.3 unified runtime.
+"""Install the matching unified MPV/FFmpeg native runtime for FongMi TV 5.8.3.
 
-The official 5.8.3 app APK supplies the unified FFmpeg core and matching Media3
-FFmpeg JNI wrapper. The official MPV runtime APK supplies libmpv and libplayer;
-the shared C++ runtime is retained from the pinned MPV AAR. The upstream Gradle
-VerifyMpvNativeTask remains enabled as the final dependency-integrity check.
+The pinned FongMi/mpv-android CI artifact contains libmpv, libplayer, the
+unified libffmpeg, and libc++ for both supported ABIs. The official 5.8.3 TV
+APK supplies the matching Media3 FFmpeg JNI wrappers. Gradle's native
+integrity task remains enabled and verifies the final AAR dependency graph.
 """
 from __future__ import annotations
 
 import argparse
 import os
 import struct
-import tempfile
 import zipfile
 from pathlib import Path
 
@@ -27,6 +26,13 @@ SPLIT_FFMPEG = {
 ABI = "armeabi-v7a"
 
 
+def validate_elf(data: bytes, name: str) -> None:
+    if len(data) < 52 or data[:4] != b"\x7fELF":
+        raise SystemExit(f"{name}: missing/invalid ELF header")
+    if data[4] != 1 or data[5] != 1 or struct.unpack_from("<H", data, 18)[0] != 40:
+        raise SystemExit(f"{name}: source ELF is not 32-bit little-endian ARM")
+
+
 def read_apk_library(archive: zipfile.ZipFile, name: str) -> bytes | None:
     target = f"lib/{ABI}/{name}"
     matches = [entry for entry in archive.infolist() if entry.filename == target]
@@ -39,12 +45,14 @@ def read_apk_library(archive: zipfile.ZipFile, name: str) -> bytes | None:
     return data
 
 
-def validate_elf(data: bytes, name: str) -> None:
-    if len(data) < 52 or data[:4] != b"\x7fELF":
-        raise SystemExit(f"{name}: missing/invalid ELF header")
-    # This pipeline produces only the Android armeabi-v7a APK.
-    if data[4] != 1 or data[5] != 1 or struct.unpack_from("<H", data, 18)[0] != 40:
-        raise SystemExit(f"{name}: source ELF is not 32-bit little-endian ARM")
+def read_native_library(archive: zipfile.ZipFile, name: str) -> bytes:
+    target = f"{ABI}/{name}"
+    matches = [entry for entry in archive.infolist() if entry.filename == target]
+    if len(matches) != 1:
+        raise SystemExit(f"{archive.filename}: expected exactly one {target}, found {len(matches)}")
+    data = archive.read(matches[0])
+    validate_elf(data, name)
+    return data
 
 
 def read_aar_library(path: Path, name: str) -> bytes:
@@ -91,8 +99,6 @@ def rewrite_aar(path: Path, replacements: dict[str, bytes], remove_names: set[st
             target.writestr(info, data)
 
     os.replace(temp_path, path)
-    # Reopen to make sure the rewritten AAR is a readable ZIP and the intended
-    # ABI now carries unified FFmpeg rather than the old split libraries.
     with zipfile.ZipFile(path, "r") as patched:
         names = set(patched.namelist())
         for name in replacements:
@@ -106,29 +112,15 @@ def rewrite_aar(path: Path, replacements: dict[str, bytes], remove_names: set[st
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--tv-dir", required=True, type=Path)
-    parser.add_argument("--runtime-apk", required=True, type=Path)
+    parser.add_argument("--native-libs-zip", required=True, type=Path)
     parser.add_argument("--base-apk", required=True, type=Path)
     args = parser.parse_args()
 
-    with zipfile.ZipFile(args.runtime_apk, "r") as runtime, zipfile.ZipFile(args.base_apk, "r") as base:
-        runtime_libs: dict[str, bytes] = {}
-        for name in ("libmpv.so", "libplayer.so"):
-            data = read_apk_library(runtime, name)
-            if data is None:
-                raise SystemExit(f"{args.runtime_apk}: missing required library lib/{ABI}/{name}")
-            runtime_libs[name] = data
-
-        # FongMi distributes the unified FFmpeg core in the TV app APK (together
-        # with its matching Media3 JNI wrapper); the MPV runtime APK deliberately
-        # does not duplicate it under lib/<abi>/.
-        app_ffmpeg = read_apk_library(base, "libffmpeg.so")
-        ffmpeg_source = str(args.base_apk)
-        if app_ffmpeg is None:
-            app_ffmpeg = read_apk_library(runtime, "libffmpeg.so")
-            ffmpeg_source = str(args.runtime_apk)
-        if app_ffmpeg is None:
-            raise SystemExit("Neither official 5.8.3 APK contains lib/armeabi-v7a/libffmpeg.so")
-
+    with zipfile.ZipFile(args.native_libs_zip, "r") as native, zipfile.ZipFile(args.base_apk, "r") as base:
+        native_libs = {
+            name: read_native_library(native, name)
+            for name in ("libmpv.so", "libplayer.so", "libffmpeg.so", "libc++_shared.so")
+        }
         app_ffmpeg_jni = read_apk_library(base, "libffmpegJNI.so")
         if app_ffmpeg_jni is None:
             raise SystemExit(f"{args.base_apk}: missing lib/{ABI}/libffmpegJNI.so")
@@ -138,23 +130,20 @@ def main() -> None:
     mpv_aar = app_libs / "lib-mpvplayer-release.aar"
     ffmpeg_aar = app_libs / "lib-decoder-ffmpeg-release.aar"
 
-    # Use the Media3/MPV AAR's already-pinned shared C++ runtime. The official
-    # module APK does not ship libc++_shared.so as a standalone APK library.
-    # Both AARs receive the exact same libc++ bytes, which is verified upstream.
-    cxx_runtime = read_aar_library(mpv_aar, "libc++_shared.so")
-
+    # Use one matching libc++ and one unified FFmpeg core across both AARs.
+    cxx_runtime = native_libs["libc++_shared.so"]
     rewrite_aar(
         mpv_aar,
         {
-            "libmpv.so": runtime_libs["libmpv.so"],
-            "libplayer.so": runtime_libs["libplayer.so"],
+            "libmpv.so": native_libs["libmpv.so"],
+            "libplayer.so": native_libs["libplayer.so"],
             "libc++_shared.so": cxx_runtime,
         },
         SPLIT_FFMPEG,
     )
 
     ffmpeg_replacements = {
-        "libffmpeg.so": app_ffmpeg,
+        "libffmpeg.so": native_libs["libffmpeg.so"],
         "libffmpegJNI.so": app_ffmpeg_jni,
         "libc++_shared.so": cxx_runtime,
     }
@@ -165,9 +154,9 @@ def main() -> None:
         ffmpeg_remove.add("libffmpegDoviJNI.so")
     rewrite_aar(ffmpeg_aar, ffmpeg_replacements, ffmpeg_remove)
 
-    print("Patched MPV/FFmpeg AARs with official FongMi Release 5.8.3 native runtime:")
-    print(f"  MPV runtime source: {args.runtime_apk}")
-    print(f"  FFmpeg core/JNI source: {ffmpeg_source}; {args.base_apk}")
+    print("Patched MPV/FFmpeg AARs with pinned FongMi unified native artifact:")
+    print(f"  Native artifact: {args.native_libs_zip}")
+    print(f"  Matching Media3 JNI wrappers: {args.base_apk}")
     print(f"  {mpv_aar}")
     print(f"  {ffmpeg_aar}")
     print("The Gradle verifyLeanbackReleaseMpvNative task remains enabled.")
