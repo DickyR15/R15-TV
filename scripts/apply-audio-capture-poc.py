@@ -337,45 +337,21 @@ def patch_mpv_engine(path: Path) -> None:
 
 
 def patch_live_activity_software_rendering(path: Path) -> None:
-    """Diagnostic only: bypass the Android HW-accelerated View renderer on LiveActivity."""
+    """Keep upstream rendering defaults while the caption overlay remains disabled."""
     text = path.read_text(encoding="utf-8")
     marker = 'android:name=".ui.activity.LiveActivity"'
-    marker_pos = text.find(marker)
-    if marker_pos < 0:
+    if marker not in text:
         raise SystemExit(f"{path}: cannot locate LiveActivity activity declaration")
-    tag_start = text.rfind("<activity", 0, marker_pos)
-    tag_end = text.find(">", marker_pos)
-    if tag_start < 0 or tag_end < 0:
-        raise SystemExit(f"{path}: cannot locate complete LiveActivity activity tag")
-    tag = text[tag_start:tag_end + 1]
-    attr = 'android:hardwareAccelerated="false"'
-    if attr in tag:
-        return
-    if 'android:hardwareAccelerated="true"' in tag:
-        tag = tag.replace('android:hardwareAccelerated="true"', attr, 1)
-    else:
-        tag = tag.replace(marker, marker + chr(10) + '            ' + attr, 1)
-    text = text[:tag_start] + tag + text[tag_end + 1:]
-    path.write_text(text, encoding="utf-8")
+    # Earlier software-rendering diagnostics still ended in native SIGABRT/SIGSEGV.
+    # Do not force hardwareAccelerated=false: preserve upstream manifest behavior.
+    return
 
 
 def patch_manifest(path: Path) -> None:
     text = path.read_text(encoding="utf-8")
-    # Diagnostic isolation: disable hardware acceleration for the entire application,
-    # not just LiveActivity. The crash can occur during activity transitions and the
-    # shared process RenderThread may still serve other hardware-accelerated windows.
-    app_start = text.find("<application")
-    app_end = text.find(">", app_start)
-    if app_start < 0 or app_end < 0:
-        raise SystemExit(f"{path}: cannot locate application manifest tag")
-    app_tag = text[app_start:app_end + 1]
-    app_attr = 'android:hardwareAccelerated="false"'
-    if app_attr not in app_tag:
-        enabled_attr = 'android:hardwareAccelerated="true"'
-        if enabled_attr not in app_tag:
-            raise SystemExit(f"{path}: application hardware acceleration attribute is missing")
-        app_tag = app_tag.replace(enabled_attr, app_attr, 1)
-        text = text[:app_start] + app_tag + text[app_end + 1:]
+    # Do not override application hardware acceleration in this diagnostic.
+    # The previous app-wide software-rendering test still showed native player crashes;
+    # preserve the pinned upstream manifest defaults while isolating the player stack.
     permissions = [
         '<uses-permission android:name="android.permission.RECORD_AUDIO" />',
         '<uses-permission android:name="android.permission.FOREGROUND_SERVICE" />',
@@ -559,7 +535,7 @@ def main() -> None:
         raise SystemExit(f"{player_setting}: playback quality setting was not applied")
 
     print("Applied Whisper Base subtitle POC with first-row Settings entry and high-contrast playback shortcut.")
-    print("Application-wide software UI rendering diagnostic enabled; player engine configuration unchanged.")
+    print("Upstream hardware UI rendering defaults restored; subtitle overlay remains disabled for crash isolation.")
     print("EXO/HLS quality defaults to a 1080p cap for multi-variant HLS, with adaptive and maximum options.")
     print("MPV unsupported 4K formats can fall back to EXO.")
     print("Scope: in-app playback audio capture + downloadable Whisper Base multilingual model + ML Kit on-device English-to-Chinese translation + OpenCC S2TWP.")
