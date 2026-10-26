@@ -110,7 +110,7 @@ jobs:
           test -f sources/TV/app/build.gradle
           test -f sources/TV/app/proguard-rules.pro
           test -f sources/TV/LICENSE.md
-          test -f sources/TV/chaquo/requirements.txt
+          test -f sources/TV/chaquo/runtime/requirements.txt
           chmod +x sources/TV/gradlew
           echo "Public source checked out: FongMi/TV@$actual_sha"
           echo "This build does not include IPTV/live-playlist sources."
