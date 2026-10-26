@@ -10,6 +10,7 @@ on:
       - "config/**"
       - "patches/**"
       - "scripts/**"
+      - "patches/ai-subtitle/**"
   workflow_dispatch:
     inputs:
       publish_release:
@@ -605,66 +606,64 @@ jobs:
             > dist/SOURCE_REFS.json
           printf '%s\n' "$SOURCE_SHA" > dist/SOURCE_COMMIT.txt
 
-      - name: Build signed release APKs
+      - name: Build Android TV armeabi-v7a APK
         if: steps.signing.outputs.mode == 'release'
         working-directory: sources/TV
+        env:
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:assembleLeanbackRelease \
-            :app:assembleMobileRelease
+            -Pandroid.injected.build.abi=armeabi-v7a \
+            :app:assembleLeanbackRelease
 
-      - name: Build debug APKs (initial test mode)
+      - name: Build Android TV armeabi-v7a APK (debug test mode)
         if: steps.signing.outputs.mode == 'debug'
         working-directory: sources/TV
         env:
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g"
         run: |
+          set -euo pipefail
           chmod +x gradlew
           ./gradlew --no-daemon --stacktrace \
-            :app:assembleLeanbackDebug \
-            :app:assembleMobileDebug
-
-      - name: Verify OpenCC 1.4.2, manifests and ABI assets in APKs
+            -Pandroid.injected.build.abi=armeabi-v7a \
+            :app:assembleLeanbackDebug
+      - name: Verify OpenCC 1.4.2, in-player subtitle integration and v7a APK
         shell: bash
         run: |
           set -euo pipefail
           TV_DIR="$GITHUB_WORKSPACE/sources/TV"
           if [[ "${{ steps.signing.outputs.mode }}" == "release" ]]; then
-            APK_ROOT="$TV_DIR/Release/apk"
+            apk="$TV_DIR/Release/apk/leanback-armeabi-v7a.apk"
           else
-            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+            apk="$(find "$TV_DIR/app/build/outputs/apk/leanback" -type f -name '*.apk' -print -quit)"
           fi
-          count=0
-          while IFS= read -r -d '' apk; do
-            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
-            case "$lower" in
-              *arm64*v8a*) abi="arm64-v8a" ;;
-              *armeabi*v7a*) abi="armeabi-v7a" ;;
-              *) echo "Unexpected ABI split: $apk" >&2; exit 1 ;;
-            esac
-            entries=$(unzip -Z1 "$apk")
-            grep -Fq "lib/$abi/libr15opencc.so" <<<"$entries"
-            grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
-            grep -Fq "assets/opencc-1.4.2/dictionary/STPhrases.ocd2" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-models.json" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
-            grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
-            grep -Fq "classes.dex" <<<"$entries"
-            echo "Verified OpenCC 1.4.2 and subtitle metadata: $(basename "$apk")"
-            count=$((count + 1))
-          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          test "$count" -eq 4
-          echo "Verified current OpenCC 1.4.2 assets across all four APK variants."
+          test -n "$apk" && test -s "$apk"
+          badging=$(aapt dump badging "$apk")
+          grep -Fq "native-code: 'armeabi-v7a'" <<<"$badging"
+          entries=$(unzip -Z1 "$apk")
+          grep -Fq "lib/armeabi-v7a/libr15opencc.so" <<<"$entries"
+          grep -Fq "assets/opencc-1.4.2/config/s2twp.json" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-models.json" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-translation-policy.json" <<<"$entries"
+          grep -Fq "assets/ai-subtitle-versions.json" <<<"$entries"
+          grep -Fq "classes.dex" <<<"$entries"
+          if grep -Eq '^lib/(arm64-v8a|x86|x86_64)/' <<<"$entries"; then
+            echo "Unexpected non-v7a native library in APK" >&2
+            grep -E '^lib/(arm64-v8a|x86|x86_64)/' <<<"$entries" >&2
+            exit 1
+          fi
+          echo "Verified single Android TV armeabi-v7a APK and AI subtitle assets."
           {
-            echo "## Localization and converter verification"
-            echo "- UI locale is forced to zh-TW by scripts/apply-taiwan-localization.py."
-            echo "- App label: R15 TV."
-            echo "- OpenCC runtime/dictionaries: official 1.4.2, s2twp."
-            echo "- AI speech and translation manifests are attached as assets."
+            echo "## In-player AI subtitle verification"
+            echo "- Only Android TV armeabi-v7a APK is intended for delivery."
+            echo "- Caption view is attached to PlayerView; no companion overlay APK is used."
+            echo "- Android AudioPlaybackCapture requires Android 10/API 29+. Android 9 remains a playback-compatibility test only; the capture action must show a notice instead of crashing."
+            echo "- CI compile/package checks do not confirm runtime playback or recognition. Android 9 emulator and Android 10+ devices must be tested separately."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Package APKs and verification metadata
+      - name: Package APK and verification metadata
         env:
           BUILD_MODE: ${{ steps.signing.outputs.mode }}
           SOURCE_SHA: ${{ steps.sources.outputs.tv_sha }}
@@ -678,32 +677,12 @@ jobs:
           TV_DIR="$GITHUB_WORKSPACE/sources/TV"
           mkdir -p dist
           if [[ "$BUILD_MODE" == "release" ]]; then
-            APK_ROOT="$TV_DIR/Release/apk"
+            apk="$TV_DIR/Release/apk/leanback-armeabi-v7a.apk"
           else
-            APK_ROOT="$TV_DIR/app/build/outputs/apk"
+            apk="$(find "$TV_DIR/app/build/outputs/apk/leanback" -type f -name '*.apk' -print -quit)"
           fi
-          found=0
-          while IFS= read -r -d '' apk; do
-            lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
-            case "$lower" in
-              *leanback*arm64*v8a*) name="R15 TV-leanback-arm64-v8a.apk" ;;
-              *leanback*armeabi*v7a*) name="R15 TV-leanback-armeabi-v7a.apk" ;;
-              *mobile*arm64*v8a*) name="R15 TV-mobile-arm64-v8a.apk" ;;
-              *mobile*armeabi*v7a*) name="R15 TV-mobile-armeabi-v7a.apk" ;;
-              *) continue ;;
-            esac
-            if [[ -e "dist/$name" ]]; then
-              continue
-            fi
-            cp "$apk" "dist/$name"
-            found=$((found + 1))
-          done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          if [[ "$found" -ne 4 ]]; then
-            echo "Expected four ABI/flavor APKs under $APK_ROOT but packaged $found." >&2
-            find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
-            exit 1
-          fi
-
+          test -n "$apk" && test -s "$apk"
+          cp "$apk" "$GITHUB_WORKSPACE/dist/R15 TV-leanback-armeabi-v7a.apk"
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-source.patch"
           cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
@@ -720,21 +699,15 @@ jobs:
             --arg runUrl "$RUN_URL" \
             '{schema:1,buildMode:$mode,baseVersion:{name:$baseVersionName,code:$baseVersionCode},buildVersion:{name:$versionName,code:$versionCode},source:{repository:$repository,branch:$branch,commit:$sourceSha},workflowRun:$runUrl}' \
             > dist/BUILD_INFO.json
-
-          (
-            cd dist
-            sha256sum "R15 TV-"*.apk > SHA256SUMS.txt
-          )
+          (cd dist && sha256sum "R15 TV-leanback-armeabi-v7a.apk" > SHA256SUMS.txt)
+          cp "$GITHUB_WORKSPACE/dist-signer-sha256.txt" dist/SIGNER_SHA256.txt
           {
             echo "## R15 TV build result"
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Version: $VERSION_NAME ($VERSION_CODE)"
-            if [[ "$BUILD_MODE" == "debug" ]]; then
-              echo "- This is a debug-signed test build. Configure the three R15TV signing secrets before publishing stable releases."
-            else
-              echo "- APKs are signed with the private R15 TV release key supplied through GitHub Actions secrets."
-            fi
+            echo "- Only one Android TV armeabi-v7a APK is packaged."
+            echo "- AI subtitles are in-player; no standalone Companion APK is included."
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload APKs and source metadata
