@@ -137,8 +137,12 @@ def patch_java(path: Path, mobile: bool) -> None:
         if init_anchor is not None:
             text = replace_once(text, init_anchor, init_anchor + "        setLongPressSpeedText();\n", path)
         else:
-            init_start = "    protected void initView(Bundle savedInstanceState) {\n"
-            if text.count(init_start) != 1:
+            init_starts = [
+                "    protected void initView(Bundle savedInstanceState) {\n",
+                "    protected void initView() {\n",
+            ]
+            init_start = next((a for a in init_starts if text.count(a) == 1), None)
+            if init_start is None:
                 raise SystemExit(f"{path}: no supported player-settings initialization method.")
             text = replace_once(text, init_start, init_start + "        setLongPressSpeedText();\n", path)
 
