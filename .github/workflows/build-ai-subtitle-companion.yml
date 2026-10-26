@@ -1,5 +1,5 @@
 name: Build R15 TV AI Subtitle Companion POC
-run-name: R15 TV AI subtitle companion POC build
+run-name: R15 TV AI subtitle companion POC (armeabi-v7a only)
 
 on:
   push:
@@ -73,17 +73,19 @@ jobs:
           test "$(git -C build/whisper.cpp rev-parse HEAD)" = "$WHISPER_CPP_COMMIT"
           echo "Whisper.cpp pinned at $WHISPER_CPP_COMMIT"
 
-      - name: Build ARM64 Whisper JNI library
+      - name: Build armeabi-v7a Whisper JNI library
         shell: bash
         env:
           WHISPER_SOURCE_DIR: ${{ github.workspace }}/build/whisper.cpp
         run: |
           set -euo pipefail
-          mkdir -p subtitle-companion/app/src/main/jniLibs/arm64-v8a
-          cmake -S subtitle-companion/native-whisper -B build/whisper-arm64 \
+          abi="armeabi-v7a"
+          mkdir -p "subtitle-companion/app/src/main/jniLibs/$abi"
+          build_dir="build/whisper-armv7"
+          cmake -S subtitle-companion/native-whisper -B "$build_dir" \
             -DCMAKE_TOOLCHAIN_FILE="$ANDROID_HOME/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
             -DWHISPER_SOURCE_DIR="$WHISPER_SOURCE_DIR" \
-            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_ABI="$abi" \
             -DANDROID_PLATFORM=android-29 \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=OFF \
@@ -93,21 +95,38 @@ jobs:
             -DWHISPER_BUILD_TESTS=OFF \
             -DWHISPER_BUILD_EXAMPLES=OFF \
             -DWHISPER_BUILD_SERVER=OFF
-          cmake --build build/whisper-arm64 --config Release --parallel 2
-          test -s build/whisper-arm64/libr15whisper.so
-          install -m 755 build/whisper-arm64/libr15whisper.so \
-            subtitle-companion/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
-          readelf -d build/whisper-arm64/libr15whisper.so | grep NEEDED || true
+          cmake --build "$build_dir" --config Release --parallel 2
+          test -s "$build_dir/libr15whisper.so"
+          install -m 755 "$build_dir/libr15whisper.so" \
+            "subtitle-companion/app/src/main/jniLibs/$abi/libr15whisper.so"
+          readelf -d "$build_dir/libr15whisper.so" | grep NEEDED || true
 
-      - name: Build companion APK
+      - name: Build and verify armeabi-v7a companion APK only
         shell: bash
         run: |
           set -euo pipefail
+          python3 - <<'PY'
+          from pathlib import Path
+
+          path = Path("subtitle-companion/app/build.gradle")
+          text = path.read_text(encoding="utf-8")
+          anchor = '        versionName "0.1.4-poc"\\n'
+          injected = anchor + '        ndk { abiFilters "armeabi-v7a" }\\n'
+          if text.count(anchor) != 1:
+              raise SystemExit(f"{path}: expected exactly one versionName anchor")
+          if 'abiFilters "armeabi-v7a"' not in text:
+              text = text.replace(anchor, injected, 1)
+              path.write_text(text, encoding="utf-8")
+          if 'abiFilters "armeabi-v7a"' not in path.read_text(encoding="utf-8"):
+              raise SystemExit("Failed to restrict APK to armeabi-v7a")
+          print("Companion Gradle packaging restricted to armeabi-v7a only.")
+          PY
+
           gradle --no-daemon --stacktrace --console=plain -p subtitle-companion :app:assembleDebug
           apk="subtitle-companion/app/build/outputs/apk/debug/app-debug.apk"
           test -s "$apk"
           mkdir -p dist/ai-subtitle-companion
-          cp "$apk" dist/ai-subtitle-companion/R15-TV-AI-Subtitle-Companion-POC-arm64.apk
+          cp "$apk" dist/ai-subtitle-companion/R15-TV-AI-Subtitle-Companion-POC-v7a.apk
           apkanalyzer manifest application-id "$apk" | grep -Fx "com.dicky.r15tv.subtitlepoc"
           apkanalyzer manifest min-sdk "$apk" | grep -Fx "28"
           merged_manifest="$(apkanalyzer manifest print "$apk")"
@@ -116,23 +135,31 @@ jobs:
             exit 1
           fi
           entries="$(unzip -Z1 "$apk")"
-          grep -Fxq "lib/arm64-v8a/libr15whisper.so" <<<"$entries"
+          grep -Fxq "lib/armeabi-v7a/libr15whisper.so" <<<"$entries"
+          if grep -Eq '^lib/(arm64-v8a|x86|x86_64)/' <<<"$entries"; then
+            echo "Unexpected non-v7a native library found in companion APK" >&2
+            grep -E '^lib/(arm64-v8a|x86|x86_64)/' <<<"$entries" >&2
+            exit 1
+          fi
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep -Fq "native-code: 'armeabi-v7a'"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -Fq "android.permission.RECORD_AUDIO"
           "$ANDROID_HOME/build-tools/36.0.0/aapt" dump permissions "$apk" | grep -Fq "android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION"
           sha256sum dist/ai-subtitle-companion/*.apk > dist/ai-subtitle-companion/SHA256SUMS.txt
           {
-            echo "## R15 TV AI Subtitle Companion POC"
-            echo "- Separate companion APK; the working R15 TV FIX3 APK is not modified."
-            echo "- Captures only the R15 TV app UID using Android AudioPlaybackCapture, subject to system consent and the target player's capture policy."
-            echo "- Speech recognition: local multilingual Whisper Base; English and other ML Kit-supported sources are translated locally to Chinese then converted by OpenCC S2TWP."
-            echo "- Whisper Base and translation language models are downloaded on first use; they are not bundled in the APK."
-            echo "- Tested only by CI compilation/packaging here; real-device capture, transcription latency, translation quality and overlay behavior still require Onn. 4K Pro testing."
+            echo "## R15 TV AI Subtitle Companion POC — armeabi-v7a only"
+            echo "- Builds a separate companion APK for 32-bit ARM; the working R15 TV 5.8.2-r15.11 app (com.dicky.r15tv) is not modified or replaced."
+            echo "- Companion package: com.dicky.r15tv.subtitlepoc; it resolves the installed target app UID from com.dicky.r15tv."
+            echo "- Includes only the armeabi-v7a Whisper JNI library; build verification fails if another ABI's native library is packaged."
+            echo "- Requires Android 10/API 29 or newer for audio playback capture, overlay permission, microphone permission and MediaProjection consent."
+            echo "- Speech recognition uses local multilingual Whisper Base; English-to-Chinese translation uses on-device ML Kit and OpenCC S2TWP."
+            echo "- Whisper Base and translation models are downloaded on first use and are not bundled in the APK."
+            echo "- CI validates compilation and packaging only; audio capture, subtitle latency and overlay behavior still require device testing."
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - name: Upload ARM64 companion POC and checksums
+      - name: Upload v7a companion POC and checksums
         uses: actions/upload-artifact@v4
         with:
-          name: R15-TV-AI-Subtitle-Companion-POC-${{ github.run_number }}
+          name: R15-TV-AI-Subtitle-Companion-POC-v7a-${{ github.run_number }}
           path: dist/ai-subtitle-companion/**
           if-no-files-found: error
           retention-days: 30
