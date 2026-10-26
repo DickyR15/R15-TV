@@ -110,8 +110,8 @@ jobs:
 
           path = Path("subtitle-companion/app/build.gradle")
           text = path.read_text(encoding="utf-8")
-          anchor = '        versionName "0.1.4-poc"\\n'
-          injected = anchor + '        ndk { abiFilters "armeabi-v7a" }\\n'
+          anchor = '        versionName "0.1.4-poc"\n'
+          injected = anchor + '        ndk { abiFilters "armeabi-v7a" }\n'
           if text.count(anchor) != 1:
               raise SystemExit(f"{path}: expected exactly one versionName anchor")
           if 'abiFilters "armeabi-v7a"' not in text:
