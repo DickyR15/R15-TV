@@ -101,11 +101,22 @@ def main() -> None:
 
     with zipfile.ZipFile(args.runtime_apk, "r") as runtime, zipfile.ZipFile(args.base_apk, "r") as base:
         runtime_libs: dict[str, bytes] = {}
-        for name in ("libmpv.so", "libplayer.so", "libffmpeg.so", "libc++_shared.so"):
+        for name in ("libmpv.so", "libplayer.so", "libc++_shared.so"):
             data = read_apk_library(runtime, name)
             if data is None:
                 raise SystemExit(f"{args.runtime_apk}: missing required library lib/{ABI}/{name}")
             runtime_libs[name] = data
+
+        # FongMi distributes the unified FFmpeg core in the TV app APK (together
+        # with its matching Media3 JNI wrapper); the MPV runtime APK deliberately
+        # does not duplicate it under lib/<abi>/.
+        app_ffmpeg = read_apk_library(base, "libffmpeg.so")
+        ffmpeg_source = str(args.base_apk)
+        if app_ffmpeg is None:
+            app_ffmpeg = read_apk_library(runtime, "libffmpeg.so")
+            ffmpeg_source = str(args.runtime_apk)
+        if app_ffmpeg is None:
+            raise SystemExit("Neither official 5.8.3 APK contains lib/armeabi-v7a/libffmpeg.so")
 
         app_ffmpeg_jni = read_apk_library(base, "libffmpegJNI.so")
         if app_ffmpeg_jni is None:
@@ -127,7 +138,7 @@ def main() -> None:
     )
 
     ffmpeg_replacements = {
-        "libffmpeg.so": runtime_libs["libffmpeg.so"],
+        "libffmpeg.so": app_ffmpeg,
         "libffmpegJNI.so": app_ffmpeg_jni,
         "libc++_shared.so": runtime_libs["libc++_shared.so"],
     }
@@ -140,7 +151,7 @@ def main() -> None:
 
     print("Patched MPV/FFmpeg AARs with official FongMi Release 5.8.3 native runtime:")
     print(f"  MPV runtime source: {args.runtime_apk}")
-    print(f"  FFmpeg JNI source: {args.base_apk}")
+    print(f"  FFmpeg core/JNI source: {ffmpeg_source}; {args.base_apk}")
     print(f"  {mpv_aar}")
     print(f"  {ffmpeg_aar}")
     print("The Gradle verifyLeanbackReleaseMpvNative task remains enabled.")
