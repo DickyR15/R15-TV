@@ -422,12 +422,29 @@ def patch_live_source_options(tv: Path) -> None:
             import_anchor + "import org.json.JSONObject;\n", live_config
         )
 
-    parse_anchor = """        LiveParser.text(live, text);
-        setHome(config, live, false);"""
-    parse_replacement = parse_anchor + """
-        applyR15SourceOptions(config, live);"""
+    parse_anchors = [
+        """        LiveParser.text(live, text);
+        setHome(config, live, false);""",
+        """        LiveParser.text(live, content.text());
+        setHome(config, live, false);""",
+        """        LiveParser.text(live, content.text());
+        setHome(config, live, true);""",
+        """        LiveParser.text(live, text);
+        setHome(config, live, true);""",
+    ]
     if "applyR15SourceOptions(config, live);" not in config_text:
-        config_text = replace_once(config_text, parse_anchor, parse_replacement, live_config)
+        parse_anchor = next((anchor for anchor in parse_anchors if config_text.count(anchor) == 1), None)
+        if parse_anchor is None:
+            # Newer upstream source decodes the live payload into Decoder.Content.
+            # Insert the options hook immediately after its unique parser call.
+            parser_call = "        LiveParser.text(live, content.text());"
+            if config_text.count(parser_call) != 1:
+                raise SystemExit(f"{live_config}: cannot find the 5.8.3 LiveParser.text call")
+            config_text = config_text.replace(parser_call, parser_call + "\n        applyR15SourceOptions(config, live);", 1)
+        else:
+            config_text = replace_once(config_text, parse_anchor,
+                                       parse_anchor + "\n        applyR15SourceOptions(config, live);",
+                                       live_config)
 
     json_home_anchor = """        setHome(config, getLives().isEmpty() ? new Live() : getLives().stream().filter(item -> item.getName().equals(config.getHome())).findFirst().orElse(getLives().get(0)), false);"""
     json_home_replacement = json_home_anchor + """
