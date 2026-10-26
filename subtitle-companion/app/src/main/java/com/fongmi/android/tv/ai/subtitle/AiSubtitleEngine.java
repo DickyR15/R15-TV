@@ -309,6 +309,9 @@ public final class AiSubtitleEngine {
                 int inferenceThreads = Math.max(1,
                         Math.min(2, Runtime.getRuntime().availableProcessors()));
                 final long inputDbfs = rmsDbfs(window);
+                String priorLanguage = previousLanguage;
+                String languageHint = priorLanguage.matches("[a-z]{2,3}")
+                        && !"und".equals(priorLanguage) ? priorLanguage : "auto";
                 Log.i(TAG, "asr_inference_start samples=" + window.length
                         + " seconds=" + (window.length / ASR_SAMPLE_RATE)
                         + " rmsDbfs=" + inputDbfs + " threads=" + inferenceThreads
@@ -328,9 +331,6 @@ public final class AiSubtitleEngine {
                 MAIN.postDelayed(heartbeat[0], 5000L);
                 String result;
                 String detectedLanguage = "und";
-                String priorLanguage = previousLanguage;
-                String languageHint = priorLanguage.matches("[a-z]{2,3}")
-                        && !"und".equals(priorLanguage) ? priorLanguage : "auto";
                 try {
                     if (cloudMode) {
                         GroqSpeechToText.TranscriptionResult cloudResult =
