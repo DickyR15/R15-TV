@@ -134,9 +134,13 @@ def patch_java(path: Path, mobile: bool) -> None:
     ]
     if "setLongPressSpeedText();" not in text:
         init_anchor = next((a for a in scale_init_candidates if text.count(a) == 1), None)
-        if init_anchor is None:
-            raise SystemExit(f"{path}: no supported player-settings initialization anchor.")
-        text = replace_once(text, init_anchor, init_anchor + "        setLongPressSpeedText();\n", path)
+        if init_anchor is not None:
+            text = replace_once(text, init_anchor, init_anchor + "        setLongPressSpeedText();\n", path)
+        else:
+            init_start = "    protected void initView(Bundle savedInstanceState) {\n"
+            if text.count(init_start) != 1:
+                raise SystemExit(f"{path}: no supported player-settings initialization method.")
+            text = replace_once(text, init_start, init_start + "        setLongPressSpeedText();\n", path)
 
     click_anchors = (
         [
