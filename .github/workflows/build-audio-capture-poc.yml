@@ -1,5 +1,5 @@
 name: Build R15 TV Audio Capture POC
-run-name: R15 TV Audio Capture POC (manual or code update)
+run-name: R15 TV Audio Capture POC (armeabi-v7a only)
 
 on:
   push:
@@ -206,34 +206,45 @@ jobs:
           git -C sources/whisper.cpp checkout --detach FETCH_HEAD
           test "$(git -C sources/whisper.cpp rev-parse HEAD)" = "$WHISPER_CPP_COMMIT"
 
-          mkdir -p sources/TV/app/src/main/jniLibs/arm64-v8a
-          mkdir -p sources/TV/app/src/main/jniLibs/armeabi-v7a
-          for abi in arm64-v8a armeabi-v7a; do
-            build_dir="$GITHUB_WORKSPACE/build/whisper-$abi"
-            cmake -S patches/whisper-native -B "$build_dir" \
-              -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
-              -DANDROID_ABI="$abi" \
-              -DANDROID_PLATFORM=android-24 \
-              -DCMAKE_BUILD_TYPE=Release \
-              -DBUILD_SHARED_LIBS=OFF \
-              -DGGML_OPENMP=OFF \
-              -DGGML_NATIVE=OFF \
-              -DGGML_CPU_KLEIDIAI=OFF \
-              -DWHISPER_BUILD_TESTS=OFF \
-              -DWHISPER_BUILD_EXAMPLES=OFF \
-              -DWHISPER_BUILD_SERVER=OFF
-            cmake --build "$build_dir" --config Release --parallel 2
-            install -m 755 "$build_dir/libr15whisper.so" \
-              "sources/TV/app/src/main/jniLibs/$abi/libr15whisper.so"
-            # Keep this build's GGML implementation self-contained inside the JNI library.
-            # Validate and report dependencies for diagnosis without aborting due to ABI-specific linker layout.
+          # This run intentionally builds only 32-bit ARM (armeabi-v7a).
+          abi="armeabi-v7a"
+          mkdir -p "sources/TV/app/src/main/jniLibs/$abi"
+          build_dir="$GITHUB_WORKSPACE/build/whisper-$abi"
+          cmake -S patches/whisper-native -B "$build_dir" \
+            -DCMAKE_TOOLCHAIN_FILE="$ANDROID_SDK_ROOT/ndk/$NDK_VERSION/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI="$abi" \
+            -DANDROID_PLATFORM=android-24 \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=OFF \
+            -DGGML_OPENMP=OFF \
+            -DGGML_NATIVE=OFF \
+            -DGGML_CPU_KLEIDIAI=OFF \
+            -DWHISPER_BUILD_TESTS=OFF \
+            -DWHISPER_BUILD_EXAMPLES=OFF \
+            -DWHISPER_BUILD_SERVER=OFF
+          cmake --build "$build_dir" --config Release --parallel 2
+          install -m 755 "$build_dir/libr15whisper.so" \
+            "sources/TV/app/src/main/jniLibs/$abi/libr15whisper.so"
+          readelf -d "$build_dir/libr15whisper.so" | grep 'NEEDED' || true
+          if ! readelf -d "$build_dir/libr15whisper.so" | grep -Fq 'libc++_shared.so'; then
+            echo "Note: libc++ runtime may be statically linked into the Whisper JNI library for $abi."
             readelf -d "$build_dir/libr15whisper.so" | grep 'NEEDED' || true
-            if ! readelf -d "$build_dir/libr15whisper.so" | grep -Fq 'libc++_shared.so'; then
-              echo "Note: libc++ runtime may be statically linked into the Whisper JNI library for $abi."
-              readelf -d "$build_dir/libr15whisper.so" | grep 'NEEDED' || true
-            fi
-            true
-          done
+          fi
+
+          # The upstream custom APK packager defaults to both ARM ABIs; narrow this POC build
+          # to a single 32-bit ARM APK to avoid spending time building unused arm64 outputs.
+          python3 - <<'PY_ABI'
+          from pathlib import Path
+
+          path = Path("sources/TV/buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy")
+          text = path.read_text(encoding="utf-8")
+          old = "include(*ABI_PAIRS.keySet().toList())"
+          new = "include('armeabi-v7a')"
+          if text.count(old) != 1:
+              raise SystemExit(f"{path}: expected one ABI include anchor, got {text.count(old)}")
+          path.write_text(text.replace(old, new, 1), encoding="utf-8")
+          print("Restricted custom APK split outputs to armeabi-v7a only.")
+          PY_ABI
 
           python3 -m py_compile scripts/apply-audio-capture-poc.py
           python3 scripts/apply-audio-capture-poc.py --tv-dir sources/TV --patch-dir patches/audio-capture
@@ -258,9 +269,9 @@ jobs:
           verify test -s sources/TV/app/src/leanback/res/layout/activity_ai_subtitle_settings.xml
           verify grep -Fq 'fallbackExoForCurrentMedia' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
           verify grep -Fq 'MPV 解碼失敗，已暫時切換 EXO' sources/TV/app/src/main/java/com/fongmi/android/tv/player/PlayerManager.java
-          verify test -s sources/TV/app/src/main/jniLibs/arm64-v8a/libr15whisper.so
           verify test -s sources/TV/app/src/main/jniLibs/armeabi-v7a/libr15whisper.so
-          echo "Whisper.cpp JNI libraries built for arm64-v8a and armeabi-v7a."
+          verify grep -Fq "include('armeabi-v7a')" sources/TV/buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy
+          echo "Whisper.cpp JNI library and APK output are restricted to armeabi-v7a."
           echo "The multilingual Whisper Base model is downloaded inside the app after the user taps the model button; model weights are not bundled in the APK."
           echo "ML Kit English-to-Chinese translation and OpenCC S2TWP remain on-device after first-use translation model download."
           echo "Real-TV audio capture, translation quality, RAM use and latency still require device testing."
@@ -396,40 +407,30 @@ jobs:
           ./gradlew --no-daemon --stacktrace --console=plain --max-workers=2 \
             :app:assembleLeanbackDebug
 
-      - name: Verify Whisper JNI and OpenCC assets in experimental APKs
+      - name: Verify the single armeabi-v7a APK and assets
         shell: bash
         run: |
           set -euo pipefail
           apk_root="sources/TV/app/build/outputs/apk"
-          count=$(find "$apk_root" -type f -name "*.apk" | wc -l)
-          test "$count" -eq 2
-          while IFS= read -r apk; do
-            entries=$(unzip -Z1 "$apk")
-            lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
-            case "$lower" in
-              *arm64*v8a*) expected_abi="arm64-v8a" ;;
-              *armeabi*v7a*) expected_abi="armeabi-v7a" ;;
-              *)
-                echo "Unexpected ABI split APK name: $apk" >&2
-                exit 1
-                ;;
-            esac
-            if ! grep -Fq "lib/$expected_abi/libr15whisper.so" <<<"$entries"; then
-              echo "Missing Whisper JNI library for $expected_abi in $apk" >&2
-              exit 1
-            fi
-            grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
-            if ! grep -Fq "lib/$expected_abi/libChineseConverter.so" <<<"$entries"; then
-              echo "Missing OpenCC native library for $expected_abi in $apk" >&2
-              exit 1
-            fi
-            if grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"; then
-              echo "Legacy sherpa model unexpectedly bundled in $apk" >&2
-              exit 1
-            fi
-            echo "Whisper JNI and OpenCC assets verified in $apk"
-          done < <(find "$apk_root" -type f -name "*.apk" | sort)
-          echo "Whisper JNI and OpenCC assets verified. The Whisper Base model is downloaded by the user in the app; device playback capture, model loading, translation and latency still require TV testing."
+          mapfile -t apks < <(find "$apk_root" -type f -name "*.apk" | sort)
+          test "${#apks[@]}" -eq 1
+          apk="${apks[0]}"
+          lower=$(basename "$apk" | tr '[:upper:]' '[:lower:]')
+          [[ "$lower" == *leanback*armeabi*v7a* ]]
+          entries=$(unzip -Z1 "$apk")
+          grep -Fq "lib/armeabi-v7a/libr15whisper.so" <<<"$entries"
+          grep -Fq "assets/openccdata/s2twp.json" <<<"$entries"
+          grep -Fq "lib/armeabi-v7a/libChineseConverter.so" <<<"$entries"
+          if grep -Fq "lib/arm64-v8a/" <<<"$entries"; then
+            echo "Unexpected arm64 native library in v7a-only APK." >&2
+            exit 1
+          fi
+          if grep -Fq "assets/ai-subtitle-model/encoder-epoch-99-avg-1.int8.onnx" <<<"$entries"; then
+            echo "Legacy sherpa model unexpectedly bundled in $apk" >&2
+            exit 1
+          fi
+          echo "Verified only one Android TV armeabi-v7a APK with Whisper JNI and OpenCC assets."
+          echo "Whisper Base remains a first-use download; real-device playback capture, model loading, translation and latency still require TV testing."
 
       - name: Package APKs and verification metadata
         env:
@@ -457,9 +458,11 @@ jobs:
           while IFS= read -r -d '' apk; do
             lower=$(printf '%s' "$apk" | tr '[:upper:]' '[:lower:]')
             case "$lower" in
-              *leanback*arm64*v8a*) name="R15 TV-POC-leanback-arm64-v8a.apk" ;;
               *leanback*armeabi*v7a*) name="R15 TV-POC-leanback-armeabi-v7a.apk" ;;
-              *) continue ;;
+              *)
+                echo "Unexpected APK variant in v7a-only build: $apk" >&2
+                exit 1
+                ;;
             esac
             if [[ -e "dist/$name" ]]; then
               continue
@@ -467,8 +470,8 @@ jobs:
             cp "$apk" "dist/$name"
             found=$((found + 1))
           done < <(find "$APK_ROOT" -type f -name '*.apk' -print0)
-          if [[ "$found" -ne 2 ]]; then
-            echo "Expected both Android TV arm64-v8a and armeabi-v7a APKs under $APK_ROOT but packaged $found." >&2
+          if [[ "$found" -ne 1 ]]; then
+            echo "Expected exactly one Android TV armeabi-v7a APK under $APK_ROOT but packaged $found." >&2
             find "$APK_ROOT" -type f -name '*.apk' -print >&2 || true
             exit 1
           fi
@@ -494,7 +497,8 @@ jobs:
             app/src/main/java/com/fongmi/android/tv/player/exo/ExoUtil.java \
             app/src/main/java/com/fongmi/android/tv/player/mpv/MpvPlayerEngine.java \
             app/src/main/java/com/fongmi/android/tv/setting/PlayerSetting.java \
-            app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro
+            app/src/main/AndroidManifest.xml app/build.gradle app/proguard-rules.pro \
+            buildSrc/src/main/groovy/com/fongmi/gradle/AbiApkPackaging.groovy
           git -C "$TV_DIR" diff --binary > "dist/R15 TV-POC-source.patch"
           git -C "$TV_DIR" diff --cached --binary >> "dist/R15 TV-POC-source.patch"
           cp "$TV_DIR/LICENSE.md" dist/UPSTREAM-GPL-3.0-LICENSE.txt
@@ -528,7 +532,7 @@ jobs:
           )
           {
             echo "## R15 TV Whisper Base Subtitle POC build result"
-            echo "- This artifact contains separate Android TV APKs for arm64-v8a and armeabi-v7a. Install the armeabi-v7a APK on devices whose Android userspace supports only 32-bit ARM."
+            echo "- This artifact contains one Android TV armeabi-v7a (32-bit ARM) APK only; no arm64 or mobile APK is built or included."
             echo "- Mode: $BUILD_MODE"
             echo "- Source: [FongMi/TV@$SOURCE_SHA](https://github.com/FongMi/TV/commit/$SOURCE_SHA)"
             echo "- Media3/MPV modules: [FongMi/media@$MEDIA_SHA](https://github.com/FongMi/media/commit/$MEDIA_SHA)"
@@ -545,7 +549,7 @@ jobs:
       - name: Upload APKs and source metadata
         uses: actions/upload-artifact@v4
         with:
-          name: R15 TV Whisper Base Subtitle POC-${{ github.run_number }}
+          name: R15 TV Whisper Base Subtitle POC-v7a-${{ github.run_number }}
           path: dist/
           if-no-files-found: error
           retention-days: 30
