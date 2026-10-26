@@ -176,10 +176,10 @@ public final class AiSubtitleOverlay {
         }
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
             new AlertDialog.Builder(activity)
-                    .setTitle("無法啟動即時字幕")
-                    .setMessage("系統音訊擷取需要 Android 10 以上。可以前往設定管理語音模型。")
-                    .setNegativeButton("取消", (dialog, which) -> dialog.dismiss())
-                    .setPositiveButton("前往設定", (dialog, which) -> AiSubtitleSettingsActivity.start(activity))
+                    .setTitle("此模擬器不支援內部音訊擷取")
+                    .setMessage("Android 9 可以正常播放直播，但系統內部播放音訊擷取需要 Android 10 以上。即時字幕尚未啟動，不會中斷目前播放。")
+                    .setNegativeButton("知道了", (dialog, which) -> dialog.dismiss())
+                    .setPositiveButton("字幕設定", (dialog, which) -> AiSubtitleSettingsActivity.start(activity))
                     .show();
             return;
         }
