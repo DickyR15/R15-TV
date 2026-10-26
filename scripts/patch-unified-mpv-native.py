@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Replace split FFmpeg native files with the matching FongMi 5.8.3 unified runtime.
 
-The official 5.8.3 app APK supplies the Media3 FFmpeg JNI wrapper, while the
-official MPV runtime APK supplies the unified FFmpeg core, MPV, player wrapper,
-and shared C++ runtime. The Gradle VerifyMpvNativeTask remains enabled and is
-the final dependency-integrity check.
+The official 5.8.3 app APK supplies the unified FFmpeg core and matching Media3
+FFmpeg JNI wrapper. The official MPV runtime APK supplies libmpv and libplayer;
+the shared C++ runtime is retained from the pinned MPV AAR. The upstream Gradle
+VerifyMpvNativeTask remains enabled as the final dependency-integrity check.
 """
 from __future__ import annotations
 
@@ -45,6 +45,17 @@ def validate_elf(data: bytes, name: str) -> None:
     # This pipeline produces only the Android armeabi-v7a APK.
     if data[4] != 1 or data[5] != 1 or struct.unpack_from("<H", data, 18)[0] != 40:
         raise SystemExit(f"{name}: source ELF is not 32-bit little-endian ARM")
+
+
+def read_aar_library(path: Path, name: str) -> bytes:
+    target = f"jni/{ABI}/{name}"
+    with zipfile.ZipFile(path, "r") as archive:
+        matches = [entry for entry in archive.infolist() if entry.filename == target]
+        if len(matches) != 1:
+            raise SystemExit(f"{path}: expected exactly one {target}, found {len(matches)}")
+        data = archive.read(matches[0])
+    validate_elf(data, name)
+    return data
 
 
 def rewrite_aar(path: Path, replacements: dict[str, bytes], remove_names: set[str]) -> None:
@@ -101,7 +112,7 @@ def main() -> None:
 
     with zipfile.ZipFile(args.runtime_apk, "r") as runtime, zipfile.ZipFile(args.base_apk, "r") as base:
         runtime_libs: dict[str, bytes] = {}
-        for name in ("libmpv.so", "libplayer.so", "libc++_shared.so"):
+        for name in ("libmpv.so", "libplayer.so"):
             data = read_apk_library(runtime, name)
             if data is None:
                 raise SystemExit(f"{args.runtime_apk}: missing required library lib/{ABI}/{name}")
@@ -127,12 +138,17 @@ def main() -> None:
     mpv_aar = app_libs / "lib-mpvplayer-release.aar"
     ffmpeg_aar = app_libs / "lib-decoder-ffmpeg-release.aar"
 
+    # Use the Media3/MPV AAR's already-pinned shared C++ runtime. The official
+    # module APK does not ship libc++_shared.so as a standalone APK library.
+    # Both AARs receive the exact same libc++ bytes, which is verified upstream.
+    cxx_runtime = read_aar_library(mpv_aar, "libc++_shared.so")
+
     rewrite_aar(
         mpv_aar,
         {
             "libmpv.so": runtime_libs["libmpv.so"],
             "libplayer.so": runtime_libs["libplayer.so"],
-            "libc++_shared.so": runtime_libs["libc++_shared.so"],
+            "libc++_shared.so": cxx_runtime,
         },
         SPLIT_FFMPEG,
     )
@@ -140,7 +156,7 @@ def main() -> None:
     ffmpeg_replacements = {
         "libffmpeg.so": app_ffmpeg,
         "libffmpegJNI.so": app_ffmpeg_jni,
-        "libc++_shared.so": runtime_libs["libc++_shared.so"],
+        "libc++_shared.so": cxx_runtime,
     }
     ffmpeg_remove = set(SPLIT_FFMPEG)
     if app_ffmpeg_dovi is not None:
